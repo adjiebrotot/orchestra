@@ -1,0 +1,281 @@
+{
+ "edits": [
+  {
+   "kind": "armGirth",
+   "table": [
+    [
+     0.07,
+     1.0
+    ],
+    [
+     0.09,
+     1.15
+    ],
+    [
+     0.158,
+     1.15
+    ],
+    [
+     0.2,
+     1.12
+    ],
+    [
+     0.245,
+     1.12
+    ],
+    [
+     0.26,
+     1.0
+    ]
+   ],
+   "reach": [
+    0.045,
+    0.06
+   ],
+   "y": [
+    0.5,
+    0.62
+   ]
+  },
+  {
+   "kind": "armStretch",
+   "k": 1.25,
+   "ramp": 0.01,
+   "reach": [
+    0.05,
+    0.07
+   ]
+  }
+ ],
+ "sourceTexture": "assets/models/rabbit/tripo-p2/rabbit.fbm/rabbit_basecolor.jpg",
+ "palm": [
+  0.0,
+  -0.996,
+  0.087
+ ],
+ "ringEdges": 11,
+ "legTurns": [
+  15,
+  8,
+  6,
+  15
+ ],
+ "chair": {
+  "halfWidth": 0.13,
+  "front": 0.08,
+  "back": -0.1,
+  "note": "The seat is level, and its top is the lowest point of the seated body over the seat, with no shin, foot, or tail (seat_masks() of tools/blender/rig_mesh.py). The front edge lies seatGap units behind the knee joint of the bind (the property seat of the armature), so that the calf does not reach over the seat."
+ },
+ "eyeBox": [
+  [
+   0.0,
+   0.685,
+   0.055
+  ],
+  [
+   0.065,
+   0.745,
+   0.105
+  ]
+ ],
+ "noseBox": [
+  [
+   -0.025,
+   0.655,
+   0.125
+  ],
+  [
+   0.025,
+   0.7,
+   0.165
+  ]
+ ],
+ "eyeBoxNote": "The eye box holds the two loose eyeballs of the source (|x| 0.025 to 0.056, y 0.692 to 0.737, z 0.062 to 0.097 in the source). The nose box holds the pink nose tip (|x| up to 0.027, y 0.648 to 0.699, z up to 0.144).",
+ "body": {
+  "crease": 180,
+  "backRoom": 0.01
+ },
+ "bodyNote": "The facts of the body (BODY_FACTS of tools/body-module.ts) beside the height: the crease angle 180, so that each corner takes the mean normal of the faces at its vertex, as the smooth shading of an FBX viewer shows the source, and a seat 1 cm deeper, so that the back keeps off the chair back.",
+ "metersPerUnit": 1.474394,
+ "metersPerUnitNote": "The scale of the app: H (0.206644 units of the source form) is 0.304675 m. At this scale, the eyes of the seated rabbit are at the height of the eyes of the third Tripo rabbit (0.947 m, assets/models/rabbit/tripo-hand/rabbit.rig.glb at 931b150dd), so the seat search of each demo reads the old eye height (design 4.2). At the H of the third rabbit (0.2985 m), the seated eyes were 0.8 cm lower. The hand rig keeps the form of the source, so only the scale of the whole body sets H. The fact height of the armature is the shoulder joints at this scale.",
+ "eyeSize": 0.206644,
+ "jointsNote": "The places are the places of the source, mapped by the paw turns of the hand rig (assets/models/rabbit/README.md). The source places are in the body units and axes of the source pose: 1 unit from the soles to the ear tips, the soles at y = 0, +z forward, +x the left side. The right side mirrors the left side. The FBX has no armature, so each joint comes from sections of the mesh and its edge loops. Arm (closed rings of 13 vertices on the upper arm and 11 on the forearm, the axis at y 0.563, a pole band from x 0.12 to 0.194 at the elbow): the shoulder joint at x 0.07, the elbow at x 0.158, the wrist at x 0.255, where the forearm rings end and the paw starts, the knuckles at x 0.287, and the tip at x 0.322. Leg (closed rings of 15 vertices on the thigh and 14 on the shin): the hip joint at (0.06, 0.275, 0.01) in the haunch, the knee at y 0.157, where the rings of 15 meet the rings of 14, the ankle at y 0.058, and the toe tips at z 0.125. Trunk: the hips at y 0.31, the neck at y 0.595, and the head from y 0.625 to 0.81. Ears: the root at y 0.805, the tips at (0.097, 1.0, -0.025). Tail: a short bone from (0, 0.305, -0.095) back.",
+ "rings": {
+  "arm": [
+   [
+    0.0837,
+    0.1012,
+    1
+   ],
+   [
+    0.1012,
+    0.1202,
+    1
+   ],
+   [
+    0.1944,
+    0.212,
+    1
+   ],
+   [
+    0.212,
+    0.2294,
+    1
+   ]
+  ],
+  "leg": [
+   [
+    0.1395,
+    0.1511,
+    1
+   ],
+   [
+    0.1682,
+    0.1865,
+    1
+   ]
+  ]
+ },
+ "rows": {
+  "start": 0.075,
+  "reach": 0.045,
+  "control": [
+   [
+    0.0755,
+    0.4,
+    0
+   ],
+   [
+    0.0866,
+    0.25,
+    0
+   ],
+   [
+    0.0955,
+    0.12,
+    0
+   ],
+   [
+    0.1043,
+    0.04,
+    0
+   ],
+   [
+    0.1143,
+    0,
+    0
+   ],
+   [
+    0.1274,
+    0,
+    0
+   ],
+   [
+    0.158,
+    0,
+    1.0
+   ],
+   [
+    0.1883,
+    0,
+    0
+   ]
+  ],
+  "wrist": {
+   "start": -0.035,
+   "band": 0.0035,
+   "count": 12
+  },
+  "knuckle": {
+   "start": -0.02,
+   "band": 0.003,
+   "count": 12
+  }
+ },
+ "pawTurn": {
+  "L": -6,
+  "R": 1
+ },
+ "turnRings": [
+  0.2032,
+  0.212
+ ],
+ "seatGap": 0.05,
+ "earPlane": {
+  "points": [
+   [
+    0.045,
+    0.81,
+    0.0
+   ],
+   [
+    0.045,
+    0.805,
+    -0.06
+   ],
+   [
+    0.02,
+    0.815,
+    -0.03
+   ],
+   [
+    0.075,
+    0.795,
+    -0.03
+   ]
+  ],
+  "band": 0.008,
+  "xmin": 0.002
+ },
+ "texture": {
+  "path": "assets/models/rabbit/tripo-hand/rabbit-color.webp"
+ },
+ "smooth": false,
+ "bandPatch": {
+  "uv": [
+   0.5707,
+   0.1512
+  ]
+ },
+ "hipJoint": [
+  [
+   0.06,
+   0.275,
+   0.01
+  ],
+  "shin_L"
+ ],
+ "hingeTurn": {
+  "L": 6,
+  "R": -37
+ },
+ "lids": {
+  "back": 135,
+  "psi": [
+   -48,
+   50
+  ],
+  "lam": [
+   -55,
+   60
+  ],
+  "steps": [
+   12,
+   12
+  ],
+  "radius": 1.12,
+  "strip": 1.07,
+  "angle": 110,
+  "srgb": [
+   236,
+   209,
+   178
+  ],
+  "uv": [
+   0.715,
+   0.8195
+  ],
+  "density": 0.93
+ },
+ "turnFit": 0.02
+}

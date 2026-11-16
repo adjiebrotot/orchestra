@@ -1,0 +1,364 @@
+{
+  "source": "assets/models/polar-bear/tripo-p2/polar-bear.fbx",
+  "sourceNote": "The Tripo P2 polar bear mesh with its quads (assets/models/polar-bear/README.md). The hand rig assets/models/polar-bear/tripo-hand/polar-bear.blend starts from it in headless Blender with the calls of tools/blender/body_armature.py (design 4.4, \"Hand rig\").",
+  "name": "Polar bear",
+  "weld": 1e-05,
+  "joints": {
+    "root": {
+      "head": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "tail": [
+        0.0,
+        0.0,
+        0.1
+      ],
+      "roll": [
+        0,
+        1,
+        0
+      ]
+    },
+    "hips": {
+      "head": [
+        0.0,
+        0.29,
+        -0.02
+      ],
+      "tail": "spine"
+    },
+    "spine": {
+      "head": [
+        0.0,
+        0.39,
+        0.0
+      ],
+      "tail": "spine1"
+    },
+    "spine1": {
+      "head": [
+        0.0,
+        0.5,
+        0.015
+      ],
+      "tail": "chest"
+    },
+    "chest": {
+      "head": [
+        0.0,
+        0.6,
+        0.0
+      ],
+      "tail": "neck"
+    },
+    "neck": {
+      "head": [
+        0.0,
+        0.7,
+        -0.015
+      ],
+      "tail": "head"
+    },
+    "head": {
+      "head": [
+        0.0,
+        0.79,
+        -0.02
+      ],
+      "tail": [
+        0.0,
+        1.0,
+        0.03
+      ]
+    },
+    "ear_L": {
+      "head": [
+        0.085,
+        0.94,
+        0.01
+      ],
+      "tail": [
+        0.105,
+        0.99,
+        0.01
+      ]
+    },
+    "clavicle_L": {
+      "head": [
+        0.03,
+        0.665,
+        -0.01
+      ],
+      "tail": "upper_arm_L"
+    },
+    "upper_arm_L": {
+      "head": [
+        0.125,
+        0.672,
+        -0.008
+      ],
+      "tail": "forearm_L",
+      "roll": "palm"
+    },
+    "forearm_L": {
+      "head": [
+        0.244721,
+        0.669707,
+        0.002345
+      ],
+      "tail": "forearm_twist_L",
+      "roll": "palm"
+    },
+    "forearm_twist_L": {
+      "head": [
+        0.299863,
+        0.669213,
+        0.011173
+      ],
+      "tail": "hand_L",
+      "roll": "palm"
+    },
+    "hand_L": {
+      "head": [
+        0.355,
+        0.67,
+        0.02
+      ],
+      "tail": "fingers_L",
+      "roll": "palm"
+    },
+    "fingers_L": {
+      "head": [
+        0.400029,
+        0.666345,
+        0.030798
+      ],
+      "tail": [
+        0.424499,
+        0.659698,
+        0.036204
+      ],
+      "roll": "palm"
+    },
+    "thigh_L": {
+      "head": [
+        0.092,
+        0.29,
+        0.0
+      ],
+      "tail": "shin_L"
+    },
+    "shin_L": {
+      "head": [
+        0.104,
+        0.164,
+        -0.012
+      ],
+      "tail": "foot_L"
+    },
+    "foot_L": {
+      "head": [
+        0.11,
+        0.062,
+        -0.03
+      ],
+      "tail": "toes_L",
+      "roll": [
+        0,
+        1,
+        0
+      ]
+    },
+    "toes_L": {
+      "head": [
+        0.12,
+        0.022,
+        0.075
+      ],
+      "tail": [
+        0.122,
+        0.01,
+        0.14
+      ],
+      "roll": [
+        0,
+        1,
+        0
+      ]
+    },
+    "tail": {
+      "head": [
+        0.0,
+        0.355,
+        -0.17
+      ],
+      "tail": [
+        0.0,
+        0.35,
+        -0.215
+      ],
+      "roll": [
+        0,
+        1,
+        0
+      ]
+    }
+  },
+  "jointsNote": "The places are the places of the source, mapped by the point edits of the hand rig (assets/models/polar-bear/README.md). The source places are in the body units and axes of the source pose: 1 unit from the soles to the top of the head, the soles at y = 0, +z forward, +x the left side. The right side mirrors the left side. The FBX has no armature, so each joint comes from sections of the mesh and its edge loops. Arm (axis y 0.67, z -0.01 to 0.02, height 0.21 at the root to 0.134 at x 0.31): the shoulder joint at x 0.125 inside the arm root (the armpit at x 0.16), the elbow at x 0.245 (0.52 of the arm from the shoulder to the wrist, as on the main polar bear), the wrist at x 0.355 where the paw widens, the knuckles at x 0.425 where the claws start, the tip at x 0.463. Leg: the hip joint at y 0.29, the knee at y 0.165 above the narrow shin, the ankle at y 0.062 above the heel, the ball of the foot at z 0.075, and the toe tips at z 0.14. Trunk: the joints on the middle line of the trunk sections. Head: the chin at y 0.79 and the top of the skull at y 1.0. Tail: the short tail at the back of the haunch at y 0.355. The palm faces down: the paws of the source lie flat with the claws at their front edge.",
+  "palm": [
+    0,
+    -1,
+    0
+  ],
+  "palmNote": "The paws of the source lie flat with the claws curled down, so the palm faces down.",
+  "bind": {
+    "trunk": {
+      "open": 1,
+      "shares": {
+        "hips": 1,
+        "spine": 1,
+        "spine1": 0.75,
+        "chest": 0.5,
+        "neck": 0.25,
+        "head": 0
+      }
+    },
+    "bindArms": {
+      "upper_arm": [
+        0.813873,
+        -0.143043,
+        0.563161
+      ],
+      "forearm": [
+        0.316246,
+        0.757051,
+        0.571719
+      ]
+    },
+    "straightArms": true,
+    "bindSupination": {
+      "L": 0.0,
+      "R": 52.0
+    },
+    "note": "legTurns gives the world turn of each left leg bone from the seated bind to the source: the thigh slopes 22 degrees down and 12 degrees out, and the shin leans 5 degrees forward of vertical, so that most of the thigh lies on the seat (uv run --no-project --with numpy python -I tools/rig/leg_turns.py <config> 22 12 5). The bind arms are those of the main polar bear. The bind paw of each arm turns about its bind forearm toward supination by bindSupination degrees (paw_supination() of tools/blender/rig_mesh.py).",
+    "legTurns": {
+      "thigh": [
+        0.578488,
+        0.064276,
+        -0.096412,
+        0.807418
+      ],
+      "shin": [
+        0.13043,
+        0.002543,
+        0.029066,
+        0.991028
+      ],
+      "foot": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ],
+      "toes": [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  },
+  "colors": {
+    "samples": 6,
+    "palette": 48,
+    "dark": 0.0074,
+    "eyeShare": 0.34,
+    "eyeBox": [
+      [
+        0.0,
+        0.88,
+        0.1
+      ],
+      [
+        0.065,
+        0.94,
+        0.145
+      ]
+    ],
+    "noseBox": [
+      [
+        -0.035,
+        0.835,
+        0.185
+      ],
+      [
+        0.035,
+        0.895,
+        0.23
+      ]
+    ],
+    "nose": [
+      0.1,
+      0.09,
+      0.09
+    ],
+    "note": "Each face takes the mean sRGB color of the color map at a grid of samples (add_surface()). The eye box holds the eyeballs (middles at x 0.034, y 0.924, z 0.095), and the nose box the black nose tip.",
+    "tone": {
+      "chroma": 0.2,
+      "light": [
+        0.985,
+        0.995
+      ],
+      "keep": [],
+      "points": [
+        [
+          0.6,
+          0,
+          0,
+          0
+        ],
+        [
+          0.97,
+          0,
+          0,
+          0
+        ]
+      ],
+      "note": "No move. The hand route does not read the tone. The color map of the source replaces the face colors in the app."
+    },
+    "eyeBoxNote": "The eye box holds the two loose eyeballs of the source (|x| 0.02 to 0.055, y 0.89 to 0.928, z 0.111 to 0.133, mapped by the point edits). The nose box holds the dark nose tip."
+  },
+  "eyeShell": {
+    "lift": 0.002,
+    "points": 12,
+    "reach": 1,
+    "darkReach": 2,
+    "note": "The values of the other meshes. The hand rig adds no eye fans (eye_fans=False)."
+  },
+  "chair": {
+    "prop": "bench",
+    "halfWidth": 0.25,
+    "front": -0.045,
+    "back": -0.2,
+    "backHeight": 0.01,
+    "note": "The piano bench of the pianist, as on the earlier Tripo polar bear (benchFitOf() of tools/body-module.ts)."
+  },
+  "armSegments": {
+    "helper": 0.03,
+    "note": "Each upper arm and each forearm has 4 deform segments, and each elbow and wrist a helper bone of this length in units."
+  },
+  "rollSplit": true,
+  "rollSplitNote": "The simple route splits the roll segments by place (roll_split() of tools/blender/simple_rig.py). The hand rig sets the same split in the exact rows of each arm ring (assets/models/polar-bear/README.md, \"tripo-hand/polar-bear.blend\").",
+  "texture": "assets/models/polar-bear/tripo-p2/polar-bear.fbm/polar-bear_basecolor.jpg",
+  "chairNote": "The seat of the rig in units of this body, as the property seat of the armature of tripo-hand/polar-bear.blend holds it.",
+  "body": {
+    "crease": 55
+  },
+  "bodyNote": "The facts of the body (BODY_FACTS of tools/body-module.ts) beside the height: the crease angle 55, because the limb rings of the source have 15 or 17 vertices, and the Tripo mesh has many poles.",
+  "metersPerUnit": 2.00323,
+  "metersPerUnitNote": "The scale of the app: H of the main polar bear (0.422795 m). The polar bear is the largest player.",
+  "eyeSize": 0.21106,
+  "eyeSizeNote": "The head height H of the body in units, as body-module measures it on the export, before the head size. The hand rig keeps the eyes of the mesh, so it places no pea eye."
+}

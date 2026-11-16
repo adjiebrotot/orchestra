@@ -1,0 +1,2294 @@
+/* The tokens and the layout of the UI prototype, docs/prototype/ui.html (design 2.8). */
+
+:root {
+  --bg-overlay: rgba(16, 13, 11, 0.72);
+  --panel: #17130f;
+  /* The floating panel of the drawer: nearly opaque, with a blur of the stage behind it. */
+  --panel-glass: rgba(21, 18, 16, 0.96);
+  /* The thin line between the rows of a list. */
+  --line-faint: rgba(255, 240, 220, 0.06);
+  --line: rgba(255, 240, 220, 0.1);
+  --text: #efe8dc;
+  --text-dim: #b5aa99;
+  --accent: #e7b45a;
+  --accent-strong: #f0c676;
+  --danger: #e0796a;
+  /* The track of a slider, where it is not filled (design 2.8). */
+  --track: rgba(255, 240, 220, 0.2);
+  /* The shade behind the title, so that the title reads over white fur (design 2.8). */
+  --title-shade: rgba(11, 9, 8, 0.8);
+  /* The gray of the GitHub mark. The logo rules of GitHub permit the mark only in white, black,
+     or gray (design 2.8). */
+  --github-mark: #c8c8c8;
+  --pill-line: rgba(255, 240, 220, 0.24);
+  /* The dark color of an icon or a text on --accent. */
+  --on-accent: #1a140d;
+  --radius-panel: 10px;
+  /* The radius of the floating panel of the drawer and of the bar. */
+  --radius-float: 12px;
+  --radius-button: 8px;
+  /* The control size of the bar and the first screen. */
+  --target: 40px;
+  /* The size of the compact controls in the drawer and in messages. */
+  --target-compact: 32px;
+  /* The center of the play button of the first screen: 72% of the height, and at least 230 px
+     above the bottom, so that the texts below it stay clear of the bar (design 2.8). */
+  --play-y: min(72%, calc(100% - 230px));
+  /* The serif of the piece title, from the fonts of the system (design 2.8). */
+  --font-serif:
+    'Palatino Linotype', Palatino, 'Book Antiqua', 'Iowan Old Style', Georgia, 'Noto Serif', serif;
+  /* The left edge of the title: 36 px at 1280 px, as in the mockup. */
+  --title-left: clamp(16px, 2.8vw, 40px);
+  /* The top edge of the title box: the logo starts here. */
+  --title-top: 14px;
+  /* The space between the bar and the bottom edge of the window. */
+  --bar-gap: 12px;
+  color-scheme: dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  /* A pinch zooms only the stage, not the page (design 2.5). A list can still scroll. The orbit
+     controls set touch-action none on the canvas and take the pinch there. */
+  touch-action: pan-x pan-y;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  min-width: var(--target);
+  min-height: var(--target);
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+button {
+  transition:
+    background-color 0.12s,
+    color 0.12s;
+}
+
+button:hover {
+  background: var(--line);
+}
+
+/* A pressed button gets a brighter background. */
+button:active {
+  background: rgba(255, 240, 220, 0.18);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The focus ring of a slider has the radius of a button. */
+input[type='range']:focus-visible {
+  border-radius: var(--radius-button);
+}
+
+/* While the bar hides during play, the pointer over the stage hides too. A pointer motion shows
+   both again (design 2.3). The orbit controls of three.js set an inline cursor on the canvas, so
+   this rule needs the priority. */
+body:has(.bar.is-hidden) #stage {
+  cursor: none !important;
+}
+
+/* In Free mode, the cursor tells that a drag turns the view (design 2.5, 2.8). */
+body:not(:has(.camera[aria-pressed='true'])) #stage {
+  cursor: grab;
+}
+
+body:not(:has(.camera[aria-pressed='true'])) #stage:active {
+  cursor: grabbing;
+}
+
+/* The hint "Drag to look around" above the bar, in the middle of the stage. Beside the open
+   drawer, it moves with the middle of the free area. The pointer goes through it. */
+.drag-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 18px;
+  pointer-events: none;
+}
+
+/* The hint "Turn the phone for a larger film." in the bottom bar of the letterbox, just below
+   the frame, in Cinematic mode on a touch screen in portrait (design 2.5). */
+.turn-hint {
+  display: none;
+}
+
+@media (orientation: portrait) and (pointer: coarse) {
+  body:has(.camera[aria-pressed='true']) .turn-hint {
+    position: fixed;
+    left: 16px;
+    right: 16px;
+    top: calc(100vh - var(--letterbox, 0px) + 16px);
+    display: block;
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 13px;
+    text-align: center;
+    pointer-events: none;
+  }
+}
+
+/* The label of the seat of a clicked player, just above the point of the click (design 2.3). The
+   pointer goes through it. */
+.pick-label {
+  position: fixed;
+  z-index: 2;
+  max-width: calc(100vw - 32px);
+  transform: translate(-50%, calc(-100% - 14px));
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+@media (min-width: 700px) {
+  body:has(.drawer:not([hidden])) .drag-hint {
+    translate: -176px 0;
+  }
+}
+
+svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The closed drawer stays in the layout with no visibility, so that it can fade out. */
+[hidden]:not(.drawer) {
+  display: none !important;
+}
+
+/* In Cinematic mode, the title stands at the top-left corner of the frame, at the insets of Free
+   mode (design 2.3). The app sets --letterbox, the height of the top and the bottom bars, and
+   --letterbox-side, the width of each side bar, so the title moves with the bars. */
+.title {
+  --logo-lift: -2px;
+  position: fixed;
+  top: calc(var(--letterbox, 0px) + var(--title-top));
+  left: calc(var(--letterbox-side, 0px) + var(--title-left));
+  max-width: min(720px, calc(100vw - 2 * var(--letterbox-side, 0px) - 2 * var(--title-left)));
+  margin: 0;
+  text-shadow:
+    0 0 1px #000,
+    0 1px 3px #000;
+  pointer-events: none;
+}
+
+/* A window in portrait has a low frame and a high top bar: at 390 × 844, the frame is 167 px high
+   and the top bar 338 px. There the title stays at the top of the window, as in Free mode, so that
+   it covers no part of the low frame (design 2.3). */
+@media (orientation: portrait) {
+  .title {
+    top: var(--title-top);
+  }
+}
+
+/* In Cinematic mode, the piece title, the composer, and the link to the repository fade out and
+   stay hidden (design 2.3), because the title card (`ui/title-card.ts`) shows the piece in the
+   frame. The logo stays. The title stays a live region, so that a screen reader still reads a new
+   piece. The link hides after the fade, so that a hidden link takes no focus and no pointer. */
+.title h2,
+.title p {
+  transition: opacity 0.6s ease;
+}
+
+body:has(.camera[aria-pressed='true']) .title h2,
+body:has(.camera[aria-pressed='true']) .title p {
+  opacity: 0;
+}
+
+body:has(.camera[aria-pressed='true']) .title .github {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.6s ease,
+    visibility 0s 0.6s;
+}
+
+/* The title shade (design 2.8): one fixed gradient from the top-left corner of the frame behind
+   the title, which keeps 4.5:1 for each line of the title over a white animal in a close shot.
+   Its full part covers the title and the 4 px margin that e2e/title-shade.e2e.ts reads, and it
+   fades out over --shade-fade-y below the title and --shade-fade-x right of it, with no straight
+   edge. The text shadow of the title adds a tight edge to each letter. */
+.title::before {
+  --shade-fade-x: 120px;
+  --shade-fade-y: 72px;
+  content: '';
+  position: absolute;
+  top: calc(-1 * var(--title-top));
+  left: calc(-1 * var(--title-left));
+  right: calc(-1 * var(--shade-fade-x));
+  bottom: calc(-1 * var(--shade-fade-y));
+  z-index: -1;
+  background: var(--title-shade);
+  mask-image:
+    linear-gradient(to bottom, #000 calc(100% - var(--shade-fade-y)), transparent),
+    linear-gradient(to right, #000 calc(100% - var(--shade-fade-x)), transparent);
+  mask-composite: intersect;
+}
+
+/* In Cinematic mode the title shows only the logo, so the shade covers only the logo line. */
+body:has(.camera[aria-pressed='true']) .title::before {
+  bottom: auto;
+  height: calc(var(--title-top) + 20px + var(--shade-fade-y));
+}
+
+.title .logo,
+.title h2,
+.title p {
+  position: relative;
+  width: fit-content;
+}
+
+/* The logo of the mockup above the piece title: the gold paw and "Pawchestra" (design 2.8). Its
+   bottom gap puts the top of the title at about 72 px, as in the mockup. It is no control. */
+.title .logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 30px -4px;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 20px;
+  letter-spacing: 0.01em;
+  color: var(--accent-strong);
+}
+
+.title .logo svg {
+  width: 21px;
+  height: 21px;
+  fill: currentColor;
+  stroke: none;
+}
+
+/* The flex line centers the box of the wordmark, which holds the depth of the tails of a "p" and
+   a "y" (`tools/wordmark.ts`), so with no lift the paw and the GitHub mark sit 2 px under the
+   capitals, and the paw hangs under the baseline. The paw moves up, so it stands on the baseline
+   and reaches the height of the capitals. */
+.title .logo > svg:first-child {
+  translate: 0 var(--logo-lift);
+}
+
+/* The heading of the page holds only the wordmark, so it takes the place of the wordmark in the
+   flex line of the logo. */
+.title .logo .name {
+  display: flex;
+  margin: 0;
+}
+
+/* The wordmark in Fraunces (design 2.8). Its view box goes from the top of the "h" to the bottom
+   of the "p" and the "y", so a height of 22 px gives the letters of a font size of about 22 px. */
+.title .logo .wordmark {
+  width: auto;
+  height: 22px;
+}
+
+/* The link to the repository on GitHub stands after the name in the logo line (design 2.8): an
+   outlined pill with the GitHub mark and the text "Open source", in the gray of --github-mark,
+   and white on a hover. The pill sets the link apart from the name. It centers on the capitals of
+   the name (--logo-lift), and the negative margins keep the height of the logo line. The title
+   takes no pointer, so the link takes it back. */
+.title .github {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 20px;
+  margin: 0 0 0 6px;
+  padding: 0 9px 0 7px;
+  border: 1px solid var(--pill-line);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--github-mark);
+  text-decoration: none;
+  translate: 0 var(--logo-lift);
+  pointer-events: auto;
+  transition:
+    background-color 0.12s,
+    border-color 0.12s,
+    color 0.12s,
+    opacity 0.6s ease;
+}
+
+.title .github:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+  background: var(--line);
+}
+
+.title .github svg {
+  width: 12px;
+  height: 12px;
+}
+
+.title h2 {
+  margin: 0;
+  font-family: var(--font-serif);
+  /* 32 px at 1280 px, as in the mockup. */
+  font-size: clamp(24px, 2.5vw, 36px);
+  font-weight: 400;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.title p {
+  margin: 4px 0 0;
+  font-size: clamp(13px, 1.15vw, 16px);
+  color: var(--text);
+}
+
+/* The title card of Cinematic mode at the song start (design 2.8): the composer in spaced gold
+   capitals, a short gold rule, and the piece title in the serif, centered in the lower part of the
+   letterbox frame, as the main title of a film. The app sets its opacity from the song time
+   (`--card-level`, `titleCardLevel()` of app/title-card.ts), so it needs no transition. A soft
+   shade behind it keeps 4.5:1 over a lit stage. It takes no pointer. */
+.title-card {
+  position: fixed;
+  left: calc(var(--letterbox-side, 0px) + 24px);
+  right: calc(var(--letterbox-side, 0px) + 24px);
+  bottom: calc(var(--letterbox, 0px) + (100vh - 2 * var(--letterbox, 0px)) * 0.08);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+  opacity: var(--card-level, 0);
+  pointer-events: none;
+}
+
+.title-card[hidden] {
+  display: none;
+}
+
+.title-card::before {
+  content: '';
+  position: absolute;
+  inset: -28px 18%;
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--title-shade);
+  filter: blur(24px);
+}
+
+.title-card p {
+  margin: 0;
+  max-width: 900px;
+}
+
+.title-card-composer {
+  font-size: clamp(11px, 0.95vw, 14px);
+  font-weight: 500;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+.title-card-rule {
+  width: 48px;
+  height: 1px;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+.title-card-title {
+  font-family: var(--font-serif);
+  font-size: clamp(22px, 3vw, 46px);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  text-wrap: balance;
+}
+
+/* The end card (design 2.8) in the middle of the frame, with the type of the title card. Its
+   opacity is a function of the time since the song end (`endCardView()` of app/end-card.ts), so it
+   needs no transition. Beside the open drawer of a wide window, it stands in the free area. */
+.end-card {
+  position: fixed;
+  left: calc(var(--letterbox-side, 0px) + 24px);
+  right: calc(var(--letterbox-side, 0px) + 24px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  text-shadow: 0 1px 3px #000;
+  opacity: var(--card-level, 0);
+}
+
+.end-card[hidden] {
+  display: none;
+}
+
+.end-card::before {
+  content: '';
+  position: absolute;
+  inset: -36px 16%;
+  z-index: -1;
+  border-radius: 999px;
+  background: var(--title-shade);
+  filter: blur(28px);
+}
+
+.end-card p {
+  margin: 0;
+  max-width: 900px;
+}
+
+.end-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.end-buttons button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--target);
+  padding: 0 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  text-shadow: none;
+}
+
+.end-again {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.end-again:hover {
+  background: var(--accent-strong);
+}
+
+.end-next {
+  max-width: min(420px, calc(100vw - 48px));
+  background: var(--bg-overlay);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.end-next-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.end-ring {
+  flex: none;
+  transform: rotate(-90deg);
+}
+
+.end-ring circle {
+  fill: none;
+  stroke-width: 2;
+}
+
+.end-ring .track {
+  stroke: var(--track);
+}
+
+.end-ring .done {
+  stroke: var(--accent);
+}
+
+@media (min-width: 700px) {
+  body:not(:has(.camera[aria-pressed='true'])):has(.drawer:not([hidden])) .end-card {
+    right: 364px;
+  }
+}
+
+/* A window in portrait has a low frame and a high top bar (2.3). There the card stands in the top
+   bar, just above the frame, so that it covers no part of the low frame. */
+@media (orientation: portrait) {
+  .title-card {
+    bottom: calc(100vh - var(--letterbox, 0px) + 20px);
+  }
+}
+
+/* The center of the play button sits at 72% of the height. While it shows, the frame of the
+   camera shrinks until the front edge of the stage stands above it, so that the button does not
+   cover the orchestra (design 2.8, `clearFirstScreen()` of shots/frame.ts). */
+.first-screen {
+  position: fixed;
+  left: 50%;
+  top: var(--play-y);
+  transform: translate(-50%, -36px);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  /* The orbit controls of the canvas get the pointer around the button. */
+  pointer-events: none;
+}
+
+.first-screen button {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--on-accent);
+  pointer-events: auto;
+}
+
+.first-screen button:hover {
+  background: var(--accent-strong);
+}
+
+.first-screen .play:active {
+  background: var(--accent-strong);
+  transform: scale(0.96);
+}
+
+/* The place of the play button in the load state of index.html, before the script runs. */
+.first-screen .boot-slot {
+  position: relative;
+  width: 72px;
+  height: 72px;
+}
+
+.first-screen .icon {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+  stroke: none;
+}
+
+/* The pause icon is a stroke icon, so that it matches the pause icon of the bar. */
+.first-screen .icon[data-shown='Pause'] {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.5;
+}
+
+.first-screen .ring {
+  position: absolute;
+  left: -6px;
+  top: -6px;
+  width: 84px;
+  height: 84px;
+  transform: rotate(-90deg);
+}
+
+/* Until the bytes of the samples pass 15%, a short part of the ring turns slowly. While the
+   piece waits for its samples, the ring turns faster (design 2.2, 2.8). */
+.first-screen.is-pending .ring {
+  animation: ring-turn 2.4s linear infinite;
+}
+
+.first-screen.is-waiting .ring {
+  animation: ring-turn 1.6s linear infinite;
+}
+
+@keyframes ring-turn {
+  from {
+    transform: rotate(-90deg);
+  }
+
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.first-screen .ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.first-screen .ring .track {
+  stroke: rgba(255, 240, 220, 0.15);
+}
+
+.first-screen .ring .done {
+  stroke: var(--text);
+}
+
+/* The line about the app, and the button that opens the demo list (design 2.8). */
+.first-screen .intro {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  /* The box of the first screen starts at the middle of the window, so its width stops at half
+     the window. The intro takes its own width, so that its two buttons fit in one line. */
+  width: min(360px, calc(100vw - 32px));
+  max-width: min(360px, calc(100vw - 32px));
+  text-align: center;
+  text-shadow: 0 1px 2px #000;
+}
+
+.first-screen .intro p {
+  margin: 0;
+  font-size: 13px;
+  /* A narrow first screen beside the stage keeps lines of about the same length. */
+  text-wrap: balance;
+  color: var(--text-dim);
+}
+
+.first-screen .select-piece {
+  width: auto;
+  height: auto;
+  min-height: var(--target);
+  padding: 0 12px;
+  border-radius: var(--radius-button);
+  background: transparent;
+  color: var(--accent);
+  font-size: 14px;
+  font-weight: 600;
+  pointer-events: auto;
+}
+
+.first-screen .select-piece:hover {
+  background: var(--line);
+  color: var(--accent-strong);
+}
+
+/* "Watch as a film" and "Select music" stand in one line below the intro line (design 2.8). */
+.first-screen .intro-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* While the drawer shows the demo list, "Select music" has nothing to open, so it goes. A wide
+   window opens the drawer at the demo list at start (design 2.8). "Watch as a film" keeps the
+   height of the line, so that the first screen and the stage do not move. */
+body:has(.drawer:not([hidden]) #panel-demos:not([hidden]))
+  .first-screen
+  .select-piece:not(.watch-film) {
+  display: none;
+}
+
+/* The box keeps its height with no text, so that the play button does not move when the load
+   ends. */
+.first-screen .status {
+  max-width: min(320px, calc(100vw - 32px));
+  white-space: pre-line;
+  text-align: center;
+  min-height: 26px;
+  font-size: 13px;
+  line-height: 16px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  border: 1px solid var(--line);
+}
+
+.first-screen .status:empty {
+  visibility: hidden;
+}
+
+.bar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: var(--bar-gap);
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-float);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+
+/* The hidden bar keeps its controls in the focus order, so that keyboard focus shows it again. */
+.bar.is-hidden {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* The controls of the hidden bar ignore the pointer, so that the first tap only shows the bar
+   (design 2.3). The bar takes the tap, so that the tap does not reach the canvas. The controls
+   stay inert until the end of that tap (`is-waking`), because the browser finds the target of a
+   tap at its end. */
+.bar.is-hidden > *,
+.bar.is-waking > * {
+  pointer-events: none;
+}
+
+/* In Cinematic mode during play, the drawer hides with the bar, so that the film fills the screen
+   (design 2.3). It keeps its place, so it comes back open, and it keeps its place in the focus
+   order. It ignores the pointer, so the first tap goes to the stage and only shows it. It fades in
+   0.2 s with its own transition. */
+body.is-ui-hidden .drawer {
+  opacity: 0;
+}
+
+body.is-ui-hidden .drawer,
+body.is-ui-hidden .drawer * {
+  pointer-events: none;
+}
+
+/* Before the file of the first piece arrives, the length is not known, so the bar shows no times
+   and no seek bar. They keep their places, so that the bar does not move. */
+.bar.is-empty .time,
+.bar.is-empty .seek {
+  visibility: hidden;
+}
+
+/* The play button of the bar: a round button with a gold ring, as in the mockup. */
+.bar .play {
+  width: 44px;
+  height: 44px;
+  border: 1.75px solid var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.bar .play:hover {
+  border-color: var(--accent-strong);
+  background: rgba(231, 180, 90, 0.12);
+  color: var(--accent-strong);
+}
+
+.bar .play svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
+}
+
+.bar .play svg[data-shown='Pause'] {
+  stroke-width: 3.5;
+}
+
+.bar .play svg[data-shown='Play'] {
+  fill: currentColor;
+  stroke-width: 1.5;
+}
+
+.time {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  padding: 0 4px;
+}
+
+.seek {
+  flex: 1;
+  min-width: 60px;
+}
+
+/* The volume slider gives up its width before a control leaves the bar. The seek bar keeps its
+   least width, and it takes the free width of the bar. */
+.volume {
+  width: 128px;
+  min-width: 64px;
+}
+
+/* From 700 px, the bar holds each control and the duration. Below 900 px, the groups of the
+   mockup do not fit: at 700 px with touch, they put three buttons up to 174 px outside the bar.
+   There the controls stand closer. */
+@media (min-width: 700px) and (max-width: 899px) {
+  .bar {
+    gap: 8px;
+    padding: 0 12px;
+  }
+}
+
+/* On a wider screen, the controls of the bar stand apart in groups, as in the mockup. */
+@media (min-width: 900px) {
+  .bar {
+    gap: 12px;
+    padding: 0 16px 0 20px;
+  }
+
+  .bar .play {
+    margin-right: 12px;
+  }
+
+  .bar .seek {
+    margin: 0 8px;
+  }
+
+  .bar .speed {
+    margin: 0 16px;
+  }
+
+  .bar .volume {
+    margin-right: 16px;
+  }
+
+  .bar > :is(.reset, .full-screen, .drawer-button) {
+    margin-left: 12px;
+  }
+}
+
+/* The sliders look the same in Chromium, WebKit, and Firefox (design 2.8): a track of 4 px in
+   --track, the filled part in --accent, and a round thumb of 14 px in --accent. `--fill` is the
+   filled part from 0 to 1, which `ui/bar.ts` sets. Firefox draws the filled part with its own
+   element. */
+input[type='range'] {
+  --fill: 0;
+  height: var(--target);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type='range']:disabled {
+  cursor: default;
+}
+
+input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  /* The filled part ends at the center of the thumb. */
+  background: linear-gradient(
+    to right,
+    var(--accent) calc(7px + (100% - 14px) * var(--fill)),
+    var(--track) 0
+  );
+}
+
+input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--track);
+}
+
+input[type='range']::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+input[type='range']::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(231, 180, 90, 0.55);
+  transition:
+    background-color 0.12s,
+    transform 0.12s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+  transition:
+    background-color 0.12s,
+    width 0.12s,
+    height 0.12s;
+}
+
+/* A hover or a drag makes the thumb brighter and larger, as the hover of a button. */
+input[type='range']:enabled:is(:hover, :active)::-webkit-slider-thumb {
+  background: var(--accent-strong);
+  transform: scale(1.2);
+}
+
+/* Firefox does not scale the thumb, so the hover changes its size. */
+input[type='range']:enabled:is(:hover, :active)::-moz-range-thumb {
+  width: 17px;
+  height: 17px;
+  background: var(--accent-strong);
+}
+
+/* The seek bar cannot seek before the samples are ready. */
+input[type='range']:disabled::-webkit-slider-thumb {
+  background: var(--text-dim);
+}
+
+input[type='range']:disabled::-moz-range-thumb {
+  background: var(--text-dim);
+}
+
+/* The speed menu is a pill with the speed in its middle, as in the mockup, with no arrows of
+   the browser. */
+.speed {
+  height: var(--target);
+  min-width: 72px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 240, 220, 0.16);
+  background: transparent;
+  font-size: 14px;
+  text-align: center;
+  text-align-last: center;
+  cursor: pointer;
+  transition: background-color 0.12s;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.speed:hover {
+  background-color: var(--line);
+}
+
+.speed option {
+  background: var(--panel);
+}
+
+/* The icon of the cinematic camera is in the accent color while the toggle is on (design 2.8). */
+.camera[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+.drawer {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  bottom: 80px;
+  width: 340px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-float);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  /* The drawer itself does not scroll and does not bounce. The panel of a tab scrolls below the
+     tabs, and in the tab "Music" only the demo list scrolls (design 2.8). */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 6px 16px 16px;
+  /* The drawer slides 16 px and fades in 200 ms when it opens and closes (design 2.8). A sheet
+     that a short drag of its handle does not close goes back to its place. */
+  transition:
+    transform 0.2s,
+    translate 0.2s,
+    opacity 0.2s,
+    visibility 0s;
+}
+
+/* The closed drawer has no visibility, so that it takes no pointer, no focus, and no place in the
+   accessibility tree. Its visibility ends after the fade. The display replaces the "none" of the
+   browser for the attribute "hidden". */
+.drawer[hidden] {
+  display: flex;
+  visibility: hidden;
+  opacity: 0;
+  translate: 16px 0;
+  transition:
+    transform 0.2s,
+    translate 0.2s,
+    opacity 0.2s,
+    visibility 0s 0.2s;
+}
+
+/* While the drawer is open, the stage moves to the middle of the free area on its left, so that
+   the drawer does not cover the stage (design 2.8). The canvas stays in place and fills the
+   window: the camera moves its frame (`stageCover()` of app/stage-cover.ts), and the scene
+   continues under the drawer and the bar. The first screen moves with the frame. */
+.first-screen {
+  transition: translate 0.2s;
+}
+
+/* The canvas fades to the page background while the app builds a new scene, so that the stop of the
+   frames does not show as a hitch (design 2.8). */
+#stage {
+  transition: opacity 0.15s;
+}
+
+/* The first screen moves with the stage beside the open drawer (design 2.8). */
+body:has(.drawer:not([hidden])) .first-screen {
+  translate: -176px 0;
+}
+
+body.is-building #stage {
+  opacity: 0;
+}
+
+/* The top of the drawer: the tabs at the left and the close button at the right (design 2.8).
+   It stays above the panel, which scrolls below it, so that the tabs stay in reach. */
+.drawer-top {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 -16px 8px;
+  padding: 8px 10px 0 16px;
+  border-bottom: 1px solid var(--line-faint);
+  background: var(--panel);
+}
+
+.tab-list {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+}
+
+/* A tab: a 16 px icon and 14 px text in --text-dim. The current tab has --text and a gold line at
+   its foot. */
+.tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--target-compact);
+  padding: 0 10px 2px;
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.tab svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+}
+
+/* A tab shows its hover only in its color, so that no tab looks like the current tab. */
+.tab:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.tab[aria-selected='true'] {
+  color: var(--text);
+}
+
+.tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+}
+
+.drawer .close-drawer {
+  min-width: var(--target-compact);
+  min-height: var(--target-compact);
+  width: var(--target-compact);
+  height: var(--target-compact);
+  margin-bottom: 2px;
+  color: var(--text-dim);
+}
+
+.drawer .close-drawer:hover {
+  color: var(--text);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The panel of a tab fills the drawer below the tabs and scrolls. It can bounce at its ends, but
+   the drawer does not. The scroll bar stands at the edge of the drawer. */
+.tab-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 240, 220, 0.18) transparent;
+}
+
+/* In the tab "Music", only the demo list scrolls, and it can bounce at its ends. The file
+   button stays below it. */
+#panel-demos:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#panel-demos > .list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -16px;
+  padding: 0 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 240, 220, 0.18) transparent;
+}
+
+.list > li + li {
+  border-top: 1px solid var(--line-faint);
+}
+
+/* A row of the demo list: the title and the composer, then the length at the right. Each row
+   keeps a column for the level meter, 9 bars of 2 px with gaps of 2 px, so that the text does
+   not move when the meter comes into a row. */
+.demo {
+  position: relative;
+  display: grid;
+  grid-template-columns: [text] 1fr [meter] 34px [length] auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 1px;
+  place-items: initial;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  margin: 2px 0;
+  padding: 7px 10px;
+  text-align: left;
+  border-radius: var(--radius-button);
+}
+
+.demo:hover {
+  background: var(--line-faint);
+}
+
+/* A button or a tab that a click focused shows no focus ring after a key of the page (2.4). */
+[data-pointer-focus]:focus-visible {
+  outline: none;
+}
+
+/* The current demo: a light row with a gold bar at its left, out of the row (design 2.8). */
+.demo[aria-current='true'] {
+  background: rgba(255, 240, 220, 0.07);
+}
+
+.demo[aria-current='true']::before {
+  content: '';
+  position: absolute;
+  left: -10px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.demo .name {
+  grid-column: text;
+  align-self: end;
+  font-size: 13px;
+  line-height: 17px;
+}
+
+.demo small {
+  grid-column: text;
+  align-self: start;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The level meter of the current demo: nine gold bars that move with the music (design 2.8).
+   `ui/demo-list.ts` scales each bar from its foot. */
+.demo .meter {
+  grid-column: meter;
+  grid-row: 1 / span 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+
+.demo .meter span {
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: var(--accent);
+  transform: scaleY(0.15);
+  transform-origin: bottom;
+}
+
+.demo .length {
+  grid-column: length;
+  grid-row: 1 / span 2;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+/* The file button below the demo list. It stays at the bottom of the drawer while the rows
+   above it scroll. */
+.file-picker {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  margin: 4px -16px -16px;
+  padding: 12px 16px 16px;
+  background: linear-gradient(to bottom, transparent, var(--panel) 12px);
+}
+
+.file-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0 10px 0 12px;
+  border: 1px solid rgba(231, 180, 90, 0.35);
+  background: rgba(231, 180, 90, 0.04);
+  font-size: 13px;
+  text-align: left;
+}
+
+.file-button:hover {
+  border-color: rgba(231, 180, 90, 0.6);
+  background: rgba(231, 180, 90, 0.1);
+}
+
+.file-button .file-icon {
+  flex: none;
+  color: var(--accent);
+}
+
+/* The name of the button, and below it a dim line that says where the file comes from. */
+.file-button .file-text {
+  display: grid;
+  gap: 1px;
+  padding: 7px 0;
+}
+
+.file-button small {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 15px;
+}
+
+.file-button .chevron {
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--text-dim);
+}
+
+/* A compact control of the drawer (design 2.8). A toggle of a seat row has a word, so it is as
+   wide as its word. */
+.toggle {
+  min-width: var(--target-compact);
+  min-height: var(--target-compact);
+  height: var(--target-compact);
+  padding: 0 10px;
+}
+
+.seat {
+  position: relative;
+  display: grid;
+  grid-template-columns: 13px 1fr auto auto;
+  align-items: center;
+  column-gap: 12px;
+  /* The dot lines up with the text of the tabs and the demo rows, and the button "Solo" keeps
+     the inset of the length of a demo row. The row has the height, the gaps, and the inner space
+     of a demo row, so that the tabs "Music" and "Seats" have one rhythm (design 2.8). */
+  min-height: 48px;
+  margin: 2px 0;
+  padding: 7px 10px;
+  border-radius: var(--radius-button);
+}
+
+.seat:hover {
+  background: var(--line-faint);
+}
+
+/* The dot of a seat (design 2.8). --glow, the level of the seat, sets its opacity, its size, and
+   its glow: a seat that does not play has a very small, faint dot, and a seat that plays has a
+   full dot with a soft glow in --ring, the fur color or a lighter mix of it (ringColor() in
+   app/seat-text.ts). The dot keeps its layout space at all levels. */
+.dot {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  box-shadow: 0 0 calc(10px * var(--glow, 0)) calc(2px * var(--glow, 0))
+    color-mix(in srgb, var(--ring) calc(100% * var(--glow, 0)), transparent);
+  opacity: calc(0.3 + 0.7 * var(--glow, 0));
+  transform: scale(calc(0.3 + 0.7 * var(--glow, 0)));
+}
+
+/* The sound-only seat has no animal, so its dot has no fur color. Its glow has the color of its
+   border. */
+.dot.no-color {
+  --ring: var(--text-dim);
+  border: 1.5px solid var(--text-dim);
+}
+
+.seat .name {
+  display: grid;
+  row-gap: 1px;
+  font-size: 13px;
+  line-height: 17px;
+}
+
+.seat small {
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+/* The rows of the mockup show the name and the animals. Only a screen reader reads the source
+   line (design 2.8). */
+.seat small.source {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The dim text of a silent seat keeps 4.5:1 on the panel and on the hover row. */
+.seat.silent .name {
+  opacity: 0.8;
+}
+
+/* The buttons "Mute" and "Solo": a small box of the mockup in a control of the compact size.
+   The box is a layer behind the word, so that the target stays large. */
+.toggle {
+  position: relative;
+  isolation: isolate;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.toggle::before {
+  content: '';
+  position: absolute;
+  inset: calc(50% - 11px) 3px;
+  z-index: -1;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: rgba(255, 240, 220, 0.05);
+  transition:
+    background-color 0.12s,
+    border-color 0.12s;
+}
+
+/* The boxes of "Mute" and "Solo" stand close, as in the mockup. The targets do not overlap. */
+.toggle + .toggle {
+  margin-left: -4px;
+}
+
+.toggle:hover,
+.toggle:active {
+  background: transparent;
+  color: var(--text);
+}
+
+.toggle:hover::before {
+  background: rgba(255, 240, 220, 0.12);
+}
+
+.toggle[aria-pressed='true'] {
+  color: var(--on-accent);
+}
+
+.toggle[aria-pressed='true']::before {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The focus ring goes around the square. */
+.toggle:focus-visible {
+  outline: none;
+}
+
+.toggle:focus-visible::before {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* A segmented control fills the width of the settings, and each label stays on one line. The
+   buttons share the free width, so a long label such as "Auto (Medium)" gets more room. */
+.segmented {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  overflow: hidden;
+}
+
+.segmented button {
+  flex: 1 1 auto;
+  border-radius: 0;
+  padding: 0 10px;
+  min-width: 0;
+  min-height: var(--target-compact);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--line-faint);
+}
+
+.segmented button[aria-pressed='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* The settings line up with the text of the tabs and the demo rows. Each setting is a group with
+   the same gaps: 8 px from the head line to the control, and 8 px to the dim line. */
+.settings {
+  display: grid;
+  gap: 20px;
+  padding: 8px 10px 0;
+}
+
+.setting-label {
+  display: block;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+/* The head line of a setting: the label at the left, and a value such as the frame rate counter
+   at the right. */
+.setting-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.setting .setting-label {
+  font-weight: 500;
+  color: var(--text);
+}
+
+.setting-value {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* The dim line below a setting, which explains its values (design 2.8). */
+.setting-help {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 17px;
+  color: var(--text-dim);
+}
+
+/* The "Playback" group shows only on a phone, with four controls of the bar (design 2.8). */
+.playback {
+  display: none;
+}
+
+.playback-row {
+  display: grid;
+  gap: 4px;
+  margin: 4px 0 12px;
+}
+
+/* Each place of the "Playback" group has a label on the left and the control on the right. */
+.playback-slot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.playback-slot .setting-label {
+  min-width: 64px;
+}
+
+.playback-slot .volume {
+  flex: 1;
+}
+
+/* The name of an icon button shows only in the "Playback" group of a phone (design 2.8). */
+.button-text {
+  display: none;
+}
+
+.playback .button-text {
+  display: inline;
+}
+
+.playback-slot button {
+  grid-auto-flow: column;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+}
+
+/* The drag handle shows only on a phone. Its band is wider and higher than its bar. */
+.handle {
+  display: none;
+}
+
+.drawer.is-dragged {
+  transition: none;
+}
+
+/* The credits dialog has the layout of the end credits of a film (design 2.8). The title card,
+   the headings, the pieces, and the end card stand on the center axis. The rows of the group
+   "Sounds" meet at the axis: the name of the source at the left, and its credit at the right. */
+.credits {
+  padding: 20px 4px 12px;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.credits p {
+  margin: 0;
+}
+
+.credits a {
+  color: var(--accent);
+}
+
+.credits a:hover {
+  color: var(--accent-strong);
+}
+
+.credits-card {
+  margin-bottom: 36px;
+}
+
+.credits .credits-app {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+}
+
+/* The small capitals of a role line and of a heading. */
+.credits .credits-role,
+.credits h3 {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.credits .credits-role {
+  margin-top: 20px;
+}
+
+/* The name of the author has the serif of the title of the piece. It is a link with a faint
+   underline. */
+.credits .credits-author {
+  margin-top: 6px;
+  font-family: var(--font-serif);
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.credits .credits-author a {
+  color: var(--text);
+  text-decoration-color: rgba(239, 232, 220, 0.3);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 5px;
+}
+
+.credits .credits-author a:hover {
+  color: var(--accent-strong);
+  text-decoration-color: currentColor;
+}
+
+/* A heading stands between two thin lines. */
+.credits-group {
+  margin-top: 32px;
+}
+
+.credits h3 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 16px;
+  color: var(--accent);
+}
+
+.credits h3::before,
+.credits h3::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* A piece: the title, the composer, and the source of the score, each on its own line. */
+.pieces {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.piece {
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.piece-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.piece small {
+  font-size: 12px;
+}
+
+/* The current piece has the serif of the title of the piece. */
+.piece.now .piece-title {
+  margin-bottom: 2px;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.credit-rows {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.credit-row {
+  display: contents;
+}
+
+.credit-rows dt {
+  text-align: right;
+  color: var(--text-dim);
+}
+
+.credit-rows dd {
+  margin: 0;
+  text-align: left;
+  color: var(--text);
+}
+
+/* The end card: the paw of the logo, the copyright line, and the link to the licenses. */
+.credits-end {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin-top: 44px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.credits-end svg {
+  width: 20px;
+  height: 20px;
+  margin-bottom: 6px;
+  fill: currentColor;
+  stroke: none;
+  color: var(--accent-strong);
+}
+
+/* The line of the link "Credits" at the end of the tab "Settings": small and dim text with no
+   box (design 2.8). */
+.credits-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 20px;
+  margin: 24px 0 0;
+  padding: 8px 10px 0;
+  border-top: 1px solid var(--line-faint);
+}
+
+/* "Copy link" and its status line, which tells that the link is in the clipboard. */
+.copy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-status {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* A button that opens a dialog and looks like a link of text. Its hover changes only the color. */
+.text-link {
+  min-width: 0;
+  min-height: var(--target-compact);
+  margin-left: -6px;
+  padding: 0 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-decoration-color: rgba(181, 170, 153, 0.5);
+  text-underline-offset: 3px;
+}
+
+.text-link:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+/* A modal dialog, such as the credits (design 2.8): on --panel, with a border in --line and the
+   radius of a panel. The header stays at the top, and the body scrolls. The browser shows a
+   closed dialog with no box, so only the open dialog gets the flex layout. */
+.modal {
+  width: min(560px, calc(100vw - 32px));
+  max-width: none;
+  max-height: min(720px, calc(100dvh - 48px));
+  padding: 0;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.modal[open] {
+  display: flex;
+  flex-direction: column;
+  animation: modal-in 0.15s ease-out;
+}
+
+/* The backdrop has the dim and the blur of --bg-overlay. A browser that does not give the tokens
+   of the page to the backdrop uses the same color from the fallback. */
+.modal::backdrop {
+  background: var(--bg-overlay, rgba(16, 13, 11, 0.72));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.modal[open]::backdrop {
+  animation: modal-backdrop-in 0.15s ease-out;
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes modal-backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 8px 20px;
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.modal-header .close {
+  min-width: var(--target-compact);
+  min-height: var(--target-compact);
+  width: var(--target-compact);
+  height: var(--target-compact);
+  color: var(--text-dim);
+}
+
+.modal-header .close:hover {
+  color: var(--text);
+}
+
+.modal-body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 240, 220, 0.18) transparent;
+  padding: 10px 18px 18px;
+}
+
+/* The live region of the messages holds no box while no message shows. A message shows above the
+   drawer, also above the sheet of a phone. */
+.messages {
+  position: fixed;
+  left: 50%;
+  bottom: 84px;
+  z-index: 1;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 24px));
+}
+
+/* While the first screen shows, a message sits 12 px above the load ring of the play button, so
+   that it does not cover "Select music", the way out of a failure (design 2.8). The ring has a
+   radius of 42 px. Beside the open drawer, the message moves with the first screen. */
+body:has(.first-screen:not([hidden])) .messages {
+  bottom: calc(100% - var(--play-y) + 54px);
+}
+
+body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
+  translate: -176px 0;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-panel);
+}
+
+/* The text wraps, and the buttons keep their width. */
+.message button {
+  flex-shrink: 0;
+  min-width: var(--target-compact);
+  min-height: var(--target-compact);
+}
+
+.message .retry {
+  border: 1px solid var(--line);
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+/* The full-page message of a browser with no WebGL2 (design 2.6). */
+.full-page {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.full-page-box {
+  display: grid;
+  gap: 8px;
+  max-width: 480px;
+}
+
+.full-page h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.full-page .about {
+  margin: 0 0 8px;
+  font-size: 16px;
+  color: var(--text-dim);
+}
+
+.full-page .message-text {
+  max-width: 480px;
+  margin: 0;
+  padding: 16px 18px;
+  font-size: 16px;
+  line-height: 1.5;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-panel);
+}
+
+/* The tooltip of a control: its name and its key (design 2.8). It shows above the bar and the
+   drawer. */
+.tooltip {
+  position: fixed;
+  z-index: 2;
+  max-width: 240px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* The drop overlay lets the drag events reach the page under it. */
+.drop {
+  position: fixed;
+  inset: 12px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-panel);
+  background: rgba(16, 13, 11, 0.6);
+  font-size: 16px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar,
+  .drawer,
+  .drawer[hidden],
+  #stage,
+  .first-screen {
+    transition: none;
+  }
+
+  .first-screen.is-pending .ring,
+  .first-screen.is-waiting .ring {
+    animation: none;
+  }
+
+  button,
+  .speed,
+  .toggle::before {
+    transition: none;
+  }
+
+  input[type='range']::-webkit-slider-thumb {
+    transition: none;
+  }
+
+  input[type='range']::-moz-range-thumb {
+    transition: none;
+  }
+
+  .first-screen .play:active {
+    transform: none;
+  }
+
+  .title h2,
+  .title p,
+  .title .github,
+  body:has(.camera[aria-pressed='true']) .title .github {
+    transition: none;
+  }
+
+  .modal[open],
+  .modal[open]::backdrop {
+    animation: none;
+  }
+
+  /* The meter stands still in the shape of the mockup. */
+  .demo .meter span {
+    transform: scaleY(var(--still)) !important;
+  }
+
+  /* The dot of a seat is small and faint or full, with no fade. */
+  .dot {
+    box-shadow: none;
+    opacity: 0.3;
+    transform: scale(0.3);
+  }
+
+  .dot.playing {
+    box-shadow: 0 0 10px 2px var(--ring);
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (max-width: 699px) {
+  /* The title of a phone stands 16 px from the top, as from the left. The tap area of 44 px
+     around the link to GitHub then stays inside the window (design 2.8). */
+  :root {
+    --title-top: 16px;
+  }
+
+  /* A phone has no room for two columns, so each row of the group "Sounds" stands on the axis:
+     the name of the source above its credit. */
+  .credit-rows {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .credit-rows dt,
+  .credit-rows dd {
+    text-align: center;
+  }
+
+  .credit-row + .credit-row dt {
+    margin-top: 14px;
+  }
+
+  /* A phone keeps the logo small, with a short gap above the title. */
+  .title .logo {
+    gap: 6px;
+    margin: 0 0 12px -3px;
+    font-size: 15px;
+    line-height: 18px;
+  }
+
+  .title .logo svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .title .logo .wordmark {
+    height: 18px;
+  }
+
+  .title .github {
+    height: 18px;
+    margin-left: 5px;
+    padding: 0 8px 0 6px;
+    font-size: 11px;
+  }
+
+  .title .github svg {
+    width: 11px;
+    height: 11px;
+  }
+
+  /* On a phone, the drawer is a sheet above the bar, so that the transport stays usable. */
+  .drawer {
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 76px;
+    width: auto;
+    max-height: 60vh;
+    padding-top: 4px;
+  }
+
+  /* The sheet covers the first screen, so it stays in its place. A message then keeps its place
+     above the bar. */
+  body:has(.drawer:not([hidden])) .first-screen {
+    translate: none;
+  }
+
+  body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
+    bottom: 84px;
+    translate: none;
+  }
+
+  /* The sheet slides up from the bar. */
+  .drawer[hidden] {
+    translate: 0 16px;
+  }
+
+  .bar {
+    left: 8px;
+    right: 8px;
+    bottom: var(--bar-gap);
+  }
+
+  /* The seek bar of a phone gets the width of the duration. The seek bar names the duration to a
+     screen reader, and the demo list shows it. */
+  .bar .time.length {
+    display: none;
+  }
+
+  :root {
+    --play-y: min(70%, calc(100% - 240px));
+    --bar-gap: 8px;
+  }
+
+  .playback {
+    display: block;
+  }
+
+  /* On a phone, a dialog fills most of the screen. */
+  .modal {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 32px);
+  }
+
+  /* On a phone, a message takes the width of the bar, so that its text has room. */
+  .messages {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  /* The tabs stand below the handle. */
+  .drawer-top {
+    padding-top: 0;
+  }
+
+  .handle {
+    position: relative;
+    flex: none;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    height: 24px;
+    margin: 0 -16px;
+    background: var(--panel);
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .handle::before {
+    content: '';
+    width: 40px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--text-dim);
+  }
+}
+
+/* On a short and wide screen, the stage fills the height, and the column of the first screen does
+   not fit below it. The first screen then stands at the right of the stage, in the middle between
+   the title and the bar (design 2.8). The place comes from a stage of 0.74 of the height wide. The
+   frame of the camera shrinks until the stage ends left of the play button. This rule comes after
+   the rules of a phone, so that a phone in landscape also gets it. */
+@media (max-height: 799px) and (min-aspect-ratio: 7/5) {
+  :root {
+    --side-left: calc(50% + 37dvh + 24px);
+  }
+
+  .first-screen {
+    left: var(--side-left);
+    right: 24px;
+    top: calc(50% - 8px);
+    transform: translateY(-50%);
+    container-type: inline-size;
+  }
+
+  .first-screen .intro,
+  .first-screen .status {
+    max-width: 100%;
+    width: auto;
+  }
+
+  /* Beside the open drawer, the first screen fills the gap between the stage and the drawer. The
+     drawer holds the demo list, so the intro does not show. */
+  body:has(.drawer:not([hidden])) .first-screen {
+    left: calc(var(--side-left) - 176px);
+    right: 364px;
+    translate: none;
+  }
+
+  body:has(.drawer:not([hidden])) .first-screen .intro {
+    display: none;
+  }
+
+  /* A gap narrower than the load ring and its margins shows no first screen. The play button of
+     the bar stays. */
+  @container (max-width: 99px) {
+    .first-screen > * {
+      visibility: hidden;
+    }
+  }
+
+  /* A message stands above the bar, at the left of the first screen. */
+  body:has(.first-screen:not([hidden])) .messages {
+    left: 12px;
+    right: calc(100% - var(--side-left) + 12px);
+    bottom: 84px;
+    display: grid;
+    justify-items: center;
+    width: auto;
+    max-width: none;
+    transform: none;
+  }
+
+  body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
+    right: 364px;
+    translate: none;
+  }
+}
+
+/* A wide window opens the drawer at start (design 2.8). The load state of index.html then stands
+   where the first screen stands beside the drawer. The query is `WIDE_LAYOUT_QUERY` of
+   `app/wide-layout.ts`. */
+@media (min-width: 1200px) and (min-aspect-ratio: 3/2) {
+  .first-screen.boot {
+    translate: -176px 0;
+  }
+}
+
+@media (min-width: 1200px) and (min-aspect-ratio: 3/2) and (max-height: 799px) {
+  .first-screen.boot {
+    left: calc(var(--side-left) - 176px);
+    right: 364px;
+    translate: none;
+  }
+}
+
+/* The touch sizes come last, so that they win. A phone-width layout also gets them. */
+@media (pointer: coarse), (max-width: 699px) {
+  :root {
+    --target: 44px;
+    --target-compact: 44px;
+  }
+
+  /* Each link of the credits is a control too. The negative margins give the link box the height
+     of one line in the line layout, so that a link in a paragraph opens no gap above its line.
+     The position paints the link over the next paragraph, so that a tap on the lower part of the
+     box hits the link. */
+  .credits a {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--target);
+    min-height: var(--target);
+    margin-block: calc((1lh - var(--target)) / 2);
+  }
+
+  /* The link to GitHub keeps its small box in the logo line, and its hit area is a square of the
+     touch size around the mark. */
+  .title .github::after {
+    content: '';
+    position: absolute;
+    inset: calc((100% - var(--target)) / 2);
+  }
+}

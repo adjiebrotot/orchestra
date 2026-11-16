@@ -1,0 +1,301 @@
+/**
+ * Probes a hash of the camera of `cameraAt()` over each demo (design 5.6). For each demo after
+ * the changes of `demos/patches.json`, the probe builds the score, the layout, and the shot plan
+ * as the app does. Then it samples the camera each {@link CAMERA_STEP} from 0 to the end of the
+ * song, for each view of {@link CAMERA_VIEWS}. The hash holds the position, the target, the field
+ * of view, the beam, the close flag, the light, and the spot of each sample as Float64 values.
+ * Two runs on two commits show if a change moved the camera: the JSON of the same code is the
+ * same, byte for byte. `--out` writes the JSON. With no `--out`, the tool prints the hash of each
+ * demo and the total hash.
+ *
+ * The JSON also keeps a CRC-32 of each sample. `--compare` and `--base` thus print, for each demo
+ * that differs, the number of changed samples of all samples of the views, and the total over all
+ * demos. `--base` runs the script of the working tree on the commit, so both sides have the same
+ * format.
+ *
+ * Usage: pnpm camera-probe [--out <file>]
+ *        pnpm camera-probe --compare <base.json> <new.json>
+ *        pnpm camera-probe --base <ref>
+ */
+import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { crc32 } from 'node:zlib';
+
+import { layoutScene } from '../src/models/layout-scene.ts';
+import { ModelCache } from '../src/models/model-cache.ts';
+import type { Transport } from '../src/pose/types.ts';
+import { buildScore } from '../src/score/score.ts';
+import { cameraAt, createCameraPose } from '../src/shots/camera-at.ts';
+import { SHOT_SEED, prepareShots } from '../src/shots/prepare.ts';
+import type { CameraView } from '../src/shots/types.ts';
+import { CINEMA_ASPECT } from '../src/shots/view.ts';
+import { patchedDemos } from './patch-demos.ts';
+import { probeCommit, probeJson, runCompareModes } from './probe-compare.ts';
+import type { ProbeComparison } from './probe-compare.ts';
+
+/** The step of the song time between two samples, in seconds. */
+const CAMERA_STEP = 0.25;
+
+/**
+ * The views of the probe: the aspect of the frame of Cinematic mode (design 2.5), with and
+ * without motion. Each window shows that frame.
+ */
+const CAMERA_VIEWS: readonly CameraView[] = [
+  { aspect: CINEMA_ASPECT, still: false },
+  { aspect: CINEMA_ASPECT, still: true },
+];
+
+/** The transport of a play from the song start, with no limit of the lift time. */
+const PLAYING: Transport = {
+  playing: true,
+  changedAtWall: 0,
+  before: null,
+  startSec: 0,
+  seekStart: false,
+  endedAtSong: false,
+  holdSec: 3,
+  leadSec: Infinity,
+};
+
+/** The probe of the camera of one demo. */
+interface DemoCamera {
+  /** The number of samples of each view. */
+  readonly samples: number;
+  /** The hash of the cameras of all samples of all views, as 16 hex digits. */
+  readonly hash: string;
+  /** The hash of the cameras of each view, by its aspect and its motion, such as `2.33 still`. */
+  readonly views: Readonly<Record<string, string>>;
+  /**
+   * The CRC-32 of the camera of each sample of each view, by the name of the view: the 32-bit
+   * values in little-endian order, as Base64 text.
+   */
+  readonly marks: Readonly<Record<string, string>>;
+}
+
+/** The output of the probe. */
+interface CameraProbe {
+  /** The camera of each demo, by the name of the demo file with no `.mid`. */
+  readonly demos: Readonly<Record<string, DemoCamera>>;
+  /** The hash of the hashes of all demos, in the order of their names, as 16 hex digits. */
+  readonly total: string;
+}
+
+/** The comparison of two probes. */
+/** The close flag of a sample, as one byte after its values. */
+const CLOSE_BYTES = { close: Uint8Array.of(1), open: Uint8Array.of(0) } as const;
+
+/**
+ * Gives the name of a view in the probe.
+ *
+ * @param view The view.
+ * @returns The name, such as `2.33 moving` or `2.33 still`.
+ */
+function viewName(view: CameraView): string {
+  return `${view.aspect.toFixed(2)} ${view.still ? 'still' : 'moving'}`;
+}
+
+/**
+ * Probes the camera of one demo: the score, the layout, and the shot plan as the app makes them,
+ * then the camera at each sample of each view.
+ *
+ * @param bytes The bytes of the demo file, after its patch.
+ * @returns The probe of the demo.
+ * @throws Error if `buildScore()` refuses the file.
+ */
+function probeDemoCamera(bytes: Uint8Array): DemoCamera {
+  const result = buildScore(bytes, 'auto');
+  if (!result.ok) {
+    throw new Error(`buildScore() refused the demo: ${result.error}.`);
+  }
+  const score = result.score;
+  const models = new ModelCache();
+  const layout = layoutScene(score, models);
+  const plan = prepareShots(score, layout, SHOT_SEED, models);
+  const count = Math.floor(score.durationSec / CAMERA_STEP) + 1;
+  const buffer = createCameraPose();
+  const values = new Float64Array(10);
+  const all = createHash('sha256');
+  const views: Record<string, string> = {};
+  const marks: Record<string, string> = {};
+  for (const view of CAMERA_VIEWS) {
+    const hash = createHash('sha256');
+    const sums = Buffer.alloc(count * 4);
+    for (let i = 0; i < count; i++) {
+      const camera = cameraAt(plan, i * CAMERA_STEP, PLAYING, view, buffer);
+      values.set(camera.position, 0);
+      values.set(camera.target, 3);
+      values[6] = camera.fov;
+      values[7] = camera.beam;
+      values[8] = camera.light;
+      values[9] = camera.spot;
+      hash.update(values);
+      hash.update(camera.close ? 'c' : 'o');
+      const sum = crc32(camera.close ? CLOSE_BYTES.close : CLOSE_BYTES.open, crc32(values));
+      sums.writeUInt32LE(sum, i * 4);
+    }
+    const digest = hash.digest('hex').slice(0, 16);
+    views[viewName(view)] = digest;
+    marks[viewName(view)] = sums.toString('base64');
+    all.update(digest);
+  }
+  return { samples: count, hash: all.digest('hex').slice(0, 16), views, marks };
+}
+
+/**
+ * Reads the CRC-32 of each sample of a view ({@link DemoCamera.marks}).
+ *
+ * @param text The Base64 text, or `undefined` for a view that the probe does not have.
+ * @returns The values, or none.
+ */
+function marksOf(text: string | undefined): Uint32Array {
+  if (text === undefined) {
+    return new Uint32Array(0);
+  }
+  const bytes = Buffer.from(text, 'base64');
+  const out = new Uint32Array(bytes.length / 4);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = bytes.readUInt32LE(i * 4);
+  }
+  return out;
+}
+
+/**
+ * Counts the changed samples of a view of a demo: the samples whose CRC-32 differs, and each
+ * sample that only one probe has.
+ *
+ * @param a The demo in the base.
+ * @param b The demo in the new probe.
+ * @param view The name of the view.
+ * @returns The number of changed samples.
+ */
+function changedSamples(a: DemoCamera, b: DemoCamera, view: string): number {
+  const x = marksOf(a.marks[view]);
+  const y = marksOf(b.marks[view]);
+  let changed = Math.abs(x.length - y.length);
+  for (let i = 0; i < Math.min(x.length, y.length); i++) {
+    if (x[i] !== y[i]) {
+      changed++;
+    }
+  }
+  return changed;
+}
+
+/**
+ * Probes the camera of each demo (design 8.2), after the changes of `demos/patches.json`.
+ *
+ * @returns The probe.
+ */
+export async function runProbe(): Promise<CameraProbe> {
+  const demos: Record<string, DemoCamera> = {};
+  const total = createHash('sha256');
+  for (const demo of await patchedDemos()) {
+    const name = demo.file.replace(/\.mid$/, '');
+    const camera = probeDemoCamera(demo.bytes);
+    demos[name] = camera;
+    total.update(`${name}:${camera.hash};`);
+  }
+  return { demos, total: total.digest('hex').slice(0, 16) };
+}
+
+/**
+ * Compares two probes, and gives the count of the equal demos and a line for each demo that
+ * differs, with the changed samples of each view that differs. A sample is changed when its
+ * CRC-32 differs, or when only one probe has it. The counts also give the changed samples of all
+ * demos.
+ *
+ * @param base The probe of the base.
+ * @param next The probe to check.
+ * @returns The counts and the differences.
+ */
+export function compareProbes(base: CameraProbe, next: CameraProbe): ProbeComparison {
+  const lines: string[] = [];
+  let equal = 0;
+  let changed = 0;
+  let total = 0;
+  const names = [...new Set([...Object.keys(base.demos), ...Object.keys(next.demos)])];
+  for (const name of names) {
+    const a = base.demos[name];
+    const b = next.demos[name];
+    if (!a || !b) {
+      lines.push(`demo ${name}: missing in the ${a ? 'new probe' : 'base'}`);
+      continue;
+    }
+    const viewNames = Object.keys(b.views);
+    const samples = b.samples * viewNames.length;
+    total += samples;
+    if (a.hash === b.hash && a.samples === b.samples) {
+      equal += 1;
+      continue;
+    }
+    const views = viewNames
+      .map((view) => ({
+        view,
+        count: a.views[view] === b.views[view] ? 0 : changedSamples(a, b, view),
+      }))
+      .filter(({ count }) => count > 0);
+    const demoChanged = views.reduce((sum, { count }) => sum + count, 0);
+    changed += demoChanged;
+    const list = views.map(({ view, count }) => `${view} ${count}`).join(', ') || 'none';
+    const length = a.samples === b.samples ? '' : `, samples ${a.samples} to ${b.samples}`;
+    lines.push(`demo ${name}: ${demoChanged} of ${samples} samples changed (${list})${length}`);
+  }
+  return {
+    counts: [`demos equal: ${equal} of ${names.length}`, `samples changed: ${changed} of ${total}`],
+    differences: lines,
+  };
+}
+
+/**
+ * The format version of the JSON of `--out` (`formatVersion()` of `tools/ref-tree.ts`). A change
+ * of the format takes the next version, so that a compare stops on two formats. Version 2 adds
+ * the CRC-32 of each sample ({@link DemoCamera.marks}).
+ */
+export const PROBE_FORMAT = 2;
+
+/**
+ * Writes a probe as the JSON of `--out`, with the format version {@link PROBE_FORMAT}.
+ *
+ * @param probe The probe.
+ * @returns The text, with a line end at the end.
+ */
+export function probeText(probe: CameraProbe): string {
+  return probeJson(PROBE_FORMAT, probe);
+}
+
+/**
+ * Probes the camera of a commit ({@link probeCommit}), with the script of the working tree in
+ * place of its `tools/camera-probe.ts`, so that both probes keep the CRC-32 of each sample. The
+ * script brings `tools/probe-compare.ts` of the working tree, which it imports.
+ *
+ * @param ref The commit, a branch, or a tag.
+ * @returns The probe of the commit.
+ * @throws Error if git does not know the ref, if the probe fails on the code of the commit, or if
+ *   its JSON has another format version than {@link PROBE_FORMAT}.
+ */
+export function probeRef(ref: string): Promise<CameraProbe> {
+  return probeCommit(ref, {
+    script: 'camera-probe.ts',
+    args: [],
+    format: PROBE_FORMAT,
+    parent: tmpdir(),
+    prefix: 'camera-probe-',
+    scripts: ['camera-probe.ts', 'probe-compare.ts'],
+  });
+}
+
+if (import.meta.main) {
+  const args = process.argv.slice(2);
+  await runCompareModes(args, { name: 'camera-probe', probeRef, runProbe, compare: compareProbes });
+  const probe = await runProbe();
+  const outAt = args.indexOf('--out');
+  const out = outAt >= 0 ? args[outAt + 1] : undefined;
+  if (out) {
+    await writeFile(out, probeText(probe));
+  }
+  const lines = Object.entries(probe.demos).map(
+    ([name, demo]) => `${name}: ${demo.hash} (${demo.samples} samples)`,
+  );
+  const next = out ? `Wrote ${out}.` : 'Write the JSON with --out <file>.';
+  console.log([...lines, `total: ${probe.total}`, next].join('\n'));
+}

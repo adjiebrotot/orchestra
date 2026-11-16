@@ -1,0 +1,38 @@
+# Editor swap files and system files
+.*.swp
+.*.swo
+.DS_Store
+
+# Python bytecode of the Python scripts
+__pycache__/
+
+# Dependencies and build output
+node_modules/
+dist/
+
+# Output of the Playwright tests (pnpm test:e2e)
+test-results/
+playwright-report/
+
+# Output of tools/split-soundfont.ts. Vite serves it in dev and copies it into dist/.
+public/sf/
+
+# Output of tools/patch-demos.ts: the demo files after demos/patches.json (design 8.3).
+public/demos/
+
+# Output of tools/write-perf-60.ts: the file of the frame target (design 9.5). Only the dev
+# server serves it.
+perf/
+
+# Probe scripts of an agent. A script here imports `three` and the source modules through the
+# node_modules of its worktree: `node scratch/<name>.ts`.
+scratch/
+
+# The images of a round report. The manager reads them in the checkout of the agent. Git keeps no
+# report image (design 9.8).
+reports/
+
+
+# The backup copies that Blender writes beside a .blend file at each save.
+*.blend1
+/node_modules
