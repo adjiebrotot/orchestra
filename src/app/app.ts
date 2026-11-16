@@ -98,6 +98,36 @@ const EMPTY_FIRST_SCREEN: FirstScreenView = {
 /** The song seconds after the song end that a render keeps, for the release and the hall. */
 const RENDER_TAIL_SEC = 2.5;
 
+/** The time without a move of the playback after which a render shows a warning, in seconds. */
+const RENDER_IDLE_WARN_SEC = 3;
+
+/** The time without a move of the playback after which a render stops with an error, in seconds. */
+const RENDER_IDLE_FAIL_SEC = 20;
+
+/** The time without encoder output after which the last step of a render shows a warning. */
+const RENDER_QUIET_WARN_MS = 5000;
+
+/** A render that runs: its video, and the state that the frame loop keeps for it. */
+interface RunningRender {
+  readonly video: VideoRender;
+  readonly durationSec: number;
+  readonly format: RenderFormat;
+  /** The wall time at which the piece ended, or `null` before its end. */
+  endedAt: number | null;
+  /** The song time before the render went back to the start of the piece, in seconds. */
+  readonly staleSec: number;
+  /** True when the playback is at the start of the piece, so the recording can start. */
+  armed: boolean;
+  /** The largest song time that the render got, in seconds. */
+  lastSongSec: number;
+  /** The wall time of the last move of the song time, in seconds. */
+  movedAt: number;
+  /** The timer that watches the render while the page gets no frames. */
+  readonly timer: number;
+  /** The camera mode, the speed, and the quality before the render. */
+  readonly before: { mode: CameraMode; speed: Speed };
+}
+
 /**
  * Gives a time as minutes and seconds.
  *
@@ -367,15 +397,9 @@ export class App {
   /** The buttons at the top of the stage that open the director and the render. */
   readonly #studio: HTMLElement;
   /** The render that runs, or `null`. */
-  #render: {
-    readonly video: VideoRender;
-    readonly durationSec: number;
-    readonly format: RenderFormat;
-    /** The wall time at which the piece ended, or `null` before its end. */
-    endedAt: number | null;
-    /** The camera mode, the speed, and the quality before the render. */
-    readonly before: { mode: CameraMode; speed: Speed };
-  } | null = null;
+  #render: RunningRender | null = null;
+  /** The render that writes its file, after the recording, or `null`. */
+  #writing: VideoRender | null = null;
   /** True while a render starts: the encoders load. */
   #renderStarting = false;
 
@@ -534,11 +558,16 @@ export class App {
       onStart: (format) => {
         this.#startRender(format).catch((error: Error) => {
           this.#renderStarting = false;
-          this.#renderPanel.show(false, 0, error.message);
+          this.#renderPanel.show('error', 0, `The render did not start: ${error.message}`);
         });
       },
       onCancel: () => {
-        this.#endRender(false).catch(reportError);
+        // In the last step, the stop ends the wait for the encoders.
+        if (this.#writing) {
+          this.#writing.cancel();
+        } else {
+          this.#endRender('stop').catch(reportError);
+        }
       },
     });
     this.#studio = document.createElement('div');
@@ -557,7 +586,7 @@ export class App {
       this.#renderPanel.setOpen(!this.#renderPanel.open);
       if (!canRenderVideo()) {
         this.#renderPanel.show(
-          false,
+          'error',
           0,
           'This browser has no WebCodecs, so it cannot render a video. Use a current Chrome, Edge, Firefox, or Safari.',
         );
@@ -1269,15 +1298,15 @@ export class App {
   async #startRender(format: RenderFormat): Promise<void> {
     const piece = this.#piece;
     const audio = this.#audio;
-    if (this.#render || this.#renderStarting) {
+    if (this.#render || this.#renderStarting || this.#writing) {
       return;
     }
     if (!piece || !audio || piece.samples !== 'ready') {
-      this.#renderPanel.show(false, 0, 'Wait until the instruments are loaded, then try again.');
+      this.#renderPanel.show('idle', 0, 'Wait until the instruments are loaded, then try again.');
       return;
     }
     this.#renderStarting = true;
-    this.#renderPanel.show(true, 0, 'Starting the encoders…');
+    this.#renderPanel.show('busy', 0, 'Starting the encoders…');
     if (this.#state.transport.playing) {
       this.#pause();
     }
@@ -1295,11 +1324,13 @@ export class App {
       format,
       durationSec + RENDER_TAIL_SEC,
     );
-    await video.start();
+    await video.start((status) => {
+      this.#renderPanel.show('busy', 0, status);
+    });
     if (piece !== this.#piece) {
       video.cancel();
       this.#renderStarting = false;
-      this.#renderPanel.show(false, 0, 'The piece changed. Try again.');
+      this.#renderPanel.show('idle', 0, 'The piece changed. Try again.');
       return;
     }
     const before = { mode: this.#cameraMode, speed: this.#speed };
@@ -1315,14 +1346,55 @@ export class App {
     this.#canvas.style.objectFit = 'contain';
     this.#canvas.style.background = '#000';
     this.#scene.resize(format.width, format.height, 1);
+    const staleSec = this.#songTime;
     this.#seek(0);
-    this.#render = { video, durationSec, format, endedAt: null, before };
+    const timer = window.setInterval(() => {
+      this.#watchRender();
+    }, 500);
+    this.#render = {
+      video,
+      durationSec,
+      format,
+      endedAt: null,
+      staleSec,
+      armed: false,
+      lastSongSec: -Infinity,
+      movedAt: performance.now() / 1000,
+      timer,
+      before,
+    };
     this.#renderStarting = false;
     this.#play(piece);
   }
 
   /**
+   * Watches a render between the frames of the page. A hidden tab gets no frames, so the frame
+   * loop cannot show the state of the render: this watch shows it.
+   */
+  #watchRender(): void {
+    const render = this.#render;
+    if (!render) {
+      return;
+    }
+    if (render.video.error) {
+      this.#endRender('fail', `The render failed: ${render.video.error.message}`).catch(
+        reportError,
+      );
+    } else if (document.hidden) {
+      // The time in a hidden tab is not a stop of the playback.
+      render.movedAt = performance.now() / 1000;
+      this.#renderPanel.show(
+        'warn',
+        render.video.progress,
+        'This tab is hidden, so the video gets no new frames. Show this tab again to continue.',
+      );
+    }
+  }
+
+  /**
    * Gives the frame of a render to its video, shows its progress, and ends it at the end time.
+   * Each state of the render shows in the panel: the render records, it waits for the playback, or
+   * it failed.
    *
    * @param wallTime The wall time of the frame, in seconds.
    */
@@ -1332,48 +1404,115 @@ export class App {
       return;
     }
     const { video, durationSec, format } = render;
-    // A resize of the window during the render must not change the size of the video.
-    if (this.#canvas.width !== format.width || this.#canvas.height !== format.height) {
-      this.#scene.resize(format.width, format.height, 1);
-    }
-    const playing = this.#state.transport.playing;
-    if (
-      render.endedAt === null &&
-      this.#songTime >= durationSec - 0.02 &&
-      (!playing || this.#songTime >= durationSec)
-    ) {
-      render.endedAt = wallTime;
-    }
-    const songSec =
-      render.endedAt === null ? this.#songTime : durationSec + wallTime - render.endedAt;
-    if (playing || render.endedAt !== null) {
-      video.frame(songSec);
-    }
     const total = durationSec + RENDER_TAIL_SEC;
-    this.#renderPanel.show(
-      true,
-      video.progress,
-      `Recording ${clockOf(Math.max(0, Math.min(songSec, total)))} of ${clockOf(total)} · ${video.codecs}. Keep this tab visible.`,
-    );
+    // The first frames after the seek can have the song time from before the render. A frame
+    // from that time is not a part of the film, and a time at the end of the piece is not the end
+    // of the render. The recording thus starts when the song time is back at the start.
+    if (!render.armed && (this.#songTime < 1 || this.#songTime < render.staleSec - 1)) {
+      render.armed = true;
+    }
+    if (!render.armed) {
+      this.#showRenderWait(
+        render,
+        wallTime,
+        'Starting the playback…',
+        'The playback does not start',
+      );
+      return;
+    }
+    let songSec = 0;
+    try {
+      // A resize of the window during the render must not change the size of the video.
+      if (this.#canvas.width !== format.width || this.#canvas.height !== format.height) {
+        this.#scene.resize(format.width, format.height, 1);
+      }
+      const playing = this.#state.transport.playing;
+      if (
+        render.endedAt === null &&
+        this.#songTime >= durationSec - 0.02 &&
+        (!playing || this.#songTime >= durationSec)
+      ) {
+        render.endedAt = wallTime;
+      }
+      songSec = render.endedAt === null ? this.#songTime : durationSec + wallTime - render.endedAt;
+      if (playing || render.endedAt !== null) {
+        video.frame(songSec);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.#endRender('fail', `The render failed: ${message}`).catch(reportError);
+      return;
+    }
+    if (songSec > render.lastSongSec) {
+      render.lastSongSec = songSec;
+      render.movedAt = wallTime;
+    }
+    const clock = clockOf(Math.max(0, Math.min(songSec, total)));
     if (video.error) {
-      this.#endRender(false, `The encoder failed: ${video.error.message}`).catch(reportError);
+      this.#endRender('fail', `The render failed: ${video.error.message}`).catch(reportError);
     } else if (video.done) {
-      this.#endRender(true).catch(reportError);
+      this.#endRender('save').catch(reportError);
+    } else if (songSec >= total) {
+      this.#renderPanel.show('busy', video.progress, 'Step 1 of 2: recording the last audio…');
+    } else {
+      const behind =
+        video.behindSec > 2
+          ? ` The encoder is ${Math.round(video.behindSec)} s behind, so step 2 takes longer.`
+          : '';
+      this.#showRenderWait(
+        render,
+        wallTime,
+        `Step 1 of 2: recording ${clock} of ${clockOf(total)} · ${video.codecs}. Keep this tab visible.${behind}`,
+        `The playback does not move at ${clock}`,
+      );
     }
   }
 
   /**
-   * Ends a render: the page returns to its camera mode, speed, and canvas size.
+   * Shows the status line of a render that needs the playback to move. When the playback does
+   * not move, the panel shows a warning with the time, and then the render stops with an error.
    *
-   * @param save True to give the file, false to drop it.
+   * @param render The render.
+   * @param wallTime The wall time of the frame, in seconds.
+   * @param status The status line while the playback moves.
+   * @param problem The start of the warning and of the error when the playback does not move.
+   */
+  #showRenderWait(render: RunningRender, wallTime: number, status: string, problem: string): void {
+    const idleSec = wallTime - render.movedAt;
+    if (idleSec > RENDER_IDLE_FAIL_SEC) {
+      this.#endRender(
+        'fail',
+        `The render failed: ${problem.charAt(0).toLowerCase()}${problem.slice(1)} for ${RENDER_IDLE_FAIL_SEC} seconds.`,
+      ).catch(reportError);
+    } else if (idleSec > RENDER_IDLE_WARN_SEC) {
+      this.#renderPanel.show(
+        'warn',
+        render.video.progress,
+        `${problem} (${Math.floor(idleSec)} s). The render stops with an error at ${RENDER_IDLE_FAIL_SEC} s.`,
+      );
+    } else {
+      this.#renderPanel.show('busy', render.video.progress, status);
+    }
+  }
+
+  /**
+   * Ends a render: the page returns to its camera mode, speed, and canvas size. With `save`, the
+   * last step starts: the encoders end their work, and the file builds. The panel shows the
+   * progress of this step, a warning when the encoders give no output, and an error when it fails.
+   *
+   * @param outcome `save` gives the file, `stop` drops it, and `fail` drops it and shows an error.
    * @param message The status line of a render that did not end well.
    */
-  async #endRender(save: boolean, message = 'The render stopped.'): Promise<void> {
+  async #endRender(
+    outcome: 'save' | 'stop' | 'fail',
+    message = 'The render stopped.',
+  ): Promise<void> {
     const render = this.#render;
     if (!render) {
       return;
     }
     this.#render = null;
+    window.clearInterval(render.timer);
     if (this.#state.transport.playing) {
       this.#pause();
     }
@@ -1388,30 +1527,53 @@ export class App {
       window.devicePixelRatio,
     );
     this.#applySettings();
-    if (!save) {
-      render.video.cancel();
-      this.#renderPanel.show(false, 0, message);
+    const { video } = render;
+    if (outcome !== 'save') {
+      video.cancel();
+      this.#renderPanel.show(outcome === 'fail' ? 'error' : 'idle', 0, message);
       return;
     }
-    // The encoders can be behind the recording: the status line shows the frames that they wrote.
+    this.#writing = video;
+    const startMs = performance.now();
     const showWriting = (): void => {
-      this.#renderPanel.show(
-        true,
-        render.video.written,
-        `Writing the MP4 file… ${Math.floor(render.video.written * 100)} %`,
-      );
+      const sec = Math.floor((performance.now() - startMs) / 1000);
+      if (video.stage === 'building') {
+        this.#renderPanel.show('busy', 1, `Step 2 of 2: building the MP4 file… ${sec} s`);
+        return;
+      }
+      const frames = `${video.framesOut.toLocaleString('en-US')} of ${video.framesIn.toLocaleString('en-US')} frames`;
+      if (video.quietMs > RENDER_QUIET_WARN_MS) {
+        this.#renderPanel.show(
+          'warn',
+          video.written,
+          `The encoder gave no output for ${Math.floor(video.quietMs / 1000)} s (${frames}). The render stops with an error at ${video.quietLimitMs / 1000} s.`,
+        );
+      } else {
+        this.#renderPanel.show(
+          'busy',
+          video.written,
+          `Step 2 of 2: writing the MP4 file, ${frames} (${Math.floor(video.written * 100)} %), ${sec} s`,
+        );
+      }
     };
     showWriting();
     const timer = window.setInterval(showWriting, 250);
     try {
-      const file = await render.video.finish();
+      const file = await video.finish();
       const name = `${(this.#piece?.title.title ?? 'orchestra').replace(/[^\w.-]+/gu, '_')}.mp4`;
-      this.#renderPanel.show(false, 1, 'Done.');
+      this.#renderPanel.show('done', 1, `${name} is ready. The download started.`);
       this.#renderPanel.showFile(file, name);
     } catch (error) {
-      this.#renderPanel.show(false, 0, `The render failed: ${(error as Error).message}`);
+      if (video.cancelled) {
+        this.#renderPanel.show('idle', 0, 'The render stopped.');
+      } else {
+        video.cancel();
+        const cause = error instanceof Error ? error.message : String(error);
+        this.#renderPanel.show('error', 0, `The render failed: ${cause}`);
+      }
     } finally {
       window.clearInterval(timer);
+      this.#writing = null;
     }
   }
 
