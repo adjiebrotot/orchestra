@@ -11,7 +11,7 @@ const BUNDLED_PACKAGES: readonly string[] = [
   'three',
   'spessasynth_core',
   'stb-vorbis',
-  '@vercel/analytics',
+  'mp4-muxer',
 ];
 
 /** Link to the legal code of CC0 1.0, which has no condition, so the file holds no copy of it. */

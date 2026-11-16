@@ -1,54 +1,68 @@
-# Pawchestra
+# Orchestra
 
-Pawchestra is a WebGL MIDI player. An orchestra of 3D animals plays the music on a small stage.
+A WebGL MIDI player in which an orchestra of 3D animals plays your music on a small stage, with a
+camera director and an MP4 render.
 
-Live site: <https://www.pawchestra.com/>
+Live site: <https://orchestra.adjiebrotots.com/>
 
-![Pawchestra](docs/pawchestra.png)
+Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqiao (Joe) Xu. See
+[License](#license) below.
 
-## Features
+## What this fork adds
 
-- **3D animal orchestra.** The animals play the strings, the woodwinds, the brass, the
-  percussion, the piano, and the harp, and a choir of animals sings. The poses follow each note:
-  the fingers, the bow strokes, the breaths, the mallet strokes, and the keys.
-- **Your own MIDI files.** Drop a `.mid` file onto the window, or select one of the built-in
-  public domain pieces. A link with `#demo=<id>` opens a demo, for example
-  <https://www.pawchestra.com/#demo=bach-bwv1047>.
-- **SoundFont synth.** An AudioWorklet plays the instruments from a SoundFont, with the reverb of
-  a real concert hall.
-- **Camera.** Select the cinematic camera, which follows the sections that play, or the free
-  orbit camera.
-- **Section controls.** Solo or mute each section. The stage beam follows the soloists.
-- **Small static app.** The app runs in the browser with WebGL and Web Audio. The first download
-  is less than 1 MB after gzip.
+- **Logo inlay on the stage floor.** The circled A of adjiebrotots.com is set into the planks as a
+  darker stained disc with a pale-wood letter, so the wood grain shows through
+  (`src/scene/stage.ts`, `logoCover()`).
+- **No Pawchestra logo in the header**, and no built-in songs: add your own (below).
+- **Camera director.** Click **Camera director** at the top of the stage. The panel shows a
+  timeline with the notes of each instrument (from the MIDI file) and the time. Click a row at a
+  time to point the camera at that instrument from there, or use **+ Cue at playhead**. For each
+  cue, choose:
+  - **Camera focus:** Automatic (the built-in film), Whole stage, High view, Conductor, or any
+    instrument.
+  - **Motion:** Static, Push in, Pull out, Orbit left, Orbit right, Crane up, Crane down.
+  - **Into shot:** a smooth move from the previous shot, or a hard cut.
 
-## Getting started
+  Each cue holds until the next cue. Before the first cue, the built-in film plays. **Preview**
+  plays the piece with the cinematic camera. The cues of each piece stay in your browser, and
+  **Export** / **Import** save and load them as JSON (`src/shots/directed.ts`,
+  `src/ui/director.ts`).
+- **Render MP4.** Click **Render MP4**, choose a format (1080p at 30 or 60 fps, 720p, or
+  ultrawide 21:9), and click **Render**. The piece plays once from the start with the cinematic camera (your
+  camera path when it is on), and the page encodes the canvas and the audio with WebCodecs into an
+  MP4 file (H.264 or VP9/AV1 video, AAC or Opus audio, whichever the browser can encode). Keep the
+  tab visible: the render runs in real time. The file downloads at the end
+  (`src/app/render-video.ts`).
 
-### Prerequisites
+## Add your songs
 
-- [Node.js](https://nodejs.org/) version 24 or newer
-- [pnpm](https://pnpm.io/) version 10
+Put MIDI files in `demos/src/` and list them in `demos/demos.json`. With no songs, the start page
+asks for a MIDI file (open one, or drop one on the page). [`demos/README.md`](demos/README.md)
+gives the details.
 
-### Run locally
+## Run locally
 
-1. Install dependencies:
-   ```bash
-   pnpm install
-   ```
+Needs Node.js 24 and pnpm 10.
 
-2. Start the local development server:
-   ```bash
-   pnpm dev
-   ```
-
-3. Open `http://localhost:5173` in your browser.
-
-### Build for production
-
-Create a static build in `dist/`:
 ```bash
-pnpm build
+pnpm install
 ```
+
+```bash
+pnpm dev
+```
+
+Open `http://localhost:5173`. `pnpm build` writes the static site to `dist/`.
+
+## Deploy (GitHub Pages)
+
+`.github/workflows/pages.yml` builds the site and publishes it on each push to `main` (or by hand
+from the Actions tab).
+
+1. In the repository settings, open **Pages** and set **Source** to **GitHub Actions**.
+2. Set the custom domain to `orchestra.adjiebrotots.com` (`public/CNAME` holds it too), and turn
+   on **Enforce HTTPS** when GitHub offers it.
+3. At the DNS host of adjiebrotots.com, add a `CNAME` record `orchestra` → `adjiebrotot.github.io`.
 
 ## Controls
 
@@ -58,114 +72,28 @@ pnpm build
 | `Left` / `Right` | Seek 5 seconds backward or forward |
 | `Up` / `Down` | Turn the volume up or down |
 | `Home` | Return to start |
-| `C` | Toggle automatic cinematic camera |
+| `C` | Toggle the cinematic camera |
 | `M` | Toggle mute |
 | `F` | Toggle full screen |
 | `Escape` | Close drawer or dialog |
 | Drag (> 4 px) | Orbit 3D camera |
 | Scroll / Pinch | Zoom in or out |
 
-## Browser support
-
-The app needs WebGL2. It supports the current and the previous major versions of Chrome, Firefox,
-and Safari (macOS and iOS), and Chrome on Android. Desktop browsers come first. A phone plays the
-music with a lower visual quality.
-
-## Privacy
-
-The site counts the page views with Vercel Web Analytics, which sets no cookies and stores no
-personal identifier. The site has no service worker. A MIDI file that you open stays on your
-device: the app sends it to no server. The page
-[`/privacy`](https://www.pawchestra.com/privacy) of the live site gives the same facts.
-
 ## Technology
 
-- [Three.js](https://threejs.org/) renders the stage with WebGL2.
-- [TypeScript](https://www.typescriptlang.org/) and [Vite](https://vite.dev/). The UI uses no
-  framework, because it is small.
-- [spessasynth_core](https://github.com/spessasus/spessasynth_core) plays the SoundFont in an
-  AudioWorklet.
-- [Oxlint](https://oxc.rs/) checks the code, and oxfmt formats it.
-- The site is static. [Vercel](https://vercel.com/) hosts it, and Vercel Web Analytics counts the
-  page views.
-
-## Architecture
-
-One `Score` drives both the sound and the animals. `poseAt()` calculates each pose only from the
-score, the layout of the stage, and the song time. Thus a seek, a pause, or a change of the speed
-always gives the correct pose.
-
-```text
- .mid file
-     │
-     v
- ┌────────┐    ┌────────┐    ┌────────┐    ┌──────────┐
- │ midi/  │───>│ score/ │─┬─>│ pose/  │───>│ scene/   │───> canvas
- │ parse  │    │ Score  │ │  │ poseAt │    │ Three.js │
- └────────┘    └────────┘ │  └────────┘    └──────────┘
-                          │      ^              ^
-                          │   models/        shots/
-                          │
-                          │  ┌──────────────────────────┐
-                          └─>│ audio/: SoundFont synth  │───> speakers
-                             └──────────────────────────┘
-```
-
-- `src/midi/`: Parses the bytes of a Standard MIDI File into tracks of events.
-- `src/score/`: Builds the `Score`: the timed notes, the sections, and the seats of the players.
-- `src/pose/`: Calculates the pose of each animal at a song time: the bow strokes, the fingers,
-  the breaths, and the mallet strokes.
-- `src/models/`: Builds the animal bodies, the instruments, and the layout of the stage.
-- `src/shots/`: Plans the camera shots, and calculates the camera at a song time.
-- `src/scene/`: Renders the stage with Three.js: the lights, the stage beam, the quality tiers,
-  and the bones of the animals.
-- `src/audio/`: Plays the SoundFont in an AudioWorklet. A Worker decodes the SoundFont files
-  before play.
-- `src/app/`, `src/ui/`: The load flow, the transport, the seat list, the URL hash, and the
-  settings.
-- `src/gallery/`: The development pages `gallery.html` and `views.html`.
-- `src/test-page/`: The development page `test.html` at `/test`: one animal plays or conducts a
-  test phrase of its role on the stage of the app.
-- `tools/`: The build scripts, the probes, and the image tools
-  ([`docs/agents/commands.md`](docs/agents/commands.md)).
-
-The modules `midi/`, `score/`, `pose/`, `models/`, and `shots/` are pure. They get all inputs as
-arguments, read no clock, and touch no DOM, so they also run in Node. Design 7.1 in
-[`docs/design/07-architecture.md`](docs/design/07-architecture.md) gives the details.
-
-## Contributing
-
-[`CONTRIBUTING.md`](CONTRIBUTING.md) gives the setup, the checks, and the rules of a change. The
-design is in [`docs/design.md`](docs/design.md). All unit tests are paused now: `pnpm test` runs
-no test, and `pnpm test:paused <path>` runs one paused file.
-
-## Credits
-
-The app includes the third-party files below. The build writes all their licenses into
-`third-party-licenses.txt`, and the credits dialog of the app links it.
-
-- **Demo pieces:** [`demos/README.md`](demos/README.md) gives the source, the license, and the
-  checksum of each piece.
-- **SoundFont:** [`assets/soundfont/README.md`](assets/soundfont/README.md) (GeneralUser GS and
-  the Versilian Studios libraries).
-- **Hall reverb:** [`assets/hall/README.md`](assets/hall/README.md) (St Paul's Hall, University
-  of Huddersfield).
-- **Font:** [`assets/fraunces/README.md`](assets/fraunces/README.md) (Fraunces, SIL Open Font
-  License).
-- **GitHub mark:** [`assets/github-mark/README.md`](assets/github-mark/README.md) (MIT license).
-- **Animal models:** each folder of [`assets/models/`](assets/models/) has a README with the
-  origin and the checksums of its files.
+[Three.js](https://threejs.org/) (WebGL2), TypeScript, [Vite](https://vite.dev/),
+[spessasynth_core](https://github.com/spessasus/spessasynth_core) (SoundFont synth in an
+AudioWorklet), and [mp4-muxer](https://github.com/Vanilagy/mp4-muxer) for the MP4 file. The site
+is static and uses no analytics. The architecture and the design docs of Pawchestra are in
+`docs/`.
 
 ## License
 
-- **Code:** the [Apache License 2.0](LICENSE).
+- **Code:** the [Apache License 2.0](LICENSE). See [`NOTICE`](NOTICE).
 - **Animal models:** the files in `assets/models/` and `src/models/bodies/` are under
-  [CC BY-NC 4.0](assets/models/LICENSE). You can use, change, and share
-  them, but not for commercial purposes.
-- **Your output:** you own the videos, images, and audio that you make with Pawchestra. You can use
-  them for any purpose, including commercial use. This grant covers the animals as they appear in
-  your output. It does not cover the model files.
-- **Name and logo:** the licenses do not cover the name "Pawchestra" or the paw logo. Give a fork a
-  different name. It can say that it is "based on Pawchestra".
-- **Third-party files:** the demo files, the SoundFont, and the hall reverb keep their own
-  licenses. The credits dialog of the app and the README file of each folder list them.
+  [CC BY-NC 4.0](assets/models/LICENSE): no commercial use.
+- **Your output:** per the Pawchestra README, you own the videos, images, and audio that you make
+  with the app, including for commercial use.
+- **Third-party files:** the SoundFont, the hall reverb, and the font keep their own licenses. The
+  build writes them all into `third-party-licenses.txt`, and the credits dialog of the app links
+  it.

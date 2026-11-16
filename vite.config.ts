@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import type { ConfigEnv, Connect, Plugin, UserConfig } from 'vite';
 import { LICENSES_FILE } from './src/app/credits.ts';
-import { DEFAULT_DEMO, DEMOS, demoUrl } from './src/app/demos.ts';
+import { DEFAULT_DEMO, demoInfo, demoUrl } from './src/app/demos.ts';
 import {
   APP_NAME,
   SHARE_IMAGE,
@@ -72,13 +72,6 @@ const PAUSED_FILES = ALL_TESTS_PAUSED ? ['**/*.test.ts'] : PAUSED_TESTS;
 const BASE = process.env['PAWCHESTRA_BASE'] ?? '/';
 
 /**
- * True in the build of `pnpm deploy:vercel`, which sets `PAWCHESTRA_ANALYTICS=1`. Only that build
- * loads Vercel Web Analytics (design 2.7), so that the local servers of the probes get no request
- * for its script.
- */
-const ANALYTICS = process.env['PAWCHESTRA_ANALYTICS'] === '1';
-
-/**
  * The plugin that gives the production build an empty module in place of the look override of
  * the dev server (`src/app/look-override.ts`, design 9.3). The override is the first import of
  * `src/main.ts`, so that it acts before the other modules load. Its code is dead in the build, but
@@ -142,9 +135,12 @@ function webApplication(): string {
  * @returns The values by name.
  */
 function indexValues(base: string): ReadonlyMap<string, string> {
-  const demo = DEMOS[DEFAULT_DEMO];
+  const demo =
+    DEFAULT_DEMO === null
+      ? { title: APP_NAME, composer: 'Open a MIDI file to start' }
+      : demoInfo(DEFAULT_DEMO);
   return new Map([
-    ['DEFAULT_DEMO_URL', demoUrl(DEFAULT_DEMO, base)],
+    ['DEFAULT_DEMO_URL', DEFAULT_DEMO === null ? '' : demoUrl(DEFAULT_DEMO, base)],
     ['DEFAULT_DEMO_TITLE', escapeHtml(demo.title)],
     ['DEFAULT_DEMO_COMPOSER', escapeHtml(demo.composer)],
     ['APP_NAME', escapeHtml(APP_NAME)],
@@ -356,8 +352,6 @@ const LOCAL_CLIPS: Plugin = {
 
 export default defineConfig({
   base: BASE,
-  // `src/main.ts` reads the constant. A build with no analytics drops the code of the package.
-  define: { PAWCHESTRA_ANALYTICS: JSON.stringify(ANALYTICS) },
   plugins: [
     DEV_LOOK_OVERRIDE,
     BROWSER_BODIES,

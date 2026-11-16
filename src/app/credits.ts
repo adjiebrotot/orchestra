@@ -1,6 +1,6 @@
 import { HALL_CREDIT, KONZERTHAUS_CREDIT } from '../audio/hall-credit.ts';
 import { SOUNDFONT_CREDITS } from '../audio/soundfont-info.ts';
-import { DEMOS, DEMO_IDS } from './demos.ts';
+import { DEMO_IDS, demoInfo } from './demos.ts';
 import type { CreditLink, DemoId, DemoInfo } from './demos.ts';
 
 /** The text of the link in the drawer that opens the credits, and the heading of their dialog. */
@@ -41,7 +41,7 @@ export interface PieceCredit {
 }
 
 /** The small line above the name of the author, on the title card of the credits dialog. */
-export const AUTHOR_TEXT = 'Created by';
+export const AUTHOR_TEXT = 'Based on Pawchestra, created by';
 
 /**
  * The author of Pawchestra, on the title card of the credits dialog (design 2.8). The link goes to
@@ -122,7 +122,7 @@ export function creditTexts(current: DemoId | null): CreditTexts {
  * @returns The title, the composer, the credit line, and the links of the demo.
  */
 function pieceCredit(id: DemoId): PieceCredit {
-  const demo: DemoInfo = DEMOS[id];
+  const demo: DemoInfo = demoInfo(id);
   const piece = { title: demo.title, composer: demo.composer, credit: demo.credit };
   if (demo.links) {
     return { ...piece, links: demo.links };

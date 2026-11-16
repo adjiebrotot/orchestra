@@ -1,5 +1,5 @@
 import { AUTHOR_LINK, LICENSES_FILE } from '../src/app/credits.ts';
-import { DEMO_IDS, DEMOS } from '../src/app/demos.ts';
+import { DEMO_IDS, demoInfo } from '../src/app/demos.ts';
 import { APP_NAME, REPOSITORY_URL, SITE_DESCRIPTION, SITE_URL } from '../src/app/page-title.ts';
 
 /**
@@ -56,7 +56,7 @@ const COMPOSERS = 'Bach, Beethoven, Boulanger, Brahms, Mendelssohn, and Mozart';
 /** The list of the demos, each one with a link that opens it (design 2.2). */
 const DEMO_LIST: Block = {
   kind: 'list',
-  items: DEMO_IDS.map((id) => `[${DEMOS[id].title}, ${DEMOS[id].composer}](/#demo=${id})`),
+  items: DEMO_IDS.map((id) => `[${demoInfo(id).title}, ${demoInfo(id).composer}](/#demo=${id})`),
 };
 
 /**
@@ -73,7 +73,7 @@ const HOME: SitePage = {
       kind: 'paragraph',
       text: `${APP_NAME} is a free, open-source MIDI player for the web. Each animal of the orchestra plays one part of the piece, a bear conducts, and the camera follows the music. The app runs in the browser with WebGL2. It needs no account and no installation.`,
     },
-    { kind: 'heading', text: 'When to use Pawchestra' },
+    { kind: 'heading', text: `When to use ${APP_NAME}` },
     {
       kind: 'list',
       items: [
@@ -86,9 +86,9 @@ const HOME: SitePage = {
     {
       kind: 'list',
       items: [
-        'To write, edit, or convert a MIDI file. Pawchestra only plays MIDI files.',
+        'To write, edit, or convert a MIDI file. It only plays MIDI files.',
         'To play an audio recording, such as an MP3 file.',
-        'To play live MIDI input, or a MIDI file from a URL. Pawchestra cannot do these.',
+        'To play live MIDI input, or a MIDI file from a URL. The app cannot do these.',
       ],
     },
     { kind: 'heading', text: 'How to use it' },
@@ -107,7 +107,7 @@ const HOME: SitePage = {
     {
       kind: 'list',
       items: [
-        '[About](/about): what Pawchestra is and how it works.',
+        `[About](/about): what ${APP_NAME} is and how it works.`,
         '[Privacy](/privacy): the data that the site uses.',
         '[Contact](/contact): how to report a problem or send an idea.',
         `[Source code](${REPOSITORY_URL}): the repository on GitHub, under the Apache License 2.0.`,
@@ -176,7 +176,7 @@ const ABOUT: SitePage = {
     { kind: 'heading', text: 'Open source' },
     {
       kind: 'paragraph',
-      text: `[${AUTHOR_LINK.text}](${AUTHOR_LINK.href}) made ${APP_NAME}. The [source code](${REPOSITORY_URL}) is on GitHub under the Apache License 2.0. The sounds and the scores have their own licenses, which the credits in the app and the [third-party licenses](/${LICENSES_FILE}) give.`,
+      text: `${APP_NAME} is based on [Pawchestra](https://github.com/qiao/pawchestra) by [${AUTHOR_LINK.text}](${AUTHOR_LINK.href}). The [source code](${REPOSITORY_URL}) is on GitHub under the Apache License 2.0, and the animal models are under CC BY-NC 4.0. The sounds and the scores have their own licenses, which the credits in the app and the [third-party licenses](/${LICENSES_FILE}) give.`,
     },
   ],
 };
@@ -189,7 +189,7 @@ const CONTACT: SitePage = {
   blocks: [
     {
       kind: 'paragraph',
-      text: `${APP_NAME} is the project of one person, [${AUTHOR_LINK.text}](${AUTHOR_LINK.href}). To send a message, open an issue in the repository of the app on GitHub. Each person can read the issues, so do not put private data in an issue.`,
+      text: `To send a message about ${APP_NAME}, open an issue in the repository of the app on GitHub. Each person can read the issues, so do not put private data in an issue.`,
     },
     { kind: 'heading', text: 'Report a problem' },
     {
@@ -237,7 +237,7 @@ const PRIVACY: SitePage = {
     { kind: 'heading', text: 'Page views' },
     {
       kind: 'paragraph',
-      text: 'The site counts the page views with [Vercel Web Analytics](https://vercel.com/docs/analytics/privacy-policy). For each page view, Vercel stores the address of the page, the page that sent you, your country and city, your browser, your operating system, and the type of your device. Vercel identifies a visit with a hash of the request, and discards the hash after 24 hours. The data does not show who you are.',
+      text: 'The site uses no analytics and sets no cookies. The camera cues that you make stay in the storage of your browser.',
     },
     { kind: 'heading', text: 'Your MIDI files' },
     {
@@ -252,7 +252,7 @@ const PRIVACY: SitePage = {
     { kind: 'heading', text: 'The host' },
     {
       kind: 'paragraph',
-      text: 'Vercel hosts the site. Like each web server, it gets the data of each request, such as your IP address, the address of the page, and the type of your browser, to send you the page. The [privacy policy of Vercel](https://vercel.com/legal/privacy-policy) applies to this data.',
+      text: 'GitHub Pages hosts the site. Like each web server, it gets the data of each request, such as your IP address, the address of the page, and the type of your browser, to send you the page. The [privacy statement of GitHub](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement) applies to this data. A video that you render stays on your device.',
     },
     { kind: 'heading', text: 'Changes and questions' },
     {

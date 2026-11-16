@@ -3,4 +3,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://www.pawchestra.com/sitemap.xml
+Sitemap: https://orchestra.adjiebrotots.com/sitemap.xml

@@ -106,7 +106,7 @@ export class SystemMedia {
     this.#session.metadata = new MediaMetadata({
       title: lines.title,
       artist: lines.composer,
-      album: 'Pawchestra',
+      album: 'Orchestra',
       artwork: [{ src: this.#artwork, sizes: ARTWORK_SIZE, type: 'image/jpeg' }],
     });
   }

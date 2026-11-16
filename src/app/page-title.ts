@@ -1,14 +1,14 @@
-import { DEFAULT_DEMO, DEMOS } from './demos.ts';
+import { DEFAULT_DEMO, demoInfo } from './demos.ts';
 import type { TitleLines } from './file-rules.ts';
 
 /** The name of the app, at the end of the title of the page (design 2.8). */
-export const APP_NAME = 'Pawchestra';
+export const APP_NAME = 'Orchestra';
 
 /**
  * The URL of the start page on the main host (design 7.4). Each build names it as the canonical
  * URL, also the build for GitHub Pages.
  */
-export const SITE_URL = 'https://www.pawchestra.com/';
+export const SITE_URL = 'https://orchestra.adjiebrotots.com/';
 
 /**
  * The title of the start page (design 7.4): the name of the app and the words that people search
@@ -33,18 +33,18 @@ export const SHARE_IMAGE: ShareImage = {
   path: 'share.jpg',
   width: 1200,
   height: 630,
-  alt: 'The Pawchestra logo and the line "A web-based MIDI player with an animal orchestra." above an orchestra of animals on a wooden stage. A bear conducts them, and the view is from above and behind the bear.',
+  alt: 'An orchestra of animals on a wooden stage. A bear conducts them.',
 };
 
 /** The description of the start page for search results and shares, at most 155 characters. */
 export const SITE_DESCRIPTION =
-  'An orchestra of animals plays classical music on a 3D stage in your browser. Play a demo by Bach, Mozart, or Beethoven, or open a MIDI file.';
+  'An orchestra of animals plays classical music on a 3D stage in your browser. Open a MIDI file, direct the camera, and render the film to MP4.';
 
 /** The repository of the app on GitHub, which the link after the logo opens (design 2.8). */
-export const REPOSITORY_URL = 'https://github.com/qiao/pawchestra';
+export const REPOSITORY_URL = 'https://github.com/adjiebrotot/orchestra';
 
 /** The accessible name and the tooltip of the link to the repository (design 2.8). */
-export const REPOSITORY_LABEL = 'Pawchestra on GitHub';
+export const REPOSITORY_LABEL = 'Orchestra on GitHub (based on Pawchestra)';
 
 /**
  * The visible text of the link to the repository, in its pill after the logo (design 2.8). The
@@ -64,8 +64,8 @@ export const REPOSITORY_TEXT = 'Open source';
  * @returns For example "Ode to Joy, Ludwig van Beethoven · Pawchestra".
  */
 export function pageTitle(lines: TitleLines, demo: boolean): string {
-  const start = DEMOS[DEFAULT_DEMO];
-  if (demo && lines.title === start.title && lines.composer === start.composer) {
+  const start = DEFAULT_DEMO === null ? null : demoInfo(DEFAULT_DEMO);
+  if (demo && start && lines.title === start.title && lines.composer === start.composer) {
     return SITE_TITLE;
   }
 

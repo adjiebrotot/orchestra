@@ -13,7 +13,6 @@ import {
 import type { PieceCredit, SoundCredit } from '../app/credits.ts';
 import type { CreditLink, DemoId } from '../app/demos.ts';
 import { createElement } from './dom.ts';
-import { createIcon } from './icons.ts';
 
 /**
  * The content of the credits dialog (design 2.8, 7.3, 8.1), in the layout of the end credits of a
@@ -44,7 +43,7 @@ export class Credits {
     const name = createElement('p', 'credits-author');
     name.append(newTabLink(AUTHOR_LINK.text, AUTHOR_LINK.href));
     card.append(
-      createElement('p', 'credits-app', 'Pawchestra'),
+      createElement('p', 'credits-app', 'Orchestra'),
       createElement('p', 'credits-role', AUTHOR_TEXT),
       name,
     );
@@ -61,7 +60,7 @@ export class Credits {
     const end = createElement('div', 'credits-end');
     const licenses = createElement('p');
     licenses.append(newTabLink(LICENSES_TEXT, licensesHref));
-    end.append(createIcon('paw'), createElement('p', '', COPYRIGHT_TEXT), licenses);
+    end.append(createElement('p', '', COPYRIGHT_TEXT), licenses);
 
     this.element.append(
       card,

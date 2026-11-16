@@ -1,7 +1,11 @@
 # AGENTS.md
 
-Pawchestra is a WebGL MIDI player in which low-poly animals play orchestral music on a small stage.
-It uses Three.js, TypeScript, Vite, and pnpm, and it is a static site on Vercel.
+Orchestra (a fork of Pawchestra) is a WebGL MIDI player in which low-poly animals play orchestral
+music on a small stage. It uses Three.js, TypeScript, Vite, and pnpm, and it is a static site on
+GitHub Pages at https://orchestra.adjiebrotots.com/ (`.github/workflows/pages.yml`). The fork adds
+the camera director (`src/shots/directed.ts`, `src/ui/director.ts`), the MP4 render
+(`src/app/render-video.ts`), and the logo inlay of the stage floor (`src/scene/stage.ts`). The demo
+pieces come from `demos/demos.json` (`demos/README.md`).
 
 This file holds the rules of each round. The modules in `docs/agents/` hold the details.
 [`CONTRIBUTING.md`](CONTRIBUTING.md) gives the setup and the core commands.
