@@ -40,6 +40,12 @@ class RenderTap extends AudioWorkletProcessor {
 registerProcessor('${TAP_NAME}', RenderTap);
 `;
 
+/** The time without encoder output after which {@link VideoRender.finish} stops, in milliseconds. */
+const STALL_MS = 30_000;
+
+/** The frames of audio in one packet of each audio codec, for a chunk that has no duration. */
+const PACKET_FRAMES = { aac: 1024, opus: 960 } as const;
+
 /** The contexts that have the processor of the tap. */
 const tapContexts = new WeakSet<BaseAudioContext>();
 
@@ -82,6 +88,10 @@ export class VideoRender {
   /** The song time of the next frame to keep, in seconds. */
   #nextFrameSec = 0;
   #frames = 0;
+  /** The video chunks that the muxer holds. */
+  #videoChunks = 0;
+  /** The wall time of the last output of an encoder, in milliseconds. */
+  #lastOutputMs = 0;
   /** The song time of the last frame that the video holds, in seconds. */
   #lastFrameSec = -1;
   /** The audio frames that the file holds, from the song time 0. */
@@ -179,9 +189,28 @@ export class VideoRender {
     const fail = (error: Error): void => {
       this.#error ??= error;
     };
+    // Some browsers give chunks without a duration. The muxer refuses such a chunk, and an error
+    // in an output callback goes only to the console. Each chunk thus gets a duration, and an
+    // error of the muxer stops the render.
+    const frameUs = 1e6 / fps;
+    const packetUs = (PACKET_FRAMES[audio[1]] / this.#sampleRate) * 1e6;
     this.#video = new VideoEncoder({
       output: (chunk, meta) => {
-        muxer.addVideoChunk(chunk, meta);
+        this.#lastOutputMs = performance.now();
+        try {
+          const data = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(data);
+          muxer.addVideoChunkRaw(
+            data,
+            chunk.type,
+            chunk.timestamp,
+            chunk.duration ?? frameUs,
+            meta,
+          );
+          this.#videoChunks++;
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)));
+        }
       },
       error: fail,
     });
@@ -196,7 +225,20 @@ export class VideoRender {
     });
     this.#encoderAudio = new AudioEncoder({
       output: (chunk, meta) => {
-        muxer.addAudioChunk(chunk, meta);
+        this.#lastOutputMs = performance.now();
+        try {
+          const data = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(data);
+          muxer.addAudioChunkRaw(
+            data,
+            chunk.type,
+            chunk.timestamp,
+            chunk.duration ?? packetUs,
+            meta,
+          );
+        } catch (error) {
+          fail(error instanceof Error ? error : new Error(String(error)));
+        }
       },
       error: fail,
     });
@@ -249,7 +291,10 @@ export class VideoRender {
     }
     // The first frame starts the file at the song time 0.
     const time = this.#frames === 0 ? 0 : Math.max(songSec, this.#lastFrameSec + 0.001);
-    const frame = new VideoFrame(this.#canvas, { timestamp: Math.round(time * 1e6) });
+    const frame = new VideoFrame(this.#canvas, {
+      timestamp: Math.round(time * 1e6),
+      duration: Math.round(1e6 / this.#format.fps),
+    });
     const keyFrame = this.#frames % (this.#format.fps * 2) === 0;
     encoder.encode(frame, { keyFrame });
     frame.close();
@@ -336,24 +381,65 @@ export class VideoRender {
     this.#sink = null;
   }
 
+  /** The part of the frames that the video encoder gave to the file, from 0 to 1. */
+  get written(): number {
+    return this.#frames === 0 ? 1 : Math.min(1, this.#videoChunks / this.#frames);
+  }
+
   /**
-   * Ends the render and gives the file.
+   * Waits until the encoders give all their chunks. It stops when an encoder fails, or when no
+   * encoder gives a chunk for {@link STALL_MS}.
+   *
+   * @throws Error if an encoder failed or stopped.
+   */
+  async #flush(): Promise<void> {
+    this.#lastOutputMs = performance.now();
+    let timer = 0;
+    const stalled = new Promise<never>((_, reject) => {
+      timer = window.setInterval(() => {
+        if (this.#error) {
+          reject(this.#error);
+        } else if (performance.now() - this.#lastOutputMs > STALL_MS) {
+          reject(new Error('The video encoder stopped before it wrote all the frames.'));
+        }
+      }, 500);
+    });
+    try {
+      await Promise.race([
+        Promise.all([this.#video?.flush(), this.#encoderAudio?.flush()]),
+        stalled,
+      ]);
+    } finally {
+      window.clearInterval(timer);
+    }
+  }
+
+  /**
+   * Ends the render and gives the file. {@link VideoRender.written} gives the progress.
    *
    * @returns The MP4 file.
-   * @throws Error if an encoder failed.
+   * @throws Error if an encoder failed or stopped.
    */
   async finish(): Promise<Blob> {
     this.#stopTap();
-    await this.#video?.flush();
-    await this.#encoderAudio?.flush();
-    this.#video?.close();
-    this.#encoderAudio?.close();
+    try {
+      await this.#flush();
+    } finally {
+      for (const encoder of [this.#video, this.#encoderAudio]) {
+        if (encoder && encoder.state !== 'closed') {
+          encoder.close();
+        }
+      }
+    }
     if (this.#error) {
       throw this.#error;
     }
     const muxer = this.#muxer;
     if (!muxer) {
       throw new Error('The render did not start.');
+    }
+    if (this.#videoChunks === 0) {
+      throw new Error('The video encoder gave no frames.');
     }
     muxer.finalize();
     return new Blob([muxer.target.buffer], { type: 'video/mp4' });

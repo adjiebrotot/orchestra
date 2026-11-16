@@ -1393,7 +1393,16 @@ export class App {
       this.#renderPanel.show(false, 0, message);
       return;
     }
-    this.#renderPanel.show(true, 1, 'Writing the MP4 file…');
+    // The encoders can be behind the recording: the status line shows the frames that they wrote.
+    const showWriting = (): void => {
+      this.#renderPanel.show(
+        true,
+        render.video.written,
+        `Writing the MP4 file… ${Math.floor(render.video.written * 100)} %`,
+      );
+    };
+    showWriting();
+    const timer = window.setInterval(showWriting, 250);
     try {
       const file = await render.video.finish();
       const name = `${(this.#piece?.title.title ?? 'orchestra').replace(/[^\w.-]+/gu, '_')}.mp4`;
@@ -1401,6 +1410,8 @@ export class App {
       this.#renderPanel.showFile(file, name);
     } catch (error) {
       this.#renderPanel.show(false, 0, `The render failed: ${(error as Error).message}`);
+    } finally {
+      window.clearInterval(timer);
     }
   }
 
