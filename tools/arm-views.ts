@@ -51,7 +51,7 @@ import type { RoleSource } from './fold-probe.ts';
 import { patchedDemo } from './patch-demos.ts';
 import { ROOT, runChild } from './ref-tree.ts';
 import { toWebp } from './screenshots.ts';
-import { DEMOS, DEMO_IDS } from '../src/app/demos.ts';
+import { DEMO_IDS, demoInfo } from '../src/app/demos.ts';
 import type { DemoId } from '../src/app/demos.ts';
 import { bodyBoundsOf, speciesItems } from '../src/gallery/items.ts';
 import type { Side } from '../src/models/body-format.ts';
@@ -105,7 +105,7 @@ const FRAME_END_MARGIN_SEC = 0.05;
  * @returns The frame, with its time and reason changed when the time is too late.
  */
 function frameInDemo(frame: Frame): Frame {
-  const last = Number((DEMOS[frame.demo].lengthSec - FRAME_END_MARGIN_SEC).toFixed(2));
+  const last = Number((demoInfo(frame.demo).lengthSec - FRAME_END_MARGIN_SEC).toFixed(2));
   if (frame.time <= last) {
     return frame;
   }

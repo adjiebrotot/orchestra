@@ -290,7 +290,8 @@ export function cameraAt(
   const span = current.moveEndSec - moveStart;
   const u = still || span <= 0 ? 0 : smoothstep((time - moveStart) / span);
   // The opening shot is the first shot, from `-Infinity` (design 5.6).
-  const from = i === 0 && !still ? establishFrom(current.from) : current.from;
+  const from =
+    i === 0 && !still && current.kind === 'wide' ? establishFrom(current.from) : current.from;
   out.fov = writeShotCamera(plan, current, u, aspect, out.position, out.target, from);
   out.beam = SHOT_BEAM_OPACITY[current.kind];
   out.light = SHOT_LIGHT[current.kind];

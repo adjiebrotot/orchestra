@@ -69,7 +69,7 @@ export function endCardView(frame: EndCardFrame): EndCardView {
  */
 export function nextDemo(id: DemoId): DemoId {
   const at = DEMO_IDS.indexOf(id);
-  return DEMO_IDS[(at + 1) % DEMO_IDS.length] ?? DEMO_IDS[0];
+  return DEMO_IDS[(at + 1) % DEMO_IDS.length] ?? id;
 }
 
 /** The button of the end card that plays the piece again (design 2.8). */

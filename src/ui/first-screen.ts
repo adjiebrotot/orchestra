@@ -40,6 +40,8 @@ export interface FirstScreenView {
   readonly loadShare: number;
   /** The load text, or '' for none. A line break separates two lines. */
   readonly loadText: string;
+  /** A text below the button when no load runs, or none. */
+  readonly note?: string;
 }
 
 /**
@@ -167,6 +169,6 @@ export class FirstScreen {
     this.#ring.style.visibility = view.loading ? '' : 'hidden';
     const offset = (RING_LENGTH * (1 - view.loadShare)).toFixed(1);
     setAttribute(this.#done, 'stroke-dashoffset', offset);
-    setText(this.#status, view.loading ? view.loadText : '');
+    setText(this.#status, view.loading ? view.loadText : (view.note ?? ''));
   }
 }

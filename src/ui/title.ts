@@ -1,19 +1,17 @@
 import { APP_NAME, REPOSITORY_LABEL, REPOSITORY_TEXT, REPOSITORY_URL } from '../app/page-title.ts';
 import { createElement, setText } from './dom.ts';
-import { createIcon, createWordmark } from './icons.ts';
+import { createIcon } from './icons.ts';
 
 /**
- * Creates the logo (design 2.8): the gold paw and the wordmark "Pawchestra". It is plain content, no
- * control. The wordmark is the heading of the page (`h1`), with the name of the app as its
- * accessible name. A screen reader reads the name and skips the paw.
+ * Creates the logo line. It shows no logo: only the link to the repository shows. The name of the
+ * app stays as the heading of the page (`h1`) for a screen reader.
  *
  * @returns The logo element.
  */
 function createLogo(): HTMLElement {
   const logo = createElement('div', 'logo');
-  const name = createElement('h1', 'name');
-  name.append(createWordmark(APP_NAME));
-  logo.append(createIcon('paw'), name);
+  const name = createElement('h1', 'name sr-only', APP_NAME);
+  logo.append(name);
   return logo;
 }
 

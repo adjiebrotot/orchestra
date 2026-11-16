@@ -90,6 +90,24 @@ uniform vec3 uPlank;
 uniform sampler2D uStageBake;
 uniform float uStageBlur;
 
+// The circled A logo of adjiebrotots.com (logos/logo.svg of the personal site), as a coverage of
+// its disc and of its letter at a point. The point is in the units of the logo: the disc has the
+// radius 1, x points right, and y points down (to the audience). The letter is an open ring of
+// radius 250/300 with a gap of 46 degrees at the bottom, and a crossbar.
+vec2 logoCover(vec2 p) {
+  float aa = max(fwidth(p.x), fwidth(p.y)) * 0.75 + 1e-4;
+  float r = length(p);
+  float disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
+  float ring = abs(r - 0.8333) - 0.0767;
+  // The gap: the wedge from 67 to 113 degrees below the middle, cut along the radii.
+  float cut = abs(p.x) * 0.9205 - p.y * 0.3907;
+  float arc = max(ring, -cut);
+  vec2 q = p - vec2(clamp(p.x, -0.7567, 0.7567), 0.0467);
+  float bar = length(q) - 0.07;
+  float letter = 1.0 - smoothstep(-aa, aa, min(arc, bar));
+  return vec2(disc, letter);
+}
+
 float woodHash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
@@ -225,6 +243,14 @@ float stagePlank = plankNumber(vColor.rgb);
 float stageSeam = seamOf(vColor.rgb);
 float grain = woodGrain(vWoodPosition + vec3(stagePlank * 41.0, 0.0, stagePlank * 0.37));
 diffuseColor.rgb *= 1.0 + uGrain * grain;
+// The logo, as an inlay in the planks of the stage top: a darker stain for the disc and a pale
+// wood for the letter, so that the grain and the planks show through.
+if (vWoodNormal.y > 0.5 && abs(vWoodPosition.y) < 0.03) {
+  vec2 logoCenter = vec2(0.0, -0.08 * uHalfSide);
+  vec2 logoCov = logoCover((vWoodPosition.xz - logoCenter) / (0.62 * uHalfSide));
+  vec3 logoTone = mix(vec3(1.0), vec3(0.6, 0.58, 0.56), logoCov.x);
+  diffuseColor.rgb *= mix(logoTone, vec3(1.42, 1.36, 1.26), logoCov.y);
+}
 `;
 
 /** The shadow of the key light in the light chunk of three.js r186. */

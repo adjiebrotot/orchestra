@@ -17,12 +17,23 @@ import { CINEMA_ASPECT } from '../shots/view.ts';
 import type { Score, SectionSize } from '../score/types.ts';
 import { focusKindOf, keepKeysAfterClick } from '../ui/dom.ts';
 import { Ui } from '../ui/ui.ts';
+import { Director } from '../ui/director.ts';
+import type { DirectorRow } from '../ui/director.ts';
+import { RenderPanel } from '../ui/render-panel.ts';
+import { directedPlan } from '../shots/directed.ts';
+import type { DirectorCue } from '../shots/directed.ts';
+import { canRenderVideo } from './render-formats.ts';
+import type { RenderFormat } from './render-formats.ts';
+import type { VideoRender } from './render-video.ts';
+import { songTimeAt } from '../audio/clock.ts';
+import type { ClockAnchor } from '../audio/clock.ts';
+import type { FirstScreenView } from '../ui/first-screen.ts';
 import { playWithSilentSwitch, warmAudioOutput } from './audio-session.ts';
 import { DEFAULT_SPEED, DEFAULT_VOLUME, uiShown, volumeGain } from './bar-rules.ts';
 import { motionEvent, nextMode } from './camera-mode.ts';
 import type { CameraEvent, CameraMode } from './camera-mode.ts';
 import type { Speed } from './bar-rules.ts';
-import { DEMOS, PERF_60, demoHash, demoUrl, isDemoId } from './demos.ts';
+import { PERF_60, demoHash, demoInfo, demoUrl, isDemoId } from './demos.ts';
 import { endCardView, nextDemo } from './end-card.ts';
 import type { StageFile } from './demos.ts';
 import { FILE_ERROR_TEXTS, fileTitle, readScoreFile } from './file-rules.ts';
@@ -71,6 +82,33 @@ import { titleCardLevel } from './title-card.ts';
 import { STOPPED, followSongTime, seekPlayState, setPlaying, startPlay } from './transport.ts';
 import type { PlayState } from './transport.ts';
 
+/** The first screen of a site with no demo: the play button opens a MIDI file. */
+const EMPTY_FIRST_SCREEN: FirstScreenView = {
+  shown: true,
+  loading: false,
+  waiting: false,
+  pending: false,
+  intro: false,
+  playLabel: 'Play',
+  loadShare: 0,
+  loadText: '',
+  note: 'Open a MIDI file to start, or drop one on the page',
+};
+
+/** The song seconds after the song end that a render keeps, for the release and the hall. */
+const RENDER_TAIL_SEC = 2.5;
+
+/**
+ * Gives a time as minutes and seconds.
+ *
+ * @param sec The time in seconds.
+ * @returns For example "3:07".
+ */
+function clockOf(sec: number): string {
+  const whole = Math.floor(sec);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+}
+
 /** The time between two updates of the frame rate counter of the settings, in seconds. */
 const FPS_COUNTER_SEC = 0.5;
 
@@ -92,6 +130,8 @@ interface Piece {
   poses: ScenePoseBuffer;
   /** The camera shots of the score (design 5.6). */
   shots: ShotPlan;
+  /** The shots of the camera path of the director, or `null` for the automatic shots. */
+  directed: ShotPlan | null;
   /** The levels of the meter in the demo list (design 2.8). */
   meter: MeterTrack;
   /** The spans of sound of each seat, for the rings of the seat list (design 2.8). */
@@ -133,6 +173,12 @@ interface Audio {
    * calls it, because Safari can reject a resume outside a user gesture (design 2.4, 6.8).
    */
   readonly resume: () => void;
+  /** The audio context and the node that a video render records. */
+  readonly record: () => {
+    context: AudioContext;
+    tap: AudioNode;
+    anchors: () => readonly ClockAnchor[];
+  };
 }
 
 /** A score with its scene, and the 3D scene of its layout, ready to show. */
@@ -158,7 +204,7 @@ function sectionSizeOf(file: StageFile | null, setting: SectionSize): SectionSiz
  * @returns The title and the composer.
  */
 function stageFileTitle(file: StageFile): TitleLines {
-  return isDemoId(file) ? DEMOS[file] : { title: `${PERF_60}.mid`, composer: '' };
+  return isDemoId(file) ? demoInfo(file) : { title: `${PERF_60}.mid`, composer: '' };
 }
 
 /** The file of a new piece: its score and bytes, its title, and its demo. */
@@ -198,6 +244,7 @@ function preparePiece(source: PieceFile, scene: ScoreScene, playWhenReady: boole
     mix: stageMix(score, layout),
     plan,
     shots,
+    directed: null,
     meter: meterTrack(score.notes, score.durationSec),
     glow: seatSpans(score.notes, score.seats.length),
     poses: createScenePose(plan),
@@ -260,6 +307,8 @@ export class App {
    * samples are ready (design 2.2).
    */
   #playWhenShown = false;
+  /** True when the site has no demo and no file shows yet: the first screen asks for a file. */
+  #empty = false;
   /** True after the first play of the session (design 2.8, the first screen). */
   #sessionPlayed = false;
   #speed: Speed = DEFAULT_SPEED;
@@ -311,6 +360,24 @@ export class App {
   readonly #phone = window.matchMedia(PHONE_LAYOUT_QUERY);
   /** The Media Session and the screen Wake Lock (design 2.4). */
   readonly #media: SystemMedia;
+  /** The camera director: the cues of the camera path of the piece. */
+  readonly #director: Director;
+  /** The panel of the MP4 render. */
+  readonly #renderPanel: RenderPanel;
+  /** The buttons at the top of the stage that open the director and the render. */
+  readonly #studio: HTMLElement;
+  /** The render that runs, or `null`. */
+  #render: {
+    readonly video: VideoRender;
+    readonly durationSec: number;
+    readonly format: RenderFormat;
+    /** The wall time at which the piece ended, or `null` before its end. */
+    endedAt: number | null;
+    /** The camera mode, the speed, and the quality before the render. */
+    readonly before: { mode: CameraMode; speed: Speed };
+  } | null = null;
+  /** True while a render starts: the encoders load. */
+  #renderStarting = false;
 
   /**
    * Creates the UI over the canvas and connects its controls.
@@ -445,6 +512,60 @@ export class App {
         this.#seek(songSec);
       },
     });
+    this.#director = new Director({
+      onChange: () => {
+        if (this.#piece) {
+          this.#updateDirected(this.#piece);
+        }
+      },
+      onSeek: (songSec) => {
+        this.#seek(songSec);
+      },
+      onPreview: () => {
+        if (this.#cameraMode !== 'cinematic') {
+          this.#changeCamera('toggle');
+        }
+        if (!this.#state.transport.playing) {
+          this.#clickPlay();
+        }
+      },
+    });
+    this.#renderPanel = new RenderPanel({
+      onStart: (format) => {
+        this.#startRender(format).catch((error: Error) => {
+          this.#renderStarting = false;
+          this.#renderPanel.show(false, 0, error.message);
+        });
+      },
+      onCancel: () => {
+        this.#endRender(false).catch(reportError);
+      },
+    });
+    this.#studio = document.createElement('div');
+    this.#studio.className = 'studio';
+    const directorButton = document.createElement('button');
+    directorButton.className = 'studio-button';
+    directorButton.textContent = 'Camera director';
+    directorButton.addEventListener('click', () => {
+      this.#director.setOpen(!this.#director.open);
+      directorButton.setAttribute('aria-pressed', String(this.#director.open));
+    });
+    const renderButton = document.createElement('button');
+    renderButton.className = 'studio-button is-accent';
+    renderButton.textContent = 'Render MP4';
+    renderButton.addEventListener('click', () => {
+      this.#renderPanel.setOpen(!this.#renderPanel.open);
+      if (!canRenderVideo()) {
+        this.#renderPanel.show(
+          false,
+          0,
+          'This browser has no WebCodecs, so it cannot render a video. Use a current Chrome, Edge, Firefox, or Safari.',
+        );
+      }
+    });
+    this.#studio.append(directorButton, renderButton);
+    this.#studio.hidden = true;
+    document.body.append(this.#studio, this.#director.element, this.#renderPanel.element);
     // The renderer made its listener first, so it makes its own state again before the steps.
     canvas.addEventListener('webglcontextrestored', () => {
       this.#restoreScene();
@@ -571,6 +692,7 @@ export class App {
     piece.mix = stageMix(score, layout);
     piece.plan = plan;
     piece.shots = shots;
+    this.#updateDirected(piece);
     piece.meter = meterTrack(score.notes, score.durationSec);
     piece.glow = seatSpans(score.notes, score.seats.length);
     piece.poses = createScenePose(plan);
@@ -715,6 +837,15 @@ export class App {
     if (window.location.hash !== hash) {
       history.replaceState(history.state, '', `${pathname}${search}${hash}`);
     }
+  }
+
+  /** Shows the first screen with no demo: the play button opens a MIDI file. */
+  showEmpty(): void {
+    this.#empty = true;
+    this.#showTitle(
+      { title: 'Orchestra', composer: 'Open a MIDI file, or drop one on the page' },
+      false,
+    );
   }
 
   /** Cinematic or Free (design 2.5). */
@@ -1064,11 +1195,13 @@ export class App {
     this.#changeCamera('new-piece');
     const demo = piece.file !== null && isDemoId(piece.file) ? piece.file : null;
     this.#showTitle(piece.title, piece.file !== null);
-    const next = demo === null ? null : DEMOS[nextDemo(demo)].title;
+    const next = demo === null ? null : demoInfo(nextDemo(demo)).title;
     this.#ui.endCard.setPiece(piece.title.title, piece.title.composer, next);
     this.#ui.demoList.show(piece.file === null ? 'file' : demo);
     this.#ui.credits.show(demo);
     this.#showSeats(piece);
+    this.#director.setPiece(this.#directorPiece(piece));
+    this.#updateDirected(piece);
     // The button "Auto" of the section size names the size of the new piece (design 2.8).
     this.#applySettings();
     this.#loadAudio(piece);
@@ -1088,6 +1221,187 @@ export class App {
     this.#ui.titleCard.setPiece(lines.title, lines.composer);
     this.#media.showPiece(lines);
     document.title = pageTitle(lines, stageFile);
+  }
+
+  /**
+   * Gives the piece of the camera director: the rows of the seats and the notes of the score.
+   *
+   * @param piece The piece.
+   * @returns The piece of the director.
+   */
+  #directorPiece(piece: Piece): {
+    key: string;
+    durationSec: number;
+    rows: DirectorRow[];
+    notes: Piece['score']['notes'];
+  } {
+    const { seats, soloist, notes, durationSec } = piece.score;
+    const counts = playerCounts(piece.plan.players, seats.length);
+    const rows = seatRows(seats, counts, soloist).map((row, seatIndex): DirectorRow => ({
+      seatIndex,
+      name: row.name,
+      color: row.ring ?? row.color ?? '#b5aa99',
+      onStage: (counts[seatIndex] ?? 0) > 0 && seats[seatIndex]?.section !== 'sound-only',
+    }));
+    return { key: `${piece.title.title}:${Math.round(durationSec)}`, durationSec, rows, notes };
+  }
+
+  /**
+   * Makes the shots of the camera path of the director again, after a change of the cues or of
+   * the scene.
+   *
+   * @param piece The current piece.
+   */
+  #updateDirected(piece: Piece): void {
+    const cues: readonly DirectorCue[] = this.#director.enabled ? this.#director.cues : [];
+    piece.directed =
+      cues.length === 0
+        ? null
+        : directedPlan(piece.shots, piece.score, piece.scene.layout, piece.scene.models, cues);
+  }
+
+  /**
+   * Starts a render of the film to an MP4 file: the piece plays from the start in Cinematic mode
+   * at the speed 1, and the canvas renders at the size of the format.
+   *
+   * @param format The size and the frame rate.
+   */
+  async #startRender(format: RenderFormat): Promise<void> {
+    const piece = this.#piece;
+    const audio = this.#audio;
+    if (this.#render || this.#renderStarting) {
+      return;
+    }
+    if (!piece || !audio || piece.samples !== 'ready') {
+      this.#renderPanel.show(false, 0, 'Wait until the instruments are loaded, then try again.');
+      return;
+    }
+    this.#renderStarting = true;
+    this.#renderPanel.show(true, 0, 'Starting the encoders…');
+    if (this.#state.transport.playing) {
+      this.#pause();
+    }
+    const record = audio.record();
+    await record.context.resume();
+    const { VideoRender } = await import('./render-video.ts');
+    const durationSec = piece.score.durationSec;
+    const video = new VideoRender(
+      this.#canvas,
+      {
+        context: record.context,
+        tap: record.tap,
+        songTimeAt: (contextTime) => songTimeAt(record.anchors(), contextTime, durationSec),
+      },
+      format,
+      durationSec + RENDER_TAIL_SEC,
+    );
+    await video.start();
+    if (piece !== this.#piece) {
+      video.cancel();
+      this.#renderStarting = false;
+      this.#renderPanel.show(false, 0, 'The piece changed. Try again.');
+      return;
+    }
+    const before = { mode: this.#cameraMode, speed: this.#speed };
+    this.#speed = 1;
+    audio.player.setRate(1);
+    if (this.#cameraMode !== 'cinematic') {
+      this.#ui.closeDrawerForFilm();
+      this.#cameraMode = 'cinematic';
+    }
+    this.#ui.closeDrawer();
+    this.#director.setOpen(false);
+    this.#countdown = 'stopped';
+    this.#canvas.style.objectFit = 'contain';
+    this.#canvas.style.background = '#000';
+    this.#scene.resize(format.width, format.height, 1);
+    this.#seek(0);
+    this.#render = { video, durationSec, format, endedAt: null, before };
+    this.#renderStarting = false;
+    this.#play(piece);
+  }
+
+  /**
+   * Gives the frame of a render to its video, shows its progress, and ends it at the end time.
+   *
+   * @param wallTime The wall time of the frame, in seconds.
+   */
+  #followRender(wallTime: number): void {
+    const render = this.#render;
+    if (!render) {
+      return;
+    }
+    const { video, durationSec, format } = render;
+    // A resize of the window during the render must not change the size of the video.
+    if (this.#canvas.width !== format.width || this.#canvas.height !== format.height) {
+      this.#scene.resize(format.width, format.height, 1);
+    }
+    const playing = this.#state.transport.playing;
+    if (
+      render.endedAt === null &&
+      this.#songTime >= durationSec - 0.02 &&
+      (!playing || this.#songTime >= durationSec)
+    ) {
+      render.endedAt = wallTime;
+    }
+    const songSec =
+      render.endedAt === null ? this.#songTime : durationSec + wallTime - render.endedAt;
+    if (playing || render.endedAt !== null) {
+      video.frame(songSec);
+    }
+    const total = durationSec + RENDER_TAIL_SEC;
+    this.#renderPanel.show(
+      true,
+      video.progress,
+      `Recording ${clockOf(Math.max(0, Math.min(songSec, total)))} of ${clockOf(total)} · ${video.codecs}. Keep this tab visible.`,
+    );
+    if (video.error) {
+      this.#endRender(false, `The encoder failed: ${video.error.message}`).catch(reportError);
+    } else if (video.done) {
+      this.#endRender(true).catch(reportError);
+    }
+  }
+
+  /**
+   * Ends a render: the page returns to its camera mode, speed, and canvas size.
+   *
+   * @param save True to give the file, false to drop it.
+   * @param message The status line of a render that did not end well.
+   */
+  async #endRender(save: boolean, message = 'The render stopped.'): Promise<void> {
+    const render = this.#render;
+    if (!render) {
+      return;
+    }
+    this.#render = null;
+    if (this.#state.transport.playing) {
+      this.#pause();
+    }
+    this.#speed = render.before.speed;
+    this.#audio?.player.setRate(this.#speed);
+    this.#cameraMode = render.before.mode;
+    this.#canvas.style.objectFit = '';
+    this.#canvas.style.background = '';
+    this.#scene.resize(
+      this.#canvas.clientWidth,
+      this.#canvas.clientHeight,
+      window.devicePixelRatio,
+    );
+    this.#applySettings();
+    if (!save) {
+      render.video.cancel();
+      this.#renderPanel.show(false, 0, message);
+      return;
+    }
+    this.#renderPanel.show(true, 1, 'Writing the MP4 file…');
+    try {
+      const file = await render.video.finish();
+      const name = `${(this.#piece?.title.title ?? 'orchestra').replace(/[^\w.-]+/gu, '_')}.mp4`;
+      this.#renderPanel.show(false, 1, 'Done.');
+      this.#renderPanel.showFile(file, name);
+    } catch (error) {
+      this.#renderPanel.show(false, 0, `The render failed: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -1217,10 +1531,13 @@ export class App {
         // The shots fill the letterbox of the aspect 21:9 in each viewport. With reduced motion,
         // each shot holds its first camera, and each cut is hard (2.5).
         const view = { aspect: CINEMA_ASPECT, still: this.#scene.reducedMotion };
-        shot = cameraAt(piece.shots, this.#songTime, transport, view, this.#shotCamera);
+        const shots = piece.directed ?? piece.shots;
+        shot = cameraAt(shots, this.#songTime, transport, view, this.#shotCamera);
       }
     }
-    this.#followTier(wallTime);
+    if (!this.#render) {
+      this.#followTier(wallTime);
+    }
     this.#updateUi(wallTime);
     const drawer = this.#ui.drawer;
     const cover = stageCover({
@@ -1231,6 +1548,8 @@ export class App {
     // The sheet of a phone covers the first screen, so the stage does not need to clear it.
     const ring = this.#phone.matches && drawer.open ? null : this.#ui.firstScreen.ringBox;
     this.#scene.render(shot, cover, ring, poser);
+    this.#director.update(this.#songTime);
+    this.#followRender(wallTime);
     this.#ui.showLetterbox(this.#scene.letterboxBar, this.#scene.letterboxSide);
     this.#showFrame();
     if (piece && !this.#audioStarted) {
@@ -1289,13 +1608,15 @@ export class App {
       : noPieceStatus(this.#failedFile !== null, this.#playWhenShown);
     const loadSec = piece ? wallTime - piece.loadStartSec : 0;
     ui.firstScreen.update(
-      firstScreenView(
-        status,
-        piece?.progress ?? null,
-        piece !== null,
-        this.#sessionPlayed,
-        loadSec,
-      ),
+      !piece && this.#empty
+        ? EMPTY_FIRST_SCREEN
+        : firstScreenView(
+            status,
+            piece?.progress ?? null,
+            piece !== null,
+            this.#sessionPlayed,
+            loadSec,
+          ),
     );
     const songSec = shownSongTime(this.#seekSec, this.#songTime);
     const ended = piece !== null && atSongEnd(status, songSec, piece.score.durationSec);
@@ -1314,6 +1635,16 @@ export class App {
       held: this.#message !== null || ui.creditsDialog.open,
     });
     ui.showPanels(shown.panels);
+    this.#studio.hidden =
+      !piece ||
+      !(
+        shown.bar ||
+        !status.playing ||
+        this.#studio.matches(':hover') ||
+        this.#director.open ||
+        this.#renderPanel.open ||
+        this.#render
+      );
     // The hint shows with the bar during the first piece in Free mode, until the first drag.
     ui.showDragHint(
       !cinematic &&
@@ -1394,7 +1725,9 @@ export class App {
   #clickPlay(): void {
     const piece = this.#piece;
     if (!piece) {
-      if (this.#failedFile !== null) {
+      if (this.#empty) {
+        this.#ui.filePicker.open();
+      } else if (this.#failedFile !== null) {
         this.#selectDemo(this.#failedFile);
       } else {
         this.#playWhenShown = !this.#playWhenShown;
@@ -1647,6 +1980,7 @@ export class App {
         // `play()` gives a rejection to the error function (design 6.8).
         player.context.resume().catch(() => undefined);
       },
+      record: () => ({ context: player.context, tap: player.tap, anchors: () => player.anchors }),
     };
     if (this.#piece) {
       this.#loadAudio(this.#piece);

@@ -158,7 +158,7 @@ const LOOK_REGIONS: readonly LookRegion[] = [
 const LOOK_CAMERAS = ['orchestra', 'default', 'violins'] as const;
 
 /** The demo of the frames: the default demo, as `pnpm close-views play` renders it. */
-const LOOK_DEMO: DemoId = DEFAULT_DEMO;
+const LOOK_DEMO: DemoId = DEFAULT_DEMO ?? '';
 
 /** The size of the frames, in pixels: `PLAY_FRAME` of `tools/close-views.ts`. */
 const LOOK_FRAME = { width: 1440, height: 900 } as const;

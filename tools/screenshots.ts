@@ -63,7 +63,7 @@ export function reviewShots(): Shot[] {
   });
   return [
     ...DEMO_IDS.map((id) => demo(id, 1440, 900)),
-    demo(DEFAULT_DEMO, 390, 844),
+    demo(DEFAULT_DEMO ?? '', 390, 844),
     gallery('species'),
     gallery('instruments'),
     {
@@ -106,9 +106,9 @@ export function playShots(): PlayShot[] {
     playSec: 6,
   });
   return [
-    shot(DEFAULT_DEMO, 1440, 900),
+    shot(DEFAULT_DEMO ?? '', 1440, 900),
     shot('beethoven-9', 1440, 900),
-    shot(DEFAULT_DEMO, 390, 844),
+    shot(DEFAULT_DEMO ?? '', 390, 844),
   ];
 }
 

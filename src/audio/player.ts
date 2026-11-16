@@ -235,6 +235,16 @@ export class WorkletPlayer implements Player {
     return this.#context;
   }
 
+  /** The end of the output chain before the volume gain: the input of a video render. */
+  get tap(): AudioNode {
+    return this.#output.trim;
+  }
+
+  /** The song length of the score, in seconds. */
+  get durationSec(): number {
+    return this.#durationSec;
+  }
+
   /** The clock anchors that `now()` uses, the last one at the end. */
   get anchors(): readonly ClockAnchor[] {
     return this.#anchors;

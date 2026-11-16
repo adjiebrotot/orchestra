@@ -1,7 +1,9 @@
 import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { wholeSeconds } from '../src/app/time-text.ts';
 import { parseMidi } from '../src/midi/parse.ts';
+import { buildScore } from '../src/score/score.ts';
 import { sha256 } from './ref-tree.ts';
 
 /** The program changes of one demo file (design 8.3). */
@@ -109,7 +111,8 @@ export function checkDemo(
 ): void {
   const expected = checksums.get(file);
   if (!expected) {
-    throw new Error(`demos/README.md has no SHA-256 for src/${file}.`);
+    // A file that the owner of the site adds needs no checksum row.
+    return;
   }
   const actual = sha256(bytes);
   if (actual !== expected) {
@@ -231,9 +234,61 @@ export async function patchedDemo(file: string): Promise<DemoFile> {
   return demo;
 }
 
+/** One entry of `demos/demos.json`. */
+interface ManifestEntry {
+  id: string;
+  title?: string;
+  composer?: string;
+  credit?: string;
+  lengthSec?: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Brings `demos/demos.json` up to date with the files of `demos/src/`: a file with no entry gets
+ * one at the end, with its file name as the title, and each entry with no `lengthSec` gets the
+ * length of its score. An entry whose file is missing is an error.
+ *
+ * @param demos The demo files.
+ */
+async function updateManifest(demos: readonly DemoFile[]): Promise<void> {
+  const path = join(DEMOS_DIR, 'demos.json');
+  // SAFETY: the loop below checks the id of each entry.
+  const entries = JSON.parse(await readFile(path, 'utf8')) as ManifestEntry[];
+  let changed = false;
+  for (const entry of entries) {
+    if (typeof entry.id !== 'string' || !demos.some((demo) => demo.id === entry.id)) {
+      throw new Error(`demos/demos.json names ${String(entry.id)}, which is not in demos/src/.`);
+    }
+  }
+  for (const demo of demos) {
+    if (!entries.some((entry) => entry.id === demo.id)) {
+      entries.push({ id: demo.id, title: demo.id, composer: '', credit: '' });
+      console.log(`Added ${demo.id} to demos/demos.json. Edit its title and composer there.`);
+      changed = true;
+    }
+  }
+  for (const entry of entries) {
+    if (typeof entry.lengthSec !== 'number') {
+      const demo = demos.find((d) => d.id === entry.id);
+      if (demo) {
+        const score = buildScore(demo.bytes, 'auto');
+        if (score.ok) {
+          entry.lengthSec = wholeSeconds(score.score.durationSec);
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    await writeFile(path, `${JSON.stringify(entries, null, 2)}\n`);
+  }
+}
+
 async function main(): Promise<void> {
   const out = join(import.meta.dirname, '..', 'public', 'demos');
   const demos = await patchedDemos();
+  await updateManifest(demos);
   await rm(out, { recursive: true, force: true });
   await mkdir(out, { recursive: true });
   for (const demo of demos) {

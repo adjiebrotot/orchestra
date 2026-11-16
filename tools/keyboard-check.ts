@@ -6,7 +6,7 @@ import type { Browser, CDPSession, Page, Route } from '@playwright/test';
 import { preview } from 'vite';
 
 import { FIRST_PLAY, SAMPLES_READY } from '../src/app/dev-hook.ts';
-import { DEFAULT_DEMO, DEMOS } from '../src/app/demos.ts';
+import { DEFAULT_DEMO, demoInfo } from '../src/app/demos.ts';
 import { FILE_FAILURE_TEXT } from '../src/app/messages.ts';
 import { REPOSITORY_LABEL, REPOSITORY_TEXT, REPOSITORY_URL } from '../src/app/page-title.ts';
 import { chromiumArgs } from './chromium-args.ts';
@@ -15,7 +15,7 @@ import { chromiumArgs } from './chromium-args.ts';
 const REPOSITORY_NAME = `${REPOSITORY_TEXT}: ${REPOSITORY_LABEL}`;
 
 /** The title of the default demo: the current row of the demo list at start. */
-const DEFAULT_TITLE = DEMOS[DEFAULT_DEMO].title;
+const DEFAULT_TITLE = demoInfo(DEFAULT_DEMO ?? '').title;
 
 /** The result of one keyboard operation of one control. */
 export interface KeyCheck {
@@ -1340,7 +1340,7 @@ async function checkDemoFailure(browser: Browser, base: string): Promise<KeyChec
     `Tab x${tabs} to Try again, Enter`,
     `${atStart}; Try again plays the demo: ${plays}`,
     atStart.startsWith(
-      `${failure}; retry true; title "${DEMOS[DEFAULT_DEMO].title}"; first play true`,
+      `${failure}; retry true; title "${demoInfo(DEFAULT_DEMO ?? '').title}"; first play true`,
     ) && plays,
   );
 
@@ -1361,7 +1361,7 @@ async function checkDemoFailure(browser: Browser, base: string): Promise<KeyChec
     'Enter on the Ode to Joy row, Shift+Tab to Try again, Enter',
     `${selected}; after Try again, hash "${hashAfter}"`,
     selected ===
-      `${failure}; retry true; title "${DEMOS[DEFAULT_DEMO].title}"; first play false; hash "${hashBefore}"` &&
+      `${failure}; retry true; title "${demoInfo(DEFAULT_DEMO ?? '').title}"; first play false; hash "${hashBefore}"` &&
       hashAfter === '#demo=beethoven-9',
   );
   await context.close();

@@ -1,4 +1,4 @@
-import { DEMOS, DEMO_IDS, demoRowLabel } from '../app/demos.ts';
+import { DEMO_IDS, demoInfo, demoRowLabel } from '../app/demos.ts';
 import type { DemoId } from '../app/demos.ts';
 import { METER_BARS } from '../app/meter.ts';
 import { clockText, spokenTime } from '../app/time-text.ts';
@@ -56,11 +56,11 @@ export class DemoList {
       this.#meter.append(bar);
     }
     for (const id of DEMO_IDS) {
-      const demo = DEMOS[id];
+      const demo = demoInfo(id);
       const row = this.#createRow(demoRowLabel(id));
       row.append(
         createElement('span', 'name', demo.title),
-        createElement('span', 'length', clockText(demo.lengthSec)),
+        createElement('span', 'length', demo.lengthSec > 0 ? clockText(demo.lengthSec) : ''),
         createElement('small', '', demo.composer),
       );
       row.addEventListener('click', () => {

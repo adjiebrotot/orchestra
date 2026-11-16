@@ -2292,3 +2292,261 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
     inset: calc((100% - var(--target)) / 2);
   }
 }
+
+/* Text for a screen reader only. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The buttons of the camera director and of the MP4 render, at the top middle of the stage. */
+.studio {
+  position: fixed;
+  top: var(--title-top);
+  left: 50%;
+  translate: -50% 0;
+  z-index: 6;
+  display: flex;
+  gap: 8px;
+}
+
+.studio[hidden] {
+  display: none;
+}
+
+.studio-button,
+.director-button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--pill-line);
+  border-radius: 999px;
+  background: var(--bg-overlay);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.studio-button:hover,
+.director-button:hover {
+  border-color: rgba(255, 255, 255, 0.45);
+  background: var(--line);
+}
+
+.studio-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
+.studio-button.is-accent,
+.director-button.is-accent {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.director-button.is-danger {
+  color: var(--danger);
+}
+
+.director-button[hidden],
+.render-link[hidden] {
+  display: none;
+}
+
+/* The panel of the camera director, above the bar. */
+.director,
+.render-panel {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 84px;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: min(48vh, 420px);
+  padding: 10px 12px 12px;
+  background: var(--panel-glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-float);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.director[hidden],
+.render-panel[hidden] {
+  display: none;
+}
+
+.render-panel {
+  height: auto;
+  left: 50%;
+  right: auto;
+  translate: -50% 0;
+  width: min(560px, calc(100vw - 24px));
+  top: 56px;
+  bottom: auto;
+}
+
+.director h3,
+.render-panel h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.director-head,
+.render-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.render-head {
+  justify-content: space-between;
+}
+
+.director-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.director-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.director-count,
+.director-hint,
+.render-hint,
+.render-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.director-close {
+  min-width: 30px;
+  min-height: 30px;
+  font-size: 20px;
+  line-height: 1;
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+.director-close:hover {
+  background: var(--line);
+}
+
+.director select,
+.director input:not([type='checkbox']),
+.render-panel select {
+  min-height: 30px;
+  padding: 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  font-size: 13px;
+}
+
+.director-timeline {
+  flex: none;
+  max-height: 210px;
+  overflow: auto;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-button);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.director-timeline canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.director-cues {
+  min-height: 0;
+  overflow: auto;
+}
+
+.director-cue {
+  display: grid;
+  grid-template-columns: 80px minmax(140px, 1.6fr) minmax(110px, 1fr) minmax(110px, 1fr) auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line-faint);
+}
+
+.director-cue > * {
+  min-width: 0;
+}
+
+.director-cue-head {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.render-row {
+  display: flex;
+  gap: 8px;
+}
+
+.render-row select {
+  flex: 1;
+  min-width: 0;
+}
+
+.render-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--track);
+  overflow: hidden;
+}
+
+.render-fill {
+  height: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+
+.render-link {
+  align-self: flex-start;
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .studio {
+    left: auto;
+    right: 12px;
+    translate: none;
+    gap: 6px;
+  }
+
+  .studio-button {
+    padding: 0 9px;
+    font-size: 12px;
+  }
+
+  .director {
+    bottom: 128px;
+  }
+
+  .director-cue {
+    grid-template-columns: 70px 1fr 1fr;
+  }
+}

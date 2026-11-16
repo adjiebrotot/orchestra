@@ -77,6 +77,8 @@ export class Ui {
   /** The end card at the song end (design 2.8). */
   readonly endCard: EndCard;
   readonly firstScreen: FirstScreen;
+  /** The file button below the demo list. */
+  readonly filePicker: FilePicker;
   readonly bar: Bar;
   readonly message: MessageBox;
   readonly drawer: Drawer;
@@ -153,12 +155,13 @@ export class Ui {
       },
     });
     this.demoList = new DemoList(actions.onSelectDemo, actions.onSelectFile);
+    this.filePicker = new FilePicker(actions.onFile);
     // The file button stands below the demo list, because it also selects a piece (design 2.8).
     this.drawer.addTab(
       'demos',
       'Music',
       this.demoList.element,
-      new FilePicker(actions.onFile).element,
+      this.filePicker.element,
     );
     this.seatList = new SeatList(actions.onSeatFlag, this.tooltips, () => {
       this.drawer.focusTab('seats');

@@ -19,6 +19,12 @@ const SOURCE_HINT_ID = 'file-source';
  */
 export class FilePicker {
   readonly element: HTMLElement;
+  readonly #input: HTMLInputElement;
+
+  /** Opens the file dialog of the browser. */
+  open(): void {
+    this.#input.click();
+  }
 
   /**
    * Creates the button and its hidden file input.
@@ -31,6 +37,7 @@ export class FilePicker {
     input.type = 'file';
     input.accept = MIDI_FILE_TYPES;
     input.hidden = true;
+    this.#input = input;
     input.addEventListener('change', () => {
       const file = input.files?.[0];
       // A second selection of the same file gives a new change event.

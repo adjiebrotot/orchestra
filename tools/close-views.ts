@@ -9,7 +9,7 @@ import type { Browser, Page } from '@playwright/test';
 import { build as viteBuild, preview } from 'vite';
 import type { Plugin } from 'vite';
 
-import { DEFAULT_DEMO, DEMOS, DEMO_IDS } from '../src/app/demos.ts';
+import { DEFAULT_DEMO, DEMO_IDS, demoInfo } from '../src/app/demos.ts';
 import type { DemoId } from '../src/app/demos.ts';
 import { BAR_HIDE_SEC } from '../src/app/bar-rules.ts';
 import { FIRST_PLAY, SAMPLES_READY } from '../src/app/dev-hook.ts';
@@ -3349,7 +3349,7 @@ function pieceName(args: Pick<PlayArgs, 'demo' | 'midi'>): string {
  */
 function pieceLength(demo: DemoId, midi: string | null): number {
   if (midi === null) {
-    return DEMOS[demo].lengthSec;
+    return demoInfo(demo).lengthSec;
   }
   const result = buildScore(new Uint8Array(readFileSync(midi)), 'auto');
   if (!result.ok) {
@@ -3539,7 +3539,7 @@ function playArgs(args: readonly string[]): PlayArgs | null {
   }
 
   const demos = DEMO_IDS.map((name) => ({ name }));
-  const demo = namedItem(line.options.get('--demo')?.[0] ?? DEFAULT_DEMO, demos, 'demo').name;
+  const demo = namedItem(line.options.get('--demo')?.[0] ?? DEFAULT_DEMO ?? '', demos, 'demo').name;
   const midiText = line.options.get('--midi')?.[0] ?? null;
   if (midiText !== null && line.options.has('--demo')) {
     throw new Error('The option --midi gives the piece, so it takes no --demo.');
