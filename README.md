@@ -32,7 +32,10 @@ Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqia
   camera path when it is on), and the page encodes the canvas and the audio with WebCodecs into an
   MP4 file (H.264 or VP9/AV1 video, AAC or Opus audio, whichever the browser can encode). Keep the
   tab visible: the render runs in real time. The file downloads at the end
-  (`src/app/render-video.ts`).
+  (`src/app/render-video.ts`). Before the render starts, the page tests each encoder with a small
+  file, and it uses a software encoder or the next codec when a test fails. The progress bar
+  shows the state of the render: stripes that move while it works, a warning with a time limit
+  while it waits for the playback or for an encoder, and an error with its cause when it fails.
 
 ## Add your songs
 
