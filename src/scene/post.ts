@@ -1,0 +1,1211 @@
+import {
+  AlwaysDepth,
+  BufferGeometry,
+  DepthTexture,
+  Float32BufferAttribute,
+  HalfFloatType,
+  LinearFilter,
+  Matrix4,
+  Mesh,
+  NoBlending,
+  OrthographicCamera,
+  RGBAFormat,
+  RGBFormat,
+  ShaderMaterial,
+  UnsignedByteType,
+  UnsignedInt101111Type,
+  UnsignedIntType,
+  Vector2,
+  Vector3,
+  Vector4,
+  WebGLRenderTarget,
+} from 'three';
+import type { Object3D, PerspectiveCamera, Scene, Texture, WebGLRenderer } from 'three';
+
+import type { Vec3 } from '../models/tuples.ts';
+import type { Steps } from '../score/steps.ts';
+
+import type { DepthDraw } from './beam.ts';
+import { LENS } from './focus.ts';
+import { cropTarget } from './letterbox.ts';
+import type { UvRect } from './letterbox.ts';
+import { gradeLut } from './grade.ts';
+import { compileInto, programsReadySteps, setUniform } from './programs.ts';
+import type { UniformValue } from './programs.ts';
+import type { Focus } from './focus.ts';
+import {
+  BLOOM_DOWN_FRAGMENT,
+  BLOOM_UP_FRAGMENT,
+  BLUR_GATHER_FRAGMENT,
+  BLUR_PREPARE_FRAGMENT,
+  DEPTH_COPY_FRAGMENT,
+  FINAL_FRAGMENT,
+  FULL_SCREEN_VERTEX,
+} from './post-shaders.ts';
+import { TIER_SETTINGS } from './quality.ts';
+import type { QualityTier } from './quality.ts';
+import {
+  SURFACE_BLUR_FRAGMENT,
+  SURFACE_FRAGMENT,
+  SURFACE_ROWS_FRAGMENT,
+  setSurfaceCamera,
+  surfaceUniforms,
+} from './surface.ts';
+
+/** The values of the post effects (design 4.5, post effects). */
+export const POST_LOOK = {
+  /** The bloom starts at this linear brightness, with a soft knee below it. */
+  bloomThreshold: 1.8,
+  bloomKnee: 0.5,
+  /** The part of the bloom that the final pass adds to the scene. */
+  bloomStrength: 0.14,
+  /**
+   * The part of all the light that the bloom keeps below its threshold: a diffusion filter of a
+   * film camera. With the bloom strength, about 3% of
+   * the image comes back as a wide soft glow, as around the lit fur in `orchestra-latest.png`.
+   */
+  diffusion: 0.015,
+  /** The factor of the bloom for each channel: the warm halation of film around a light. */
+  halation: [1.15, 0.95, 0.8],
+  /** The part of the light that the vignette takes from the corners. */
+  vignette: 0.45,
+  /** The size of the film grain, in display values. */
+  grain: 0.035,
+} as const;
+
+/**
+ * The lateral color of the lens (design 4.5, post effects): the red and the blue of the scene move
+ * a little outward and inward from the middle of the frame, with the square of the distance, as
+ * the color fringe at the edges of a real film lens. The middle of the frame stays sharp.
+ */
+export const LENS_FRINGE = {
+  /**
+   * The shift of the red and of the blue at a corner of the frame, as a part of the distance from
+   * the middle of the frame: about 3 px at a corner of a frame of 1440 × 617 CSS pixels.
+   */
+  shift: 0.004,
+} as const;
+
+/**
+ * The vignette of the letterbox of Cinematic mode (design 2.5, 4.5): an oval with the shape of the
+ * frame, so that the top and the bottom edges darken as much as the sides. The round vignette of
+ * `POST_LOOK` comes from the middle of the canvas, and it darkened the middle of the top edge by
+ * only about 12%, where the hall is dark already.
+ */
+export const FRAME_VIGNETTE = {
+  /**
+   * The part of the light that the vignette takes from the corners of the frame. The middle of
+   * each edge loses about 0.69 of it. A close shot multiplies it by the ratio of
+   * `SHOT_LOOK.vignette` to `POST_LOOK.vignette`.
+   */
+  strength: 0.55,
+  /**
+   * The start and the end of the fall, in the distance from the middle of the frame: 1 at the
+   * middle of each edge, and the square root of 2 at the corners.
+   */
+  fall: [0.3, Math.SQRT2],
+} as const;
+
+/**
+ * The room haze of the final pass (design 4.5, light and render): thin warm air that grows with
+ * the distance behind the subject of the camera, so the back rows and the hall get an aerial
+ * depth, and the beam stands in air, as in `orchestra-latest.png`. The stage in front of the
+ * subject gets no haze, so the black point of the stage stays.
+ */
+export const ROOM_HAZE = {
+  /**
+   * The density of the haze, for each stage side of distance. The value is the middle of a lineup
+   * of three densities in the close shots, where the back rows fade a little more into the hall.
+   */
+  density: 0.17,
+  /**
+   * The light of the haze in all directions, in linear values, before the phase. The glow of the
+   * hall above the stage in `orchestra-latest.png` has a luma p90 of 49, and the first light of
+   * `[0.03, 0.0175, 0.00875]` gave 22.
+   */
+  color: [0.045, 0.02625, 0.013125],
+  /**
+   * The g of the Henyey-Greenstein phase: the haze is brighter toward the rim light, which stands
+   * behind the stage and shines toward the camera, as the haze of a real hall scatters most light
+   * forward.
+   */
+  forward: 0.6,
+} as const;
+
+/** The room haze of one frame. */
+export interface HazeFrame {
+  /** The depth of the scene at full size, with no hall and no light effects (`BeamDepth`). */
+  readonly depth: Texture;
+  /** The distance from the camera at which the haze starts, in meters: the subject. */
+  readonly start: number;
+  /** The stage side `S`, in meters. */
+  readonly stageSide: number;
+  /** The position of the light that the haze scatters: the rim light on the stage axis. */
+  readonly light: Vec3;
+  /** The height of the hall floor, in meters. */
+  readonly floorY: number;
+}
+
+/**
+ * The part of the canvas that shows the scene in one frame (design 2.5, 4.5). In Cinematic mode,
+ * each pass writes only the letterbox, and the final pass writes black bars around it.
+ */
+export interface PostView {
+  /** The part of the canvas that shows the scene, or `null` for the full canvas. */
+  readonly rect: UvRect | null;
+  /**
+   * The height of the image of the camera divided by the height of the canvas: 1 in Free mode,
+   * and the height of the letterbox in Cinematic mode. The blur of the depth of field is a part of
+   * the image height.
+   */
+  readonly imageHeight: number;
+  /**
+   * The share of the letterbox, from 0 (Free mode) to 1 (Cinematic mode). It mixes the round
+   * vignette of the canvas with the vignette of the frame ({@link FRAME_VIGNETTE}).
+   */
+  readonly cinema: number;
+}
+
+/** The depth pass of the beam of one frame (`BeamDepth`, design 4.5). */
+export interface SceneDepth {
+  /** The depth of the scene at full size, with no hall and no light effects. */
+  readonly texture: Texture;
+  /**
+   * The objects of the scene that the depth holds and that are not in the hall: the stage, the
+   * props, and the players. The depth of field copies their depth from the texture and draws only
+   * the hall.
+   */
+  readonly parts: readonly Object3D[];
+}
+
+/** The values of the final pass that change with each frame. */
+interface PostFrame {
+  /** The room haze, or `null` for no haze. */
+  readonly haze: HazeFrame | null;
+  /**
+   * The depth pass of the beam, for the surface pass (`scene/surface.ts`) and the depth of field,
+   * or `null` with no depth pass.
+   */
+  readonly depth: SceneDepth | null;
+  /** The part of the light that the vignette takes from the corners. */
+  readonly vignette: number;
+  readonly view: PostView;
+}
+
+/**
+ * Makes the uniforms of the color grade, `GRADE_FUNCTION` of `post-shaders.ts`: the shared lookup
+ * table of `scene/grade.ts`.
+ *
+ * @returns The uniforms, new for each call.
+ */
+export function gradeUniforms() {
+  return { uGradeLut: { value: gradeLut() } };
+}
+
+/** The number of samples of the multisample target of the scene (design 2.6). */
+const MSAA_SAMPLES = 4;
+
+/** The number of changes of the film grain each second, as film at 24 frames each second. */
+export const GRAIN_RATE = 24;
+
+/**
+ * Gives the seed of the film grain at a time (design 4.5). The seed changes {@link GRAIN_RATE}
+ * times each second, at each frame rate of the display.
+ *
+ * @param timeSec The wall time of the frame, in seconds. A fixed time keeps the grain still.
+ * @returns The seed, from 0 to 1024.
+ */
+export function grainSeed(timeSec: number): number {
+  return (Math.floor(timeSec * GRAIN_RATE) * 17.31) % 1024;
+}
+
+/** The clear color behind the hall, in sRGB: the dark of the hall far from the light. */
+export const CLEAR_COLOR = '#0b0807';
+
+/**
+ * The color format of the targets of the scene and of the bloom (design 2.6). `packed` holds three
+ * small floats in 32 bits (R11F_G11F_B10F), and needs `EXT_color_buffer_float`. `half` holds four
+ * half floats in 64 bits, and needs `EXT_color_buffer_half_float`. With `none`, the scene renders
+ * to the canvas with no post effects. The packed format halved the time of the scene pass on the
+ * development Mac: 1.9 ms against 3.4 ms at 2880 × 1800 with MSAA.
+ */
+export type TargetFormat = 'packed' | 'half' | 'none';
+
+/**
+ * Selects the color format of the targets from the extensions of the renderer.
+ *
+ * @param renderer The renderer.
+ * @returns The best format that the GPU can render to.
+ */
+export function targetFormatOf(renderer: WebGLRenderer): TargetFormat {
+  if (renderer.extensions.has('EXT_color_buffer_float')) {
+    return 'packed';
+  }
+  if (renderer.extensions.has('EXT_color_buffer_half_float')) {
+    return 'half';
+  }
+  return 'none';
+}
+
+/**
+ * Calculates the sizes of the bloom levels: half the size of the canvas, then half of each level,
+ * with at least one pixel.
+ *
+ * @param width The width of the drawing buffer, in pixels.
+ * @param height The height of the drawing buffer, in pixels.
+ * @param levels The number of levels.
+ * @returns The width and the height of each level.
+ */
+export function bloomSizes(width: number, height: number, levels: number): [number, number][] {
+  const sizes: [number, number][] = [];
+  let w = width;
+  let h = height;
+  for (let i = 0; i < levels; i++) {
+    w = Math.max(1, Math.floor(w / 2));
+    h = Math.max(1, Math.floor(h / 2));
+    sizes.push([w, h]);
+  }
+  return sizes;
+}
+
+/**
+ * Creates a target with linear values in floats and a linear filter.
+ *
+ * @param width The width, in pixels.
+ * @param height The height, in pixels.
+ * @param format The color format. `packed` has no alpha channel.
+ * @param samples The samples of the multisampling, or 0.
+ * @returns The target.
+ */
+function floatTarget(
+  width: number,
+  height: number,
+  format: TargetFormat,
+  samples = 0,
+): WebGLRenderTarget {
+  const packed = format === 'packed';
+  return new WebGLRenderTarget(width, height, {
+    type: packed ? UnsignedInt101111Type : HalfFloatType,
+    format: packed ? RGBFormat : RGBAFormat,
+    minFilter: LinearFilter,
+    magFilter: LinearFilter,
+    samples,
+    depthBuffer: samples > 0,
+  });
+}
+
+/** The uniforms of a pass by name. */
+type PassUniforms = Record<string, { value: UniformValue }>;
+
+/**
+ * Creates the material of a full-screen pass.
+ *
+ * @param fragmentShader The fragment shader.
+ * @param uniforms The uniforms.
+ * @param defines The defines of the shader.
+ * @returns The material. It reads no depth and writes no depth.
+ */
+function passMaterial(
+  fragmentShader: string,
+  uniforms: PassUniforms,
+  defines: Record<string, string | number> = {},
+): ShaderMaterial {
+  return new ShaderMaterial({
+    vertexShader: FULL_SCREEN_VERTEX,
+    fragmentShader,
+    uniforms,
+    defines,
+    blending: NoBlending,
+    depthTest: false,
+    depthWrite: false,
+    // The passes into a target take no tone mapping. The final pass to the canvas takes it.
+    toneMapped: false,
+  });
+}
+
+/**
+ * Gives the uniforms of the focus (scene/focus.ts) of a pass that reads the depth.
+ *
+ * @returns New uniforms.
+ */
+function focusUniforms() {
+  return {
+    uDepth: { value: null },
+    uNear: { value: 0.1 },
+    uFar: { value: 100 },
+    uFocus: { value: 10 },
+    uBlurScale: { value: 0 },
+    uMaxBlur: { value: LENS.maxBlur },
+    uMaxNearBlur: { value: LENS.maxNearBlur },
+    uPixelsPerBlur: { value: 1 },
+  };
+}
+
+/**
+ * Sets the clamp of the samples of a pass to the part of its source that the frame wrote: the
+ * middles of the first and the last written pixels (`SOURCE_CLAMP` of `post-shaders.ts`). A full
+ * source gets the clamp from 0 to 1, which changes no sample.
+ *
+ * @param material The material of the pass.
+ * @param name The name of the uniform of the clamp.
+ * @param source The source of the pass.
+ */
+function setClamp(material: ShaderMaterial, name: string, source: WebGLRenderTarget): void {
+  const clamp = material.uniforms[name]?.value;
+  if (!(clamp instanceof Vector4)) {
+    return;
+  }
+  if (!source.scissorTest) {
+    clamp.set(0, 0, 1, 1);
+    return;
+  }
+  const { x, y, z, w } = source.scissor;
+  clamp.set(
+    (x + 0.5) / source.width,
+    (y + 0.5) / source.height,
+    (x + z - 0.5) / source.width,
+    (y + w - 0.5) / source.height,
+  );
+}
+
+/**
+ * Sets the size of one texel of the source of a pass.
+ *
+ * @param material The material of the pass. It has the uniform `uTexel`.
+ * @param source The source of the pass.
+ */
+function setTexel(material: ShaderMaterial, source: WebGLRenderTarget): void {
+  const texel = material.uniforms['uTexel']?.value;
+  if (texel instanceof Vector2) {
+    texel.set(1 / source.width, 1 / source.height);
+  }
+}
+
+/** The targets of one size of the canvas and one tier. */
+interface Targets {
+  /** The scene, with MSAA. */
+  readonly scene: WebGLRenderTarget;
+  /** The downsample levels of the bloom, from half size down. */
+  readonly bloomDown: readonly WebGLRenderTarget[];
+  /** The upsample levels of the bloom, one for each level except the smallest. */
+  readonly bloomUp: readonly WebGLRenderTarget[];
+  /** The depth of the scene at half size, for the depth of field. */
+  readonly depth: WebGLRenderTarget | null;
+  /** The color and the blur of each pixel at half size. */
+  readonly blurPrepare: WebGLRenderTarget | null;
+  /** The soft image at half size. */
+  readonly blurGather: WebGLRenderTarget | null;
+  /**
+   * The contact shade and the floor gloss at half or quarter size (`scene/surface.ts`), before the
+   * blur.
+   */
+  readonly surface: WebGLRenderTarget | null;
+  /** The floor gloss after the first half of its blur, along the rows, or `null` with no gloss. */
+  readonly surfaceRows: WebGLRenderTarget | null;
+  /** The contact shade and the floor gloss at half or quarter size, after the blur. */
+  readonly surfaceBlur: WebGLRenderTarget | null;
+  /** Each target above, for the crop of each frame and the disposal. */
+  readonly all: readonly WebGLRenderTarget[];
+}
+
+/** The inputs of the depth pass of the depth of field ({@link PostPipeline}). */
+interface DepthSources {
+  /** The light effects that write no depth. The depth pass hides them. */
+  readonly effects: readonly Object3D[];
+  /** The depth pass of the beam of the frame, or `null` with none. */
+  readonly depth: SceneDepth | null;
+}
+
+/** The pass materials whose programs change with the quality tier. */
+interface TierPasses {
+  /** The gather pass of the depth of field. Its sample count follows the tier. */
+  readonly blurGather: ShaderMaterial;
+  /** The pass of the contact shade and the floor gloss. */
+  readonly surface: ShaderMaterial;
+  /** The blur pass of the contact shade and the floor gloss. */
+  readonly surfaceBlur: ShaderMaterial;
+  /** The final pass to the canvas. Its effects follow the tier. */
+  readonly final: ShaderMaterial;
+}
+
+/** A pass material and its target for a compile, or `null` for the canvas. */
+type PassCompile = readonly [ShaderMaterial, WebGLRenderTarget | null];
+
+/** A change of the quality tier whose pass programs still compile. */
+interface TierChange {
+  /** The new tier. */
+  readonly tier: QualityTier;
+  /** The pass materials of the new tier. No frame uses them before the steps end. */
+  readonly passes: TierPasses;
+  /** The steps that compile the programs of the passes and wait until the GPU links them. */
+  readonly steps: Steps<undefined>;
+}
+
+/**
+ * The post effects of the stage (design 2.6, 4.5). The scene renders with MSAA into a target of
+ * floats, then the bloom, the depth of field, and one final pass make the image of the canvas.
+ *
+ * ```text
+ * scene ──> [scene target, MSAA] ──┬──> bloom down 1/2 ... ──> bloom up ──────────┐
+ *                                  └──> blur prepare 1/2 ──> blur gather 1/2 ──┐  │
+ * beam depth + hall ──> [depth 1/2] ──────────^ (only with a shallow focus)    v  v
+ *           [scene target] ───────────────────────────────────────────────> final pass ──> canvas
+ * ```
+ */
+export class PostPipeline {
+  readonly #renderer: WebGLRenderer;
+  readonly #format: TargetFormat;
+  #tier: QualityTier;
+  readonly #camera = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  readonly #quad: Mesh;
+  #targets: Targets | null = null;
+  readonly #bloomPrefilter: ShaderMaterial;
+  readonly #bloomDown: ShaderMaterial;
+  readonly #bloomUp: ShaderMaterial;
+  readonly #blurPrepare: ShaderMaterial;
+  /** The copy of the depth of the beam pass into the depth of the depth of field. */
+  readonly #depthCopy: ShaderMaterial;
+  #blurGather: ShaderMaterial;
+  #surface: ShaderMaterial;
+  readonly #surfaceRows: ShaderMaterial;
+  #surfaceBlur: ShaderMaterial;
+  #final: ShaderMaterial;
+  /** The change of the tier that waits for its programs, or `null` (design 2.6). */
+  #change: TierChange | null = null;
+  /**
+   * The draw of the depth pass of the depth of field with the depth materials of the meshes. The
+   * resolve of the depth of the multisample target cost 2.1 ms on the development Mac, and a
+   * separate pass at half size costs less.
+   */
+  readonly #depth: DepthDraw;
+  /**
+   * The visibility of each hidden object before the depth pass of the depth of field, so that the
+   * pass gives each object its own visibility back. Each frame writes it first.
+   */
+  readonly #depthShown: boolean[] = [];
+  #width = 0;
+  #height = 0;
+
+  /**
+   * Creates the passes. The targets follow {@link PostPipeline.setSize}.
+   *
+   * @param renderer The renderer of the canvas.
+   * @param format The color format of the targets. It is not `none`.
+   * @param tier The quality tier. It sets the bloom levels and the samples of the blur.
+   * @param depth Draws the depth pass of the depth of field with a depth material that writes no
+   *   color in place of the material of each mesh (`VariantMaterials.renderDepth()`).
+   */
+  constructor(renderer: WebGLRenderer, format: TargetFormat, tier: QualityTier, depth: DepthDraw) {
+    this.#renderer = renderer;
+    this.#format = format;
+    this.#tier = tier;
+    this.#depth = depth;
+    const geometry = new BufferGeometry();
+    // One triangle that covers the view.
+    geometry.setAttribute(
+      'position',
+      new Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3),
+    );
+    geometry.setAttribute('uv', new Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+    this.#quad = new Mesh(geometry);
+    this.#quad.frustumCulled = false;
+
+    const down = () => ({
+      uSource: { value: null },
+      uTexel: { value: new Vector2() },
+      uThreshold: { value: POST_LOOK.bloomThreshold },
+      uKnee: { value: POST_LOOK.bloomKnee },
+      uDiffusion: { value: POST_LOOK.diffusion },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+    });
+    this.#bloomPrefilter = passMaterial(BLOOM_DOWN_FRAGMENT, down(), { PREFILTER: 1 });
+    this.#bloomDown = passMaterial(BLOOM_DOWN_FRAGMENT, down());
+    this.#bloomUp = passMaterial(BLOOM_UP_FRAGMENT, {
+      uSource: { value: null },
+      uBase: { value: null },
+      uTexel: { value: new Vector2() },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+    });
+    this.#blurPrepare = passMaterial(BLUR_PREPARE_FRAGMENT, {
+      uColor: { value: null },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+      ...focusUniforms(),
+    });
+    this.#depthCopy = depthCopyMaterial();
+    this.#surfaceRows = passMaterial(SURFACE_ROWS_FRAGMENT, {
+      uSource: { value: null },
+      uTexel: { value: new Vector2() },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+    });
+    const passes = createTierPasses(tier);
+    this.#blurGather = passes.blurGather;
+    this.#surface = passes.surface;
+    this.#surfaceBlur = passes.surfaceBlur;
+    this.#final = passes.final;
+  }
+
+  /**
+   * Sets the size of the targets to the drawing buffer of the canvas.
+   *
+   * @param width The width of the drawing buffer, in pixels.
+   * @param height The height of the drawing buffer, in pixels.
+   */
+  setSize(width: number, height: number): void {
+    if (width === this.#width && height === this.#height && this.#targets) {
+      return;
+    }
+    this.#width = width;
+    this.#height = height;
+    this.#disposeTargets();
+    this.#targets = this.#createTargets();
+  }
+
+  /**
+   * Changes the quality tier: the bloom levels and the samples of the blur. The new passes compile
+   * in the next frames, one step in each frame, and the frames use the old tier until the GPU
+   * links their programs (design 2.6). No frame thus waits for a link on the main thread.
+   *
+   * @param tier The new tier.
+   * @param target A render target for the compile of the passes into a target.
+   */
+  setTier(tier: QualityTier, target: WebGLRenderTarget): void {
+    if (tier === (this.#change?.tier ?? this.#tier)) {
+      return;
+    }
+    this.#dropChange();
+    if (tier === this.#tier) {
+      return;
+    }
+    const passes = createTierPasses(tier);
+    const steps = this.#compilePassSteps([
+      [passes.blurGather, target],
+      [passes.surface, target],
+      [passes.surfaceBlur, target],
+      [passes.final, null],
+    ]);
+    this.#change = { tier, passes, steps };
+  }
+
+  /**
+   * Runs one step of the change of the tier, and uses the new passes and their targets after the
+   * last step.
+   */
+  #followChange(): void {
+    const change = this.#change;
+    if (!change || !change.steps.next().done) {
+      return;
+    }
+    this.#change = null;
+    this.#tier = change.tier;
+    this.#blurGather.dispose();
+    this.#surface.dispose();
+    this.#surfaceBlur.dispose();
+    this.#final.dispose();
+    this.#blurGather = change.passes.blurGather;
+    this.#surface = change.passes.surface;
+    this.#surfaceBlur = change.passes.surfaceBlur;
+    this.#final = change.passes.final;
+    this.#disposeTargets();
+    this.#targets = this.#createTargets();
+  }
+
+  /** Stops the change of the tier that waits for its programs, and frees its passes. */
+  #dropChange(): void {
+    const change = this.#change;
+    if (!change) {
+      return;
+    }
+    this.#change = null;
+    change.steps.return(undefined);
+    for (const material of Object.values(change.passes)) {
+      material.dispose();
+    }
+  }
+
+  /**
+   * Renders a frame of a scene with the post effects to the canvas.
+   *
+   * @param scene The scene.
+   * @param camera The camera.
+   * @param focus The focus of the frame (scene/focus.ts).
+   * @param effects The light effects that write no depth, such as the visible beam. The depth pass
+   *   hides them.
+   * @param timeSec The time of the effects, in seconds, for the film grain ({@link grainSeed}).
+   * @param frame The room haze, the vignette, and the view of the frame.
+   */
+  render(
+    scene: Scene,
+    camera: PerspectiveCamera,
+    focus: Focus,
+    effects: readonly Object3D[],
+    timeSec: number,
+    frame: PostFrame,
+  ): void {
+    this.#followChange();
+    const targets = this.#targets;
+    if (!targets) {
+      return;
+    }
+    const { view } = frame;
+    this.#crop(targets, view.rect);
+    const renderer = this.#renderer;
+    renderer.setRenderTarget(targets.scene);
+    renderer.render(scene, camera);
+
+    const depth = frame.depth;
+    const surface = depth ? this.#renderSurface(targets, camera, depth.texture) : null;
+    const bloom = this.#renderBloom(targets);
+    const blur = focus.active
+      ? this.#renderBlur(targets, scene, camera, focus, { effects, depth }, view.imageHeight)
+      : null;
+
+    const final = this.#final;
+    setUniform(final.uniforms, 'uScene', targets.scene.texture);
+    setUniform(final.uniforms, 'uBloom', bloom?.texture ?? null);
+    setUniform(final.uniforms, 'uBlur', blur?.texture ?? null);
+    setUniform(final.uniforms, 'uBlurOn', blur ? 1 : 0);
+    setUniform(final.uniforms, 'uSurface', surface?.texture ?? null);
+    setUniform(final.uniforms, 'uSurfaceOn', surface ? 1 : 0);
+    // The bloom and the blur have the same half size, so one clamp serves both. The surface pass
+    // can have a quarter size, so it has its own clamp.
+    const half = bloom ?? blur;
+    if (half) {
+      setClamp(final, 'uHalfClamp', half);
+    }
+    if (surface) {
+      setClamp(final, 'uSurfaceClamp', surface);
+    }
+    const rect = view.rect;
+    const frameRect = final.uniforms['uFrame']?.value;
+    if (frameRect instanceof Vector4) {
+      frameRect.set(rect?.left ?? 0, rect?.bottom ?? 0, rect?.right ?? 1, rect?.top ?? 1);
+    }
+    this.#setFocus(final, camera, focus, (this.#height / 2) * view.imageHeight);
+    setUniform(final.uniforms, 'uAspect', this.#width / this.#height);
+    this.#setHaze(final, camera, frame.haze);
+    setUniform(final.uniforms, 'uVignette', frame.vignette);
+    setUniform(final.uniforms, 'uCinema', view.cinema);
+    setUniform(final.uniforms, 'uSeed', grainSeed(timeSec));
+    setUniform(final.uniforms, 'uFringe', LENS_FRINGE.shift);
+    this.#pass(final, null);
+  }
+
+  /**
+   * Limits each target of the frame to the part of the view (design 2.5): the passes write only the
+   * pixels of the part, and no pass renders the scene under the bars.
+   *
+   * @param targets The targets.
+   * @param rect The part of the canvas that shows the scene, or `null` for the full canvas.
+   */
+  #crop(targets: Targets, rect: UvRect | null): void {
+    for (const target of targets.all) {
+      cropTarget(target, rect);
+    }
+  }
+
+  /**
+   * Compiles the programs of the passes in steps (design 7.2), so that no frame waits for the GPU
+   * to link them. Each pass but the final pass renders into a target, and three.js gives a pass
+   * into a target other programs than a pass to the canvas.
+   *
+   * @param target A render target for the compile of the passes into a target.
+   * @returns The steps.
+   */
+  *compileSteps(target: WebGLRenderTarget): Steps<undefined> {
+    yield* this.#compileEachSteps([
+      [this.#bloomPrefilter, target],
+      [this.#bloomDown, target],
+      [this.#bloomUp, target],
+      [this.#depthCopy, target],
+      [this.#blurPrepare, target],
+      [this.#blurGather, target],
+      [this.#surface, target],
+      [this.#surfaceRows, target],
+      [this.#surfaceBlur, target],
+      [this.#final, null],
+    ]);
+    return undefined;
+  }
+
+  /**
+   * Compiles the programs of the passes of a change of the tier, one pass in each step, and then
+   * waits until the GPU links them.
+   *
+   * @param passes Each material with its target, or `null` for the canvas.
+   * @returns The steps.
+   */
+  *#compilePassSteps(passes: readonly PassCompile[]): Steps<undefined> {
+    yield* this.#compileEachSteps(passes);
+    yield* programsReadySteps(this.#renderer);
+    return undefined;
+  }
+
+  /**
+   * Compiles the program of each pass, one pass in each step.
+   *
+   * @param passes Each material with its target, or `null` for the canvas.
+   * @returns The steps.
+   */
+  *#compileEachSteps(passes: readonly PassCompile[]): Steps<undefined> {
+    const renderer = this.#renderer;
+    for (const [material, into] of passes) {
+      this.#quad.material = material;
+      compileInto(renderer, into, () => {
+        renderer.compile(this.#quad, this.#camera);
+      });
+      yield;
+    }
+    return undefined;
+  }
+
+  #createTargets(): Targets {
+    const width = this.#width;
+    const height = this.#height;
+    const format = this.#format;
+    const settings = TIER_SETTINGS[this.#tier];
+    const sizes = bloomSizes(width, height, settings.bloomLevels);
+    const blur = settings.blurSamples > 0;
+    const [halfWidth, halfHeight] = bloomSizes(width, height, 1)[0] ?? [1, 1];
+    let depth: WebGLRenderTarget | null = null;
+    if (blur) {
+      depth = new WebGLRenderTarget(halfWidth, halfHeight, { type: UnsignedByteType });
+      depth.depthTexture = new DepthTexture(halfWidth, halfHeight, UnsignedIntType);
+    }
+    const scene = floatTarget(width, height, format, MSAA_SAMPLES);
+    // No pass reads the depth of the scene target, so the resolve of its samples copies only the
+    // color. The depth of field and the haze read the depth pass of the beam.
+    scene.resolveDepthBuffer = false;
+    const bloomDown = sizes.map(([w, h]) => floatTarget(w, h, format));
+    const bloomUp = sizes.slice(0, -1).map(([w, h]) => floatTarget(w, h, format));
+    // The blur of each pixel needs the alpha channel.
+    const blurPrepare = blur ? floatTarget(halfWidth, halfHeight, 'half') : null;
+    const blurGather = blur ? floatTarget(halfWidth, halfHeight, format) : null;
+    // The contact shade is in the alpha channel. The pass has half or a quarter of the size.
+    const shade = settings.contactSamples > 0 || settings.floorGloss;
+    const level = settings.surfaceLevel;
+    const [surfaceWidth, surfaceHeight] = bloomSizes(width, height, level)[level - 1] ?? [1, 1];
+    const surface = shade ? floatTarget(surfaceWidth, surfaceHeight, 'half') : null;
+    const surfaceRows = settings.floorGloss
+      ? floatTarget(surfaceWidth, surfaceHeight, 'half')
+      : null;
+    const surfaceBlur = shade ? floatTarget(surfaceWidth, surfaceHeight, 'half') : null;
+    const all = [
+      scene,
+      ...bloomDown,
+      ...bloomUp,
+      depth,
+      blurPrepare,
+      blurGather,
+      surface,
+      surfaceRows,
+      surfaceBlur,
+    ].filter((target) => target !== null);
+    return {
+      scene,
+      bloomDown,
+      bloomUp,
+      depth,
+      blurPrepare,
+      blurGather,
+      surface,
+      surfaceRows,
+      surfaceBlur,
+      all,
+    };
+  }
+
+  /**
+   * Renders the surface pass at half or quarter size and its blur (`scene/surface.ts`).
+   *
+   * @param targets The targets.
+   * @param camera The camera of the frame.
+   * @param depth The depth of the scene at full size.
+   * @returns The target of the blurred surface pass, or `null` when the tier has none.
+   */
+  #renderSurface(
+    targets: Targets,
+    camera: PerspectiveCamera,
+    depth: Texture,
+  ): WebGLRenderTarget | null {
+    const { surface, surfaceRows, surfaceBlur } = targets;
+    if (!surface || !surfaceBlur) {
+      return null;
+    }
+    const pass = this.#surface;
+    setUniform(pass.uniforms, 'uDepth', depth);
+    setUniform(pass.uniforms, 'uScene', targets.scene.texture);
+    const texel = pass.uniforms['uDepthTexel']?.value;
+    if (texel instanceof Vector2) {
+      texel.set(1 / this.#width, 1 / this.#height);
+    }
+    setClamp(pass, 'uClamp', targets.scene);
+    setSurfaceCamera(pass, camera);
+    this.#pass(pass, surface);
+    if (surfaceRows) {
+      const rows = this.#surfaceRows;
+      setUniform(rows.uniforms, 'uSource', surface.texture);
+      setTexel(rows, surface);
+      setClamp(rows, 'uClamp', surface);
+      this.#pass(rows, surfaceRows);
+    }
+    const blur = this.#surfaceBlur;
+    setUniform(blur.uniforms, 'uSource', surface.texture);
+    setUniform(blur.uniforms, 'uRows', surfaceRows?.texture ?? null);
+    setTexel(blur, surface);
+    setClamp(blur, 'uClamp', surface);
+    this.#pass(blur, surfaceBlur);
+    return surfaceBlur;
+  }
+
+  #renderBloom(targets: Targets): WebGLRenderTarget | null {
+    const levels = targets.bloomDown;
+    let source = targets.scene;
+    for (const [i, level] of levels.entries()) {
+      const material = i === 0 ? this.#bloomPrefilter : this.#bloomDown;
+      setUniform(material.uniforms, 'uSource', source.texture);
+      setTexel(material, source);
+      setClamp(material, 'uClamp', source);
+      this.#pass(material, level);
+      source = level;
+    }
+    // Each level of the upsample has its own target, so that no pass writes a target that the
+    // frame already wrote. The second write of a target cost 0.4 ms for each level on the
+    // development Mac.
+    for (let i = levels.length - 2; i >= 0; i--) {
+      const base = levels[i];
+      const to = targets.bloomUp[i];
+      if (base && to) {
+        setUniform(this.#bloomUp.uniforms, 'uSource', source.texture);
+        setUniform(this.#bloomUp.uniforms, 'uBase', base.texture);
+        setTexel(this.#bloomUp, source);
+        setClamp(this.#bloomUp, 'uClamp', source);
+        this.#pass(this.#bloomUp, to);
+        source = to;
+      }
+    }
+    return levels.length > 0 ? source : null;
+  }
+
+  /**
+   * Renders the depth of field at half size: the depth, the color and the blur of each pixel, and
+   * the soft image.
+   *
+   * @param targets The targets.
+   * @param scene The scene.
+   * @param camera The camera.
+   * @param focus The focus of the frame.
+   * @param sources The light effects and the depth pass of the beam of {@link #renderDepth}.
+   * @param imageHeight The height of the image of the camera divided by the height of the canvas.
+   * @returns The target of the soft image, or `null` when the tier has no depth of field.
+   */
+  #renderBlur(
+    targets: Targets,
+    scene: Scene,
+    camera: PerspectiveCamera,
+    focus: Focus,
+    sources: DepthSources,
+    imageHeight: number,
+  ): WebGLRenderTarget | null {
+    const { depth, blurPrepare, blurGather } = targets;
+    if (!depth || !blurPrepare || !blurGather) {
+      return null;
+    }
+    this.#renderDepth(depth, scene, camera, sources);
+    const pixelsPerBlur = (blurPrepare.height / 2) * imageHeight;
+    const prepare = this.#blurPrepare;
+    setUniform(prepare.uniforms, 'uColor', targets.scene.texture);
+    setClamp(prepare, 'uClamp', targets.scene);
+    this.#setFocus(prepare, camera, focus, pixelsPerBlur);
+    this.#pass(prepare, blurPrepare);
+    const gather = this.#blurGather;
+    setUniform(gather.uniforms, 'uSource', blurPrepare.texture);
+    setTexel(gather, blurPrepare);
+    setClamp(gather, 'uClamp', blurPrepare);
+    setUniform(gather.uniforms, 'uPixelsPerBlur', pixelsPerBlur);
+    this.#pass(gather, blurGather);
+    return blurGather;
+  }
+
+  /**
+   * Renders the depth of the scene at half size for the depth of field, with the hall and with no
+   * light effects. With the depth pass of the beam, a pass copies its depth, and a draw of the
+   * scene adds only the hall: each player and each prop then draws its depth one time in each
+   * frame. With no depth pass of the beam, a draw of the scene gives all of the depth.
+   *
+   * @param depth The target of the depth at half size.
+   * @param scene The scene.
+   * @param camera The camera.
+   * @param sources The light effects and the depth pass of the beam.
+   */
+  #renderDepth(
+    depth: WebGLRenderTarget,
+    scene: Scene,
+    camera: PerspectiveCamera,
+    sources: DepthSources,
+  ): void {
+    const renderer = this.#renderer;
+    const beam = sources.depth;
+    // The shadow map of the frame is ready, so the depth pass needs no new one.
+    const shadows = renderer.shadowMap.autoUpdate;
+    renderer.shadowMap.autoUpdate = false;
+    const hidden = beam ? [...sources.effects, ...beam.parts] : sources.effects;
+    if (beam) {
+      const copy = this.#depthCopy;
+      setUniform(copy.uniforms, 'uSceneDepth', beam.texture);
+      const scale = copy.uniforms['uScale']?.value;
+      if (scale instanceof Vector2) {
+        scale.set(this.#width / depth.width, this.#height / depth.height);
+      }
+      // The copy writes the depth of each pixel of the crop, so the draw of the hall clears
+      // nothing.
+      this.#pass(copy, depth);
+    }
+    const shown = this.#depthShown;
+    shown.length = 0;
+    for (const object of hidden) {
+      shown.push(object.visible);
+      object.visible = false;
+    }
+    renderer.setRenderTarget(depth);
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = !beam;
+    this.#depth.renderDepth(() => {
+      renderer.render(scene, camera);
+    });
+    renderer.autoClear = autoClear;
+    for (const [k, object] of hidden.entries()) {
+      object.visible = shown[k] ?? true;
+    }
+    renderer.shadowMap.autoUpdate = shadows;
+  }
+
+  /**
+   * Sets the uniforms of the room haze of a frame ({@link ROOM_HAZE}).
+   *
+   * @param material The final pass.
+   * @param camera The camera of the frame.
+   * @param haze The haze of the frame, or `null` for no haze.
+   */
+  #setHaze(material: ShaderMaterial, camera: PerspectiveCamera, haze: HazeFrame | null): void {
+    setUniform(material.uniforms, 'uHazeOn', haze ? 1 : 0);
+    setUniform(material.uniforms, 'uSceneDepth', haze?.depth ?? null);
+    if (!haze) {
+      return;
+    }
+    const uniforms = material.uniforms;
+    const inverse = uniforms['uHazeInverse']?.value;
+    if (inverse instanceof Matrix4) {
+      inverse.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
+    }
+    const from = uniforms['uHazeCamera']?.value;
+    if (from instanceof Vector3) {
+      from.copy(camera.position);
+    }
+    const light = uniforms['uHazeLight']?.value;
+    if (light instanceof Vector3) {
+      light
+        .set(...haze.light)
+        .sub(camera.position)
+        .normalize();
+    }
+    const values = uniforms['uHaze']?.value;
+    if (values instanceof Vector4) {
+      values.set(haze.start, ROOM_HAZE.density / haze.stageSide, ROOM_HAZE.forward, haze.floorY);
+    }
+  }
+
+  #setFocus(
+    material: ShaderMaterial,
+    camera: PerspectiveCamera,
+    focus: Focus,
+    pixelsPerBlur: number,
+  ): void {
+    setUniform(material.uniforms, 'uDepth', this.#targets?.depth?.depthTexture ?? null);
+    setUniform(material.uniforms, 'uNear', camera.near);
+    setUniform(material.uniforms, 'uFar', camera.far);
+    setUniform(material.uniforms, 'uFocus', focus.distance);
+    setUniform(material.uniforms, 'uBlurScale', focus.scale);
+    setUniform(material.uniforms, 'uPixelsPerBlur', pixelsPerBlur);
+  }
+
+  #pass(material: ShaderMaterial, target: WebGLRenderTarget | null): void {
+    this.#quad.material = material;
+    const renderer = this.#renderer;
+    renderer.setRenderTarget(target);
+    // Each pass writes each pixel of its target, so it clears nothing.
+    const autoClear = renderer.autoClear;
+    renderer.autoClear = false;
+    renderer.render(this.#quad, this.#camera);
+    renderer.autoClear = autoClear;
+  }
+
+  #disposeTargets(): void {
+    const targets = this.#targets;
+    if (!targets) {
+      return;
+    }
+    targets.depth?.depthTexture?.dispose();
+    for (const target of targets.all) {
+      target.dispose();
+    }
+    this.#targets = null;
+  }
+}
+
+/**
+ * Creates the copy of the depth of the beam pass into the depth of the depth of field
+ * (`DEPTH_COPY_FRAGMENT`). It writes the depth of each pixel and no color.
+ *
+ * @returns The material.
+ */
+function depthCopyMaterial(): ShaderMaterial {
+  const material = passMaterial(DEPTH_COPY_FRAGMENT, {
+    uSceneDepth: { value: null },
+    uScale: { value: new Vector2(2, 2) },
+  });
+  // A depth test that always passes, because WebGL writes no depth with the test off.
+  material.depthTest = true;
+  material.depthFunc = AlwaysDepth;
+  material.depthWrite = true;
+  material.colorWrite = false;
+  return material;
+}
+
+/**
+ * Creates the gather pass of the depth of field of a tier.
+ *
+ * @param tier The quality tier.
+ * @returns The material.
+ */
+function createBlurGather(tier: QualityTier): ShaderMaterial {
+  return passMaterial(
+    BLUR_GATHER_FRAGMENT,
+    {
+      uSource: { value: null },
+      uTexel: { value: new Vector2() },
+      uPixelsPerBlur: { value: 1 },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+    },
+    { SAMPLES: Math.max(1, TIER_SETTINGS[tier].blurSamples) },
+  );
+}
+
+/**
+ * Creates the pass of the contact shade and the floor gloss of a tier.
+ *
+ * @param tier The quality tier.
+ * @returns The material.
+ */
+function createSurface(tier: QualityTier): ShaderMaterial {
+  const settings = TIER_SETTINGS[tier];
+  const defines: Record<string, number> = {};
+  if (settings.contactSamples > 0) {
+    defines['CONTACT_SAMPLES'] = settings.contactSamples;
+  }
+  if (settings.floorGloss) {
+    defines['FLOOR_GLOSS'] = 1;
+  }
+  return passMaterial(SURFACE_FRAGMENT, surfaceUniforms(), defines);
+}
+
+/**
+ * Creates the blur pass of the contact shade and the floor gloss of a tier.
+ *
+ * @param tier The quality tier.
+ * @returns The material.
+ */
+function createSurfaceBlur(tier: QualityTier): ShaderMaterial {
+  const defines: Record<string, number> = {};
+  if (TIER_SETTINGS[tier].floorGloss) {
+    defines['FLOOR_GLOSS'] = 1;
+  }
+  return passMaterial(
+    SURFACE_BLUR_FRAGMENT,
+    {
+      uSource: { value: null },
+      uRows: { value: null },
+      uTexel: { value: new Vector2() },
+      uClamp: { value: new Vector4(0, 0, 1, 1) },
+    },
+    defines,
+  );
+}
+
+/**
+ * Creates the final pass of a tier, which draws to the canvas.
+ *
+ * @param tier The quality tier.
+ * @returns The material.
+ */
+function createFinal(tier: QualityTier): ShaderMaterial {
+  const settings = TIER_SETTINGS[tier];
+  const defines: Record<string, number> = {};
+  if (settings.bloomLevels > 0) {
+    defines['BLOOM'] = 1;
+  }
+  if (settings.blurSamples > 0) {
+    defines['DEPTH_OF_FIELD'] = 1;
+  }
+  if (settings.lensFringe) {
+    defines['LENS_FRINGE'] = 1;
+  }
+  if (settings.contactSamples > 0 || settings.floorGloss) {
+    defines['SURFACE'] = 1;
+  }
+  if (settings.floorGloss) {
+    defines['FLOOR_GLOSS'] = 1;
+  }
+  const look = POST_LOOK;
+  const material = passMaterial(
+    FINAL_FRAGMENT,
+    {
+      uFrame: { value: new Vector4(0, 0, 1, 1) },
+      uHalfClamp: { value: new Vector4(0, 0, 1, 1) },
+      uScene: { value: null },
+      uBloom: { value: null },
+      uBlur: { value: null },
+      uBlurOn: { value: 0 },
+      uSurface: { value: null },
+      uSurfaceOn: { value: 0 },
+      uSurfaceClamp: { value: new Vector4(0, 0, 1, 1) },
+      uBloomStrength: { value: look.bloomStrength },
+      uHalation: { value: new Vector3(...look.halation) },
+      uSceneDepth: { value: null },
+      uHazeOn: { value: 0 },
+      uHazeInverse: { value: new Matrix4() },
+      uHazeCamera: { value: new Vector3() },
+      uHazeLight: { value: new Vector3(0, 1, 0) },
+      uHazeColor: { value: new Vector3(...ROOM_HAZE.color) },
+      uHaze: { value: new Vector4() },
+      ...gradeUniforms(),
+      uVignette: { value: look.vignette },
+      uAspect: { value: 1 },
+      uCinema: { value: 0 },
+      // The fall does not change, so no frame sets it.
+      uFrameVignette: { value: new Vector2(...FRAME_VIGNETTE.fall) },
+      uGrain: { value: look.grain },
+      uSeed: { value: 0 },
+      uFringe: { value: LENS_FRINGE.shift },
+      ...focusUniforms(),
+    },
+    defines,
+  );
+  // The final pass draws to the canvas, so it takes the tone mapping of the renderer.
+  material.toneMapped = true;
+  return material;
+}
+
+/**
+ * Creates the pass materials whose programs change with the tier.
+ *
+ * @param tier The quality tier.
+ * @returns The materials.
+ */
+function createTierPasses(tier: QualityTier): TierPasses {
+  return {
+    blurGather: createBlurGather(tier),
+    surface: createSurface(tier),
+    surfaceBlur: createSurfaceBlur(tier),
+    final: createFinal(tier),
+  };
+}

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Stops a commit that adds or changes an image or a video outside the folders that keep the images
+# of the product. The images of a report go into the folder `reports/`, which git ignores (design
+# 9.8), because report images made most of the size of the git history. The texture folder of an
+# FBX source mesh (`assets/models/<s>/**/<name>.fbm/`) is a source file. The web color map and the
+# web normal map of a body (`assets/models/<s>/**/<name>-color.webp` and `-normal.webp`,
+# design 4.5) are images of the product.
+# `pnpm install` sets `core.hooksPath` to this folder.
+set -euo pipefail
+
+media='\.(webp|png|jpe?g|gif|webm|mp4|mov)$'
+kept='^(src|public|docs/reference|docs/prototype|tools/sheet-mattes)/'
+kept+='|^docs/[^/]+$'
+kept+='|^assets/models/.+\.fbm/'
+kept+='|^assets/models/.+-(color|normal)\.webp$'
+
+blocked="$(git diff --cached --name-only --diff-filter=AM -z | tr '\0' '\n' |
+  grep -iE "$media" | grep -vE "$kept" || true)"
+if [[ -n "$blocked" ]]; then
+  echo "pre-commit: this commit adds images or videos outside the folders that git keeps:" >&2
+  sed 's/^/  /' <<<"$blocked" >&2
+  echo "Move the images of a report into reports/, which git ignores (docs/agents/workflow.md)." >&2
+  echo "Add a folder to this hook only for the images of the product." >&2
+  exit 1
+fi

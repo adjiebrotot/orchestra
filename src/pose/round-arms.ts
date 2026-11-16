@@ -1,0 +1,211 @@
+import { MathUtils, Quaternion, Vector3 } from 'three';
+
+import type { PlayerModel } from '../models/player.ts';
+import type { Vec3 } from '../models/tuples.ts';
+import { Z_AXIS } from './axes.ts';
+import { armOut } from './hang.ts';
+import type { ArmRig } from './ik.ts';
+
+/**
+ * The turn of an elbow for each radian of out swing that an arm needs more than the arm of the
+ * body that a shared hold fits ({@link elbowOutTurn}). The turn of an elbow moves the upper arm
+ * near the shoulder less than the elbow, so the turn is larger than the swing. With 1, the cast
+ * matrix kept each cell of the clarinet over its limit (the cat 2.4 cm, the panda 5.4 cm, the
+ * mannequin 2.5 cm). With 2, the mannequin and the rabbit clarinetists pass (0.8 cm and 1.1 cm),
+ * and the panda goes 1.9 cm into the body. A larger turn also turns the paw on its forearm: the
+ * left paw of the rabbit flutist turns 50° from its accepted grip (limit 45°).
+ */
+const TURN_PER_SWING = 2;
+
+/**
+ * Gives the turn of an elbow out to the side by the rule of the round free arms in a shared hold
+ * (design 5.3, "Free round arms"): {@link TURN_PER_SWING} times the out swing that the arm needs
+ * beside the trunk ({@link armOut}) less the swing of the body that the hold fits. A body that
+ * needs the same swing or less keeps the elbows of the hold, and a rounder body turns each elbow
+ * out, so that its upper arms stay off the trunk.
+ *
+ * @param model The player model.
+ * @param arm The arm.
+ * @param fitOut The out swing of the arms of the body that the hold fits, in radians, or `null`
+ *   for a hold with no rule.
+ * @returns The turn, in radians: 0 or more.
+ */
+export function elbowOutTurn(model: PlayerModel, arm: ArmRig, fitOut: number | null): number {
+  return fitOut === null ? 0 : Math.max(0, TURN_PER_SWING * (armOut(model, arm) - fitOut));
+}
+
+/**
+ * The lift of a shoulder bone for each radian of out swing that an arm needs more than
+ * {@link LIFT_FROM} and more than the arm of the body that a shared hold fits
+ * ({@link shoulderLift}). With 0.5 and no {@link LIFT_FROM}, the upper arm root of the pig flutist
+ * went 3.8 cm in place of 4.3 cm into the body, and the rabbit clarinetist failed the grip turn
+ * (46°, limit 45°).
+ */
+const LIFT_PER_SWING = 1.5;
+
+/**
+ * The out swing of the arms above which the shoulders lift ({@link shoulderLift}). The root of
+ * the upper arm turns against the shoulder by the swing from the hanging bind, so only the round
+ * bodies with a large swing lift: the dog, the pig, the badger, the penguin, and the hippo. The
+ * rabbit, the cat, and the panda keep their shoulders.
+ */
+const LIFT_FROM = 34 * MathUtils.DEG2RAD;
+
+/**
+ * The largest lift of a shoulder bone: the rise of the clavicle of a real person from the arm at
+ * the side (6°) to the raised arm (17°), measured with bone pins (Ludewig et al. 2009,
+ * `docs/reference/wind-technique.md`).
+ */
+const MAX_LIFT = 11 * MathUtils.DEG2RAD;
+
+/**
+ * Gives the lift of a shoulder bone up and out around the forward axis by the rule of the round
+ * free arms in a shared hold (design 5.3, "Lifted shoulders in a shared hold"):
+ * {@link LIFT_PER_SWING} times the out swing that the arm needs beside the trunk
+ * ({@link armOut}) less the larger of {@link LIFT_FROM} and the swing of the body that the hold
+ * fits, up to {@link MAX_LIFT}. The shoulder joint goes up with the shoulder bone, and the arm
+ * keeps its paw, so the upper arm turns less against the shoulder, and its root stays out of the
+ * trunk.
+ *
+ * @param model The player model.
+ * @param arm The arm.
+ * @param fitOut The out swing of the arms of the body that the hold fits, in radians, or `null`
+ *   for a hold with no rule.
+ * @returns The lift, in radians: 0 or more.
+ */
+export function shoulderLift(model: PlayerModel, arm: ArmRig, fitOut: number | null): number {
+  if (fitOut === null) {
+    return 0;
+  }
+  const from = Math.max(LIFT_FROM, fitOut);
+  return Math.min(MAX_LIFT, Math.max(0, LIFT_PER_SWING * (armOut(model, arm) - from)));
+}
+
+/**
+ * The largest distance from the shoulder joint to the wrist in the middle of a move of a free paw,
+ * as a share of the length of the arm ({@link keepBent}). With no limit, the wrist of the free
+ * left paw of the dog flutist was up to 1.07 arm lengths from the shoulder joint, so the arm was
+ * straight, and the upper arm went 2.0 cm into the chest in the lift (1.0 cm with 0.97, and 0.9 cm
+ * with 0.94). With 0.97, the upper arm of the dog clarinetist still went 1.6 cm into the shoulder
+ * in a lowering (1.3 cm with 0.94, and 1.1 cm with 0.9).
+ */
+const BENT_REACH = 0.94;
+
+const toWrist = new Vector3();
+
+/**
+ * Keeps the elbow of a free paw bent in the lift and the lowering by the rule of the round free
+ * arms in a shared hold (design 5.3, "Bent arms in the moves"): a wrist further from the shoulder
+ * joint than {@link BENT_REACH} of the length of the arm comes nearer to the joint along the line
+ * between them. The limit fades to the whole length at the rest and at the play
+ * (`4 × weight × (1 - weight)`), so the paw keeps its places there and moves with no jump. A bent
+ * elbow follows its pole, so the elbow turn of the rule holds the upper arm off the trunk, and a
+ * straight arm does not.
+ *
+ * @param arm The arm.
+ * @param shoulder The posed shoulder joint.
+ * @param weight The eased weight of the playing pose: 0 is the rest pose.
+ * @param wrist The wrist of the move, which the function changes.
+ * @returns `wrist`.
+ */
+export function keepBent(arm: ArmRig, shoulder: Vector3, weight: number, wrist: Vector3): Vector3 {
+  if (weight <= 0 || weight >= 1) {
+    return wrist;
+  }
+  const { shoulder: root, elbow, wrist: hand } = arm.bind;
+  const length =
+    Math.hypot(elbow[0] - root[0], elbow[1] - root[1], elbow[2] - root[2]) +
+    Math.hypot(hand[0] - elbow[0], hand[1] - elbow[1], hand[2] - elbow[2]);
+  const limit = length * (1 - (1 - BENT_REACH) * 4 * weight * (1 - weight));
+  const distance = toWrist.subVectors(wrist, shoulder).length();
+  return distance > limit ? wrist.copy(shoulder).addScaledVector(toWrist, limit / distance) : wrist;
+}
+
+/**
+ * The soft part of the limit of {@link keepMoveBend}, as a share of the length of the arm: the
+ * wrist starts to slow this far inside the limit, and never passes the limit.
+ */
+const MOVE_BEND_SOFT = 0.06;
+
+/**
+ * Keeps the elbow of a move bent by the reach of a hold (design 5.2, "Bent elbows in the
+ * moves"): a wrist further from the shoulder joint than `reach` times the length of the arm comes
+ * nearer to the joint along the line between them, with a soft limit ({@link MOVE_BEND_SOFT}).
+ * The limit fades to the whole length at the rest and at the play (`4 × weight × (1 - weight)`),
+ * so the paw keeps its places there and moves with no jump. A wrist path that leaves the reach in
+ * the middle of a move locks the arm straight, and the elbow angle changes fastest near a
+ * straight arm: the bow arm of the red fox went from a bend of 97° to 0° and back to 88° in a
+ * lift of 0.7 s, and the elbow moved at up to 1.7 m/s.
+ *
+ * @param arm The arm.
+ * @param shoulder The posed shoulder joint.
+ * @param reach The largest distance from the shoulder joint to the wrist in the middle of the
+ *   move, as a share of the length of the arm.
+ * @param weight The eased weight of the playing pose: 0 is the rest pose.
+ * @param wrist The wrist of the move, which the function changes.
+ * @returns `wrist`.
+ */
+export function keepMoveBend(
+  arm: ArmRig,
+  shoulder: Vector3,
+  reach: number,
+  weight: number,
+  wrist: Vector3,
+): Vector3 {
+  if (weight <= 0 || weight >= 1) {
+    return wrist;
+  }
+  const { shoulder: root, elbow, wrist: hand } = arm.bind;
+  const length =
+    Math.hypot(elbow[0] - root[0], elbow[1] - root[1], elbow[2] - root[2]) +
+    Math.hypot(hand[0] - elbow[0], hand[1] - elbow[1], hand[2] - elbow[2]);
+  const share = 4 * weight * (1 - weight);
+  const soft = MOVE_BEND_SOFT * length * share;
+  const knee = length * (1 - (1 - reach) * share) - soft;
+  const distance = toWrist.subVectors(wrist, shoulder).length();
+  if (distance <= knee || soft <= 0) {
+    return wrist;
+  }
+  const limited = knee + soft * Math.tanh((distance - knee) / soft);
+  return wrist.copy(shoulder).addScaledVector(toWrist, limited / distance);
+}
+
+const lift = new Quaternion();
+
+/**
+ * Adds the lift of a shoulder bone ({@link shoulderLift}) to its turn: a turn around z after the
+ * turn, the left shoulder from -x toward +y, and the right one from +x toward +y.
+ *
+ * @param turn The local rotation of the `shoulder` bone, which the function changes.
+ * @param angle The lift, in radians. A negative angle takes a lift off a lifted turn.
+ * @param side The side of the arm.
+ * @returns `turn`, with the lift.
+ */
+export function liftShoulder(turn: Quaternion, angle: number, side: 'L' | 'R'): Quaternion {
+  if (angle === 0) {
+    return turn;
+  }
+  return turn.multiply(lift.setFromAxisAngle(Z_AXIS, side === 'L' ? -angle : angle));
+}
+
+/**
+ * Turns the direction to which an elbow points out to the side of its arm, around the forward
+ * axis: its part in the plane of x and y turns toward the out side by an angle, and stops at the
+ * out side. Its forward part stays.
+ *
+ * @param pole The direction, in the axes of the chest or of the root.
+ * @param turn The angle, in radians.
+ * @param side The side of the arm.
+ * @returns The turned direction, or `pole` itself for no turn.
+ */
+export function turnPoleOut(pole: Vec3, turn: number, side: 'L' | 'R'): Vec3 {
+  if (turn <= 0) {
+    return pole;
+  }
+  const out = side === 'L' ? -1 : 1;
+  const [x, y, z] = pole;
+  const length = Math.hypot(x, y);
+  const angle = Math.atan2(y, out * x);
+  const turned = Math.sign(angle) * Math.max(0, Math.abs(angle) - turn);
+  return [out * length * Math.cos(turned), length * Math.sin(turned), z];
+}
