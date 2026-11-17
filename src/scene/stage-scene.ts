@@ -534,6 +534,8 @@ export class StageScene {
   #modeMove: ModeMove | null = null;
   /** True when the next change of the camera mode also blends the camera: the toggle. */
   #blendCamera = false;
+  /** The stage dressing (design 4.5, backdrop), which the hall of the shown layout holds. */
+  #backdrop: Group | null = null;
 
   /**
    * Creates the renderer on a canvas. The scene shows nothing until {@link StageScene.show}.
@@ -702,6 +704,8 @@ export class StageScene {
     setPoolAim(this.#pool, aim);
     setRimLights(this.#rim, view.lights);
     this.#variants.useScene(view.scene);
+    // The dressing lives on from layout to layout, so the dispose of the old scene skips it.
+    this.#backdrop?.removeFromParent();
     this.#disposeView();
     // The controls connect after the old controls disconnect, because a disconnect clears the
     // `touch-action` of the canvas.
@@ -712,6 +716,28 @@ export class StageScene {
     this.#aim = aim;
     this.#aimTarget = aim;
     this.#view = view;
+    if (this.#backdrop) {
+      view.hall.add(this.#backdrop);
+    }
+  }
+
+  /**
+   * Sets the stage dressing (design 4.5, backdrop). The hall of each shown layout holds it, so the
+   * depth of field reads its depth, and the depth pass of the beam skips it, as the hall.
+   *
+   * @param group The group of the dressing, or `null` for none.
+   */
+  setBackdrop(group: Group | null): void {
+    this.#backdrop?.removeFromParent();
+    this.#backdrop = group;
+    if (group && this.#view) {
+      this.#view.hall.add(group);
+    }
+  }
+
+  /** The stage side `S` of the shown layout, in meters, or 0 with no layout. */
+  get stageSide(): number {
+    return this.#view?.stageSide ?? 0;
   }
 
   /**

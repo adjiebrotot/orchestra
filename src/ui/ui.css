@@ -2610,6 +2610,187 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   text-decoration: none;
 }
 
+/* The panel "Stage design": the dressing behind the stage, below the buttons of the studio. */
+.stage-panel {
+  position: fixed;
+  top: 56px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 7;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(600px, calc(100vw - 24px));
+  max-height: calc(100vh - 160px);
+  padding: 10px 12px 12px;
+  background: var(--panel-glass);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-float);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+.stage-panel[hidden] {
+  display: none;
+}
+
+.stage-panel h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.stage-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.stage-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-faint);
+  border-radius: var(--radius-button);
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.stage-section-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.stage-section > .render-hint {
+  margin: 0;
+}
+
+.stage-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stage-rows[hidden] {
+  display: none;
+}
+
+.stage-row {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.stage-label {
+  padding-top: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.stage-panel select,
+.stage-panel input[type='number'] {
+  min-height: 30px;
+  padding: 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  font-size: 13px;
+}
+
+.stage-row > select {
+  justify-self: start;
+  max-width: 100%;
+}
+
+.stage-stepper {
+  display: inline-flex;
+  gap: 4px;
+  justify-self: start;
+}
+
+.stage-stepper input {
+  width: 56px;
+  text-align: center;
+}
+
+.stage-images {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.stage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 3px 4px 3px 3px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--panel);
+  font-size: 12px;
+}
+
+.stage-chip img {
+  width: 30px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stage-chip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stage-chip-button {
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.stage-chip-button:hover {
+  background: var(--line);
+}
+
+.stage-image-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.stage-image-tools select {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-section > .director-button.is-danger {
+  align-self: flex-start;
+}
+
+.director-button:disabled,
+.stage-panel select:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
 @media (max-width: 640px) {
   .studio {
     left: auto;
@@ -2629,5 +2810,18 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 
   .director-cue {
     grid-template-columns: 70px 1fr 1fr;
+  }
+
+  .stage-panel {
+    max-height: calc(100vh - 190px);
+  }
+
+  .stage-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .stage-label {
+    padding-top: 0;
   }
 }

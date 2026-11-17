@@ -1,3 +1,5 @@
+import { isScreenCue, screenFrame } from '../scene/backdrop-settings.ts';
+import type { Json, ScreenCue } from '../scene/backdrop-settings.ts';
 import { DIRECTOR_MOTIONS, focusSeat } from '../shots/directed.ts';
 import type { DirectorCue, DirectorFocus, DirectorMotion } from '../shots/directed.ts';
 import { createButton, createElement } from './dom.ts';
@@ -36,6 +38,21 @@ export interface DirectorActions {
   readonly onSeek: (songSec: number) => void;
   /** A click on "Preview": play in Cinematic mode. */
   readonly onPreview: () => void;
+  /** A change of the screen cues (design 4.5, backdrop). */
+  readonly onScreenChange: (cues: readonly ScreenCue[]) => void;
+}
+
+/** An image that a screen cue can show. */
+export interface ScreenImage {
+  readonly id: string;
+  readonly name: string;
+}
+
+/** The cues of a piece that the browser keeps: the camera path and the screen. */
+interface StoredCues {
+  readonly cues: DirectorCue[];
+  readonly enabled: boolean;
+  readonly screen: ScreenCue[];
 }
 
 /** The width of the names of the rows, in CSS pixels. */
@@ -114,7 +131,7 @@ function isCue(value: unknown): value is DirectorCue {
  * @param text The JSON text.
  * @returns The cues, or `null` for a text with no cues.
  */
-function readCues(text: string): { cues: DirectorCue[]; enabled: boolean } | null {
+function readCues(text: string): StoredCues | null {
   try {
     const data: unknown = JSON.parse(text);
     const list: unknown = Array.isArray(data) ? data : (data as { cues?: unknown } | null)?.cues;
@@ -122,7 +139,13 @@ function readCues(text: string): { cues: DirectorCue[]; enabled: boolean } | nul
       return null;
     }
     const enabled = Array.isArray(data) ? true : (data as { enabled?: unknown }).enabled !== false;
-    return { cues: list.filter(isCue), enabled };
+    // SAFETY: `data` is an object here, because `list` came from its field `cues`.
+    const screen: Json = Array.isArray(data) ? [] : ((data as { screen?: Json }).screen ?? []);
+    return {
+      cues: list.filter(isCue),
+      enabled,
+      screen: Array.isArray(screen) ? screen.filter(isScreenCue) : [],
+    };
   } catch {
     return null;
   }
@@ -145,6 +168,11 @@ export class Director {
   readonly #count: HTMLElement;
   #piece: DirectorPiece | null = null;
   #cues: DirectorCue[] = [];
+  /** The screen cues of the piece, sorted by time (design 4.5, backdrop). */
+  #screenCues: ScreenCue[] = [];
+  /** The images of the screen, or an empty list when the screen does not show. */
+  #screenImages: readonly ScreenImage[] = [];
+  readonly #addScreen: HTMLButtonElement;
   #songSec = 0;
   /** The playhead x of the last drawing, so that a frame draws only after a change. */
   #drawnAt = -1;
@@ -177,6 +205,10 @@ export class Director {
     const add = this.#textButton('+ Cue at playhead', () => {
       this.#addCue({ timeSec: this.#songSec, focus: 'wide', motion: 'push-in', cut: false });
     });
+    this.#addScreen = this.#textButton('+ Screen cue at playhead', () => {
+      this.#addScreenCue(this.#songSec);
+    });
+    this.#addScreen.hidden = true;
     const preview = this.#textButton('Preview', () => {
       actions.onPreview();
     });
@@ -196,8 +228,10 @@ export class Director {
           const read = readCues(text);
           if (read) {
             this.#cues = read.cues;
+            this.#screenCues = read.screen;
             this.#enabled.checked = read.enabled;
             this.#changed();
+            this.#screenChanged();
           }
         })
         .catch(reportError);
@@ -206,9 +240,14 @@ export class Director {
       importInput.click();
     });
     const clear = this.#textButton('Clear', () => {
-      if (this.#cues.length > 0 && window.confirm('Remove all cues of this piece?')) {
+      if (
+        this.#cues.length + this.#screenCues.length > 0 &&
+        window.confirm('Remove all cues of this piece?')
+      ) {
         this.#cues = [];
+        this.#screenCues = [];
         this.#changed();
+        this.#screenChanged();
       }
     });
     this.#zoom = createElement('select', 'director-zoom');
@@ -227,13 +266,22 @@ export class Director {
       this.setOpen(false);
     });
     const tools = createElement('div', 'director-tools');
-    tools.append(add, preview, this.#zoom, importButton, exportButton, clear, importInput);
+    tools.append(
+      add,
+      this.#addScreen,
+      preview,
+      this.#zoom,
+      importButton,
+      exportButton,
+      clear,
+      importInput,
+    );
     head.append(title, enabledLabel, this.#count, tools, close);
 
     const hint = createElement(
       'p',
       'director-hint',
-      'Click a row at a time to point the camera at that instrument from there. Click the ruler to seek. Each cue holds until the next cue.',
+      'Click a row at a time to point the camera at that instrument from there. Click the Screen row to change the screen image there. Click the ruler to seek. Each cue holds until the next cue.',
     );
     this.#scroll = createElement('div', 'director-timeline');
     this.#canvas = createElement('canvas');
@@ -258,6 +306,25 @@ export class Director {
   /** The cues of the current piece, sorted by time. */
   get cues(): readonly DirectorCue[] {
     return this.#cues;
+  }
+
+  /** The screen cues of the current piece, sorted by time. */
+  get screenCues(): readonly ScreenCue[] {
+    return this.#screenCues;
+  }
+
+  /**
+   * Sets the images of the screen. With images, the timeline shows the row "Screen".
+   *
+   * @param images The images of the screen, or an empty list when the screen does not show.
+   */
+  setScreenImages(images: readonly ScreenImage[]): void {
+    this.#screenImages = images;
+    this.#addScreen.hidden = images.length === 0;
+    this.#renderList();
+    if (this.open) {
+      this.#layout();
+    }
   }
 
   /** True if the cues drive the cinematic camera. */
@@ -286,6 +353,7 @@ export class Director {
   setPiece(piece: DirectorPiece | null): void {
     this.#piece = piece;
     this.#cues = [];
+    this.#screenCues = [];
     this.#enabled.checked = true;
     if (piece) {
       try {
@@ -293,6 +361,7 @@ export class Director {
         const read = stored ? readCues(stored) : null;
         if (read) {
           this.#cues = read.cues;
+          this.#screenCues = read.screen;
           this.#enabled.checked = read.enabled;
         }
       } catch {
@@ -340,6 +409,41 @@ export class Director {
   /** Sorts the cues by time. */
   #sort(): void {
     this.#cues.sort((a, b) => a.timeSec - b.timeSec);
+    this.#screenCues.sort((a, b) => a.timeSec - b.timeSec);
+  }
+
+  /**
+   * Adds a screen cue with the next image after the image that shows at its time. A cue at the
+   * same time as another screen cue replaces it.
+   *
+   * @param timeSec The song time.
+   */
+  #addScreenCue(timeSec: number): void {
+    const images = this.#screenImages;
+    if (images.length === 0) {
+      return;
+    }
+    const time = Math.round(Math.max(0, timeSec) * 10) / 10;
+    const shown = screenFrame(this.#screenCues, images[0]?.id ?? null, time).to;
+    const index = images.findIndex((image) => image.id === shown);
+    const image = images[(index + 1) % images.length] ?? images[0];
+    if (!image) {
+      return;
+    }
+    this.#screenCues = this.#screenCues.filter((c) => Math.abs(c.timeSec - time) >= 0.05);
+    this.#screenCues.push({ timeSec: time, image: image.id, cut: false });
+    this.#changed();
+    this.#screenChanged();
+  }
+
+  /** Tells the app of a change of the screen cues. */
+  #screenChanged(): void {
+    this.#actions.onScreenChange(this.#screenCues);
+  }
+
+  /** The height of the row "Screen" of the timeline: one row with the screen, else 0. */
+  get #screenRow(): number {
+    return this.#screenImages.length > 0 ? ROW_PX : 0;
   }
 
   /**
@@ -361,12 +465,16 @@ export class Director {
     if (piece) {
       try {
         const key = STORE_PREFIX + piece.key;
-        if (this.#cues.length === 0) {
+        if (this.#cues.length === 0 && this.#screenCues.length === 0) {
           window.localStorage.removeItem(key);
         } else {
           window.localStorage.setItem(
             key,
-            JSON.stringify({ enabled: this.#enabled.checked, cues: this.#cues }),
+            JSON.stringify({
+              enabled: this.#enabled.checked,
+              cues: this.#cues,
+              screen: this.#screenCues,
+            }),
           );
         }
       } catch {
@@ -380,7 +488,11 @@ export class Director {
 
   /** Downloads the cues as a JSON file. */
   #export(): void {
-    const data = JSON.stringify({ enabled: this.#enabled.checked, cues: this.#cues }, null, 2);
+    const data = JSON.stringify(
+      { enabled: this.#enabled.checked, cues: this.#cues, screen: this.#screenCues },
+      null,
+      2,
+    );
     const link = createElement('a');
     link.href = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
     link.download = `${(this.#piece?.key ?? 'camera').replace(/[^\w.-]+/gu, '_')}-camera.json`;
@@ -441,10 +553,13 @@ export class Director {
   /** Writes the list of the cues. */
   #renderList(): void {
     this.#list.replaceChildren();
+    const screenCount = this.#screenCues.length;
     this.#count.textContent =
-      this.#cues.length === 0
+      (this.#cues.length === 0
         ? 'No cues: the built-in film plays'
-        : `${this.#cues.length} cue${this.#cues.length === 1 ? '' : 's'}`;
+        : `${this.#cues.length} cue${this.#cues.length === 1 ? '' : 's'}`) +
+      (screenCount > 0 ? ` · ${screenCount} screen cue${screenCount === 1 ? '' : 's'}` : '');
+    this.#renderScreenList();
     if (this.#cues.length === 0) {
       return;
     }
@@ -512,6 +627,83 @@ export class Director {
       row.append(time, focus, motion, cut, go, remove);
       table.append(row);
     }
+    this.#list.prepend(table);
+  }
+
+  /** Writes the list of the screen cues, below the camera cues. */
+  #renderScreenList(): void {
+    if (this.#screenCues.length === 0 || this.#screenImages.length === 0) {
+      return;
+    }
+    const table = createElement('div', 'director-table');
+    const header = createElement('div', 'director-cue director-cue-head');
+    for (const text of ['Time', 'Screen image', 'Transition', '', '']) {
+      const cell = createElement('span', '', text);
+      if (text === 'Screen image') {
+        cell.style.gridColumn = 'span 2';
+      }
+      header.append(cell);
+    }
+    table.append(header);
+    for (const [i, cue] of this.#screenCues.entries()) {
+      const row = createElement('div', 'director-cue');
+      const set = (change: Partial<ScreenCue>): void => {
+        this.#screenCues[i] = { ...cue, ...change };
+        this.#changed();
+        this.#screenChanged();
+      };
+      const time = createElement('input');
+      time.value = cueTime(cue.timeSec);
+      time.setAttribute('aria-label', 'Screen cue time');
+      time.addEventListener('change', () => {
+        const sec = parseCueTime(time.value);
+        if (sec === null) {
+          time.value = cueTime(cue.timeSec);
+        } else {
+          set({ timeSec: Math.round(sec * 10) / 10 });
+        }
+      });
+      const image = createElement('select');
+      image.setAttribute('aria-label', 'Screen image');
+      const known = this.#screenImages.some((item) => item.id === cue.image);
+      for (const item of known
+        ? this.#screenImages
+        : [...this.#screenImages, { id: cue.image, name: 'Missing image' }]) {
+        const option = createElement('option', '', item.name);
+        option.value = item.id;
+        option.selected = item.id === cue.image;
+        image.append(option);
+      }
+      image.addEventListener('change', () => {
+        set({ image: image.value });
+      });
+      const cut = createElement('select');
+      cut.setAttribute('aria-label', 'Screen transition');
+      for (const [value, label] of [
+        ['fade', 'Fade'],
+        ['cut', 'Cut'],
+      ] as const) {
+        const option = createElement('option', '', label);
+        option.value = value;
+        option.selected = (value === 'cut') === cue.cut;
+        cut.append(option);
+      }
+      cut.addEventListener('change', () => {
+        set({ cut: cut.value === 'cut' });
+      });
+      const go = this.#textButton('Go', () => {
+        this.#actions.onSeek(cue.timeSec);
+      });
+      const remove = this.#textButton('Delete', () => {
+        this.#screenCues.splice(i, 1);
+        this.#changed();
+        this.#screenChanged();
+      });
+      remove.classList.add('is-danger');
+      image.style.gridColumn = 'span 2';
+      row.append(time, image, cut, go, remove);
+      table.append(row);
+    }
     this.#list.append(table);
   }
 
@@ -538,7 +730,7 @@ export class Director {
   #layout(): void {
     const rows = this.#piece?.rows.length ?? 0;
     const width = LABEL_PX + this.#songWidth() + 8;
-    const height = RULER_PX + Math.max(1, rows) * ROW_PX + 4;
+    const height = RULER_PX + this.#screenRow + Math.max(1, rows) * ROW_PX + 4;
     const ratio = Math.min(2, window.devicePixelRatio || 1);
     this.#canvas.style.width = `${width}px`;
     this.#canvas.style.height = `${height}px`;
@@ -579,11 +771,16 @@ export class Director {
       context.fillStyle = '#b5aa99';
       context.fillText(cueTime(t).replace(/\.0$/u, ''), x + 3, 8);
     }
+    // The row of the screen, with a block for each image from its cue to the next cue.
+    const top = RULER_PX + this.#screenRow;
+    if (this.#screenRow > 0) {
+      this.#drawScreenRow(context, songWidth, duration);
+    }
     // The rows and their notes.
     const rowOf = new Map<number, number>();
     for (const [i, row] of piece.rows.entries()) {
       rowOf.set(row.seatIndex, i);
-      const y = RULER_PX + i * ROW_PX;
+      const y = top + i * ROW_PX;
       if (i % 2 === 0) {
         context.fillStyle = 'rgba(255, 240, 220, 0.035)';
         context.fillRect(0, y, LABEL_PX + songWidth, ROW_PX);
@@ -600,7 +797,7 @@ export class Director {
       const x0 = this.#timeX(note.startSec);
       const x1 = Math.max(x0 + 1, this.#timeX(note.endSec));
       context.fillStyle = row.color;
-      context.fillRect(x0, RULER_PX + i * ROW_PX + 3, x1 - x0, ROW_PX - 6);
+      context.fillRect(x0, top + i * ROW_PX + 3, x1 - x0, ROW_PX - 6);
     }
     // The cues: a line over all rows, and the name of the focus in the cue track.
     for (const cue of this.#cues) {
@@ -612,7 +809,7 @@ export class Director {
       if (i !== undefined) {
         context.strokeStyle = '#f0c676';
         context.lineWidth = 2;
-        context.strokeRect(x, RULER_PX + i * ROW_PX + 1, 10, ROW_PX - 2);
+        context.strokeRect(x, top + i * ROW_PX + 1, 10, ROW_PX - 2);
       }
       context.fillStyle = '#f0c676';
       context.fillText(this.#focusLabel(cue.focus), x + 4, RULER_PX - 4, 110);
@@ -620,6 +817,41 @@ export class Director {
     this.#base = context.getImageData(0, 0, this.#canvas.width, this.#canvas.height);
     this.#drawnAt = -1;
     this.#drawPlayhead(Math.round(this.#timeX(this.#songSec)));
+  }
+
+  /**
+   * Draws the row "Screen": a block for each image, from its cue to the next cue.
+   *
+   * @param context The context of the canvas.
+   * @param songWidth The width of the song.
+   * @param duration The duration of the song.
+   */
+  #drawScreenRow(context: CanvasRenderingContext2D, songWidth: number, duration: number): void {
+    const y = RULER_PX;
+    context.fillStyle = 'rgba(126, 182, 230, 0.08)';
+    context.fillRect(0, y, LABEL_PX + songWidth, ROW_PX);
+    context.fillStyle = '#9cc7ee';
+    context.fillText('Screen', 6, y + ROW_PX / 2, LABEL_PX - 10);
+    const name = (id: string | null): string =>
+      this.#screenImages.find((image) => image.id === id)?.name ?? '';
+    const spans: [number, number, string][] = [
+      [0, this.#screenCues[0]?.timeSec ?? duration, name(this.#screenImages[0]?.id ?? null)],
+    ];
+    for (const [i, cue] of this.#screenCues.entries()) {
+      spans.push([cue.timeSec, this.#screenCues[i + 1]?.timeSec ?? duration, name(cue.image)]);
+    }
+    for (const [i, [start, end, label]] of spans.entries()) {
+      const x0 = this.#timeX(start);
+      const x1 = Math.max(x0 + 1, this.#timeX(end));
+      context.fillStyle = i === 0 ? 'rgba(126, 182, 230, 0.16)' : 'rgba(126, 182, 230, 0.32)';
+      context.fillRect(x0 + 1, y + 2, x1 - x0 - 2, ROW_PX - 4);
+      if (i > 0) {
+        context.fillStyle = '#9cc7ee';
+        context.fillRect(x0 - 1, y, 2, ROW_PX);
+      }
+      context.fillStyle = '#e6f1fb';
+      context.fillText(label, x0 + 4, y + ROW_PX / 2, Math.max(0, x1 - x0 - 8));
+    }
   }
 
   /**
@@ -665,7 +897,11 @@ export class Director {
       this.#actions.onSeek(Math.max(0, sec));
       return;
     }
-    const row = piece.rows[Math.floor((y - RULER_PX) / ROW_PX)];
+    if (y < RULER_PX + this.#screenRow) {
+      this.#addScreenCue(sec);
+      return;
+    }
+    const row = piece.rows[Math.floor((y - RULER_PX - this.#screenRow) / ROW_PX)];
     if (!row?.onStage) {
       return;
     }
