@@ -94,6 +94,29 @@ export function rimLightPlace(stageSide: number, x = 0): Vec3 {
 }
 
 /**
+ * The height of the lamp of a visible beam above the stage top, in stage sides (design 4.5). The
+ * rim light stands high above the hall walls, out of each frame, so the beam seemed to come out of
+ * the dark in a tall frame. A lamp on a batten over the back of the stage, on the line from the
+ * foot of the beam to the rim light, gives the beam a visible source. At 0.8 S, the default view of
+ * a phone shows the lamp near the top of the image, and the default view of a wide window does not.
+ */
+export const BEAM_SOURCE_HEIGHT_IN_SIDES = 0.8;
+
+/**
+ * Gives the place of the lamp of a visible beam ({@link BEAM_SOURCE_HEIGHT_IN_SIDES}): the point
+ * at that height on the line from the stage top under the rim light to the rim light.
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @param x The x of the rim light, in meters: 0 on the stage axis.
+ * @returns The position, in meters.
+ */
+export function beamSourcePlace(stageSide: number, x = 0): Vec3 {
+  const [, lightY, lightZ] = rimLightPlace(stageSide, x);
+  const t = (BEAM_SOURCE_HEIGHT_IN_SIDES * stageSide) / lightY;
+  return [x, lightY * t, lightZ * t];
+}
+
+/**
  * The height of the cone that the shot planner keeps clear of cameras, in stage sides (design
  * 5.6). The cone stands upright on the stage center and holds the haze of the visible beam near
  * the stage, also when the beam leans to the key light.
