@@ -1,9 +1,16 @@
-import { Group, Mesh, MeshPhysicalMaterial, ShaderChunk, Vector3 } from 'three';
+import { Group, Mesh, MeshPhysicalMaterial, ShaderChunk, Vector3, Vector4 } from 'three';
 import type { Texture } from 'three';
 
 import { STAGE_COLORS } from '../models/props.ts';
 import type { Vec3 } from '../models/tuples.ts';
-import { STAGE_CORNER_CUT, STAGE_LIP, buildStage } from '../models/stage.ts';
+import {
+  PODIUM_FROM_FRONT,
+  PODIUM_SIZE,
+  STAGE_CORNER_CUT,
+  STAGE_LIP,
+  STAGE_THICKNESS,
+  buildStage,
+} from '../models/stage.ts';
 import { createGeometry } from './geometry.ts';
 import { shadowChunkWithSamples } from './shadow-chunk.ts';
 import { addLightPool } from './light-pool.ts';
@@ -11,6 +18,8 @@ import type { PoolUniforms } from './light-pool.ts';
 import { addRimLight } from './rim-light.ts';
 import type { RimUniforms } from './rim-light.ts';
 import { noBakeTexture } from './stage-bake.ts';
+import { noStageTextUniforms } from './stage-text.ts';
+import type { StageTextUniforms } from './stage-text.ts';
 
 /**
  * The finish of the stage wood (design 4.5, materials): walnut with a soft sheen under a thin
@@ -89,6 +98,11 @@ uniform vec3 uSeamColor;
 uniform vec3 uPlank;
 uniform sampler2D uStageBake;
 uniform float uStageBlur;
+uniform sampler2D uStageText;
+uniform vec3 uStageTextMode;
+uniform vec3 uStageTextTint;
+uniform vec4 uStageTextFloor;
+uniform vec4 uStageTextFront;
 
 // The circled A logo of adjiebrotots.com (logos/logo.svg of the personal site), as a coverage of
 // its disc and of its letter at a point. The point is in the units of the logo: the disc has the
@@ -251,7 +265,63 @@ if (vWoodNormal.y > 0.5 && abs(vWoodPosition.y) < 0.03) {
   vec3 logoTone = mix(vec3(1.0), vec3(0.6, 0.58, 0.56), logoCov.x);
   diffuseColor.rgb *= mix(logoTone, vec3(1.42, 1.36, 1.26), logoCov.y);
 }
+// The stage text (scene/stage-text.ts), as an inlay of the same kind: the letters change the tone
+// of the wood under them. The box holds the line at the aspect of its texture. On the floor, the
+// top of the letters points to the back of the stage, so the audience reads the text.
+if (uStageTextMode.y > 0.5) {
+  bool textFloor = uStageTextMode.y < 1.5;
+  vec4 textBox = textFloor ? uStageTextFloor : uStageTextFront;
+  float textHalfHeight = min(textBox.w, textBox.z / uStageTextMode.x);
+  vec2 textHalf = vec2(textHalfHeight * uStageTextMode.x, textHalfHeight);
+  vec2 textPoint = textFloor
+    ? vec2(vWoodPosition.x - textBox.x, textBox.y - vWoodPosition.z)
+    : vec2(vWoodPosition.x - textBox.x, vWoodPosition.y - textBox.y);
+  vec2 textUv = textPoint / (2.0 * textHalf) + 0.5;
+  float textCover = texture2D(uStageText, textUv).r;
+  textCover *= step(abs(textPoint.x), textHalf.x) * step(abs(textPoint.y), textHalf.y);
+  vec3 textNormal = normalize(vWoodNormal);
+  bool textFace = textFloor
+    ? textNormal.y > 0.5 && abs(vWoodPosition.y) < 0.03
+    : textNormal.z > 0.9 && vWoodPosition.z > uHalfSide - 0.02 && vWoodPosition.y < 0.0;
+  if (textFace) {
+    diffuseColor.rgb *= mix(vec3(1.0), uStageTextTint, textCover);
+  }
+}
 `;
+
+/** The space between the stage text and the edges of its box, in meters (design 4.5, stage text). */
+const STAGE_TEXT_MARGIN = 0.06;
+
+/**
+ * Gives the two boxes of the stage text (design 4.5, stage text): on the floor between the podium
+ * and the lip of the front edge, and on the skirt of the front edge. Each box is the center and
+ * the largest half width and half height of the line, in meters. The width stays inside the
+ * straight part of the front edge, clear of the corner cuts.
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @param podium The podium center, or `null` for a layout with no podium.
+ * @returns The floor box (x, z, half width, half height) and the front box (x, y, half width,
+ *   half height).
+ */
+export function stageTextBoxes(stageSide: number, podium: Vec3 | null): [Vector4, Vector4] {
+  const half = stageSide / 2;
+  const margin = STAGE_TEXT_MARGIN;
+  const back = (podium ? podium[2] + PODIUM_SIZE[2] / 2 : half - PODIUM_FROM_FRONT) + margin;
+  const front = half - STAGE_LIP.width - margin;
+  const depth = Math.max(0.1, front - back);
+  const width = half - STAGE_CORNER_CUT * stageSide - 0.5;
+  const floor = new Vector4(0, (back + front) / 2, Math.min(width, 0.3 * stageSide), depth / 2);
+  // The skirt is low, so its letters keep half the margin.
+  const top = -STAGE_LIP.drop - margin / 2;
+  const bottom = -STAGE_THICKNESS + margin / 2;
+  const face = new Vector4(
+    0,
+    (top + bottom) / 2,
+    Math.min(width, 0.3 * stageSide),
+    (top - bottom) / 2,
+  );
+  return [floor, face];
+}
 
 /** The shadow of the key light in the light chunk of three.js r186. */
 const KEY_SHADOW =
@@ -359,6 +429,9 @@ function liftedShadowVertex(): string {
  * @param bake The uniforms of the bake of the static props. With no bake, all light reaches each
  *   point.
  * @param rim The uniforms of the rim lights (design 4.5), or `null` for no rim lights.
+ * @param podium The podium center, or `null` for a layout with no podium: the place of the text on
+ *   the floor.
+ * @param text The uniforms of the stage text (design 4.5, stage text).
  * @returns The material.
  */
 export function createStageMaterial(
@@ -366,7 +439,10 @@ export function createStageMaterial(
   pool: PoolUniforms,
   bake: StageBakeUniforms = noBakeUniforms(),
   rim: RimUniforms | null = null,
+  podium: Vec3 | null = null,
+  text: StageTextUniforms = noStageTextUniforms(),
 ): MeshPhysicalMaterial {
+  const [textFloor, textFront] = stageTextBoxes(stageSide, podium);
   const material = new MeshPhysicalMaterial({
     vertexColors: true,
     flatShading: true,
@@ -396,6 +472,11 @@ export function createStageMaterial(
     shader.uniforms['uStageBake'] = bake.uStageBake;
     shader.uniforms['uShadowLift'] = bake.uShadowLift;
     shader.uniforms['uStageBlur'] = bake.uStageBlur;
+    shader.uniforms['uStageText'] = text.uStageText;
+    shader.uniforms['uStageTextMode'] = text.uStageTextMode;
+    shader.uniforms['uStageTextTint'] = text.uStageTextTint;
+    shader.uniforms['uStageTextFloor'] = { value: textFloor };
+    shader.uniforms['uStageTextFront'] = { value: textFront };
     shader.uniforms['uSideGlow'] = {
       value: new Vector3(SIDE_GLOW.skirt, SIDE_GLOW.edge, SIDE_GLOW.fade),
     };
@@ -439,6 +520,7 @@ export function createStageMaterial(
  * @param pool The uniforms of the pool of the stage lights (design 4.5).
  * @param bake The uniforms of the bake of the static props.
  * @param rim The uniforms of the rim lights (design 4.5), or `null` for no rim lights.
+ * @param text The uniforms of the stage text (design 4.5, stage text).
  * @returns A group with the stage mesh. The mesh has its own material.
  */
 export function createStage(
@@ -447,10 +529,11 @@ export function createStage(
   pool: PoolUniforms,
   bake: StageBakeUniforms = noBakeUniforms(),
   rim: RimUniforms | null = null,
+  text: StageTextUniforms = noStageTextUniforms(),
 ): Group {
   const stage = new Mesh(
     createGeometry(buildStage(stageSide, podium)),
-    createStageMaterial(stageSide, pool, bake, rim),
+    createStageMaterial(stageSide, pool, bake, rim, podium, text),
   );
   stage.castShadow = true;
   stage.receiveShadow = true;
