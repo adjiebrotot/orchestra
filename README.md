@@ -18,8 +18,10 @@ Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqia
   timeline with the notes of each instrument (from the MIDI file) and the time. Click a row at a
   time to point the camera at that instrument from there, or use **+ Cue at playhead**. For each
   cue, choose:
-  - **Camera focus:** Automatic (the built-in film), Whole stage, High view, Conductor, or any
-    instrument.
+  - **Camera focus:** Automatic (the built-in film), Whole stage, High view, Conductor, a
+    background move (Helicopter view, Low-angle orbit, or Backdrop orbit), or any instrument. The
+    built-in film also uses the three background moves. For a background move, Orbit left and
+    Orbit right set the direction of its orbit.
   - **Motion:** Static, Push in, Pull out, Orbit left, Orbit right, Crane up, Crane down.
   - **Into shot:** a smooth move from the previous shot, or a hard cut.
 
@@ -36,6 +38,9 @@ Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqia
   - **Screen:** an LED screen or a cloth with a projection, and its images. In the Camera director,
     click the **Screen** row at a time (or use **+ Screen cue at playhead**) to change the screen
     image there, with a fade or a cut.
+
+  - **Stage text:** one line of text in the wood of the stage near the conductor, on the floor in
+    front of the podium or on the front of the stage, as a pale inlay, a dark stain, or gold leaf.
 
   Upload your own images, or pick a built-in country flag. The settings and the images stay in your
   browser (`src/scene/backdrop.ts`, `src/ui/stage-panel.ts`).
