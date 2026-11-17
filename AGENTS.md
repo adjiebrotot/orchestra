@@ -59,7 +59,7 @@ This file holds the rules of each round. The modules in `docs/agents/` hold the 
 ## Work rules
 
 - **Where.** An agent that works alone commits on `main` in the main checkout. An agent that works
-  beside another agent works in its own detached worktree. Push nothing.
+  beside another agent works in its own detached worktree.
 - **Commits.** Make very fine-grained commits: one logical change in each, with a Conventional
   Commit subject. Stage each path by its name, never with `git add -A` or `git add .`.
 - **Checks.** The user verifies each result by hand in the app. Gates that stay on:
