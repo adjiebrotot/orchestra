@@ -55,13 +55,14 @@ export async function loadBodies(names: readonly BodyName[] = ALL_BODIES): Promi
  * of the species of each seat with players.
  *
  * @param score The score.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns Each body one time.
  */
-export function castBodies(score: Score): BodyName[] {
+export function castBodies(score: Score, noPig = false): BodyName[] {
   const names = new Set<BodyName>([SPECIES[CONDUCTOR.species].body]);
   for (const seat of score.seats) {
     if (seat.section !== 'sound-only' && seat.playerCount > 0) {
-      names.add(SPECIES[speciesOf(seat.section, seat.indexInSection)].body);
+      names.add(SPECIES[speciesOf(seat.section, seat.indexInSection, noPig)].body);
     }
   }
   return [...names];
@@ -73,10 +74,11 @@ export function castBodies(score: Score): BodyName[] {
  * bodies loaded, as in Node, the step yields nothing.
  *
  * @param score The score.
+ * @param noPig True when the setting "No pig" is on (design 2.8).
  * @returns The steps.
  */
-export function* castBodiesSteps(score: Score): Steps<void> {
-  const missing = castBodies(score).filter((name) => !hasBody(name));
+export function* castBodiesSteps(score: Score, noPig = false): Steps<void> {
+  const missing = castBodies(score, noPig).filter((name) => !hasBody(name));
   if (missing.length > 0) {
     yield loadBodies(missing);
   }

@@ -124,15 +124,27 @@ export function chamberFormOf(seats: readonly Seat[]): ChamberForm | null {
 const DEFAULT_KETTLES: KettleCount = 4;
 
 /**
+ * The species that takes the seats of the pig when the setting "No pig" is on (design 2.8, 4.3).
+ * It plays the horn with the shared hold of the horn (design 5.3).
+ */
+export const NO_PIG_SPECIES = 'bear' as const satisfies SpeciesId;
+
+/**
  * Gives the species of a seat (design 4.3).
  *
  * @param section The section of the seat.
  * @param indexInSection The index of the seat in its section.
+ * @param noPig True when the setting "No pig" is on: {@link NO_PIG_SPECIES} replaces the pig.
  * @returns The species.
  */
-export function speciesOf(section: PlayingSection, indexInSection: number): SpeciesId {
+export function speciesOf(
+  section: PlayingSection,
+  indexInSection: number,
+  noPig = false,
+): SpeciesId {
   const variants: readonly SpeciesId[] = SECTION_SPECIES[section];
-  return variants[indexInSection % variants.length] ?? variants[0] ?? 'rabbit';
+  const species = variants[indexInSection % variants.length] ?? variants[0] ?? 'rabbit';
+  return noPig && species === 'pig' ? NO_PIG_SPECIES : species;
 }
 
 /**
@@ -184,10 +196,11 @@ function collectNotes(score: Score): SeatNotes[] {
  * instruments allow it, and the players of an arc sit (design 4.2).
  *
  * @param score The score.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns One entry for each player, in the order of the seats, then of the players in a seat
  *   (the order of `ScenePose.players`, design 5.1).
  */
-export function castScore(score: Score): PlayerCast[] {
+export function castScore(score: Score, noPig = false): PlayerCast[] {
   const facts = collectNotes(score);
   const form = chamberFormOf(score.seats);
   const cast: PlayerCast[] = [];
@@ -210,7 +223,7 @@ export function castScore(score: Score): PlayerCast[] {
       cast.push({
         seatIndex,
         player,
-        species: speciesOf(section, seat.indexInSection),
+        species: speciesOf(section, seat.indexInSection, noPig),
         instrument,
         kettles,
         support: supportOf(instrument, form ? form !== 'arc' : seatIndex === score.soloist),

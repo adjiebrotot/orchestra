@@ -25,12 +25,13 @@ export interface ScoreScene {
  * share one model cache.
  *
  * @param score The score.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns The steps, which return the layout, the player models, and the plans.
  */
-function* planSceneSteps(score: Score): Steps<ScoreScene> {
-  yield* castBodiesSteps(score);
+function* planSceneSteps(score: Score, noPig: boolean): Steps<ScoreScene> {
+  yield* castBodiesSteps(score, noPig);
   const models = new ModelCache();
-  const layout = yield* layoutSceneSteps(score, models);
+  const layout = yield* layoutSceneSteps(score, models, noPig);
   const plan = yield* preparePosesSteps(score, layout, POSE_SEED, models);
   const shots = yield* prepareShotsSteps(score, layout, SHOT_SEED, models, plan);
   return { layout, models, plan, shots };
@@ -64,10 +65,11 @@ export interface PlannedScore {
  * Calculates the scene of a score in steps (design 7.2).
  *
  * @param score The score.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns The steps, which return the score and its scene.
  */
-export function* planScoreSteps(score: Score): Steps<PlannedScore> {
-  return { score, scene: yield* planSceneSteps(score) };
+export function* planScoreSteps(score: Score, noPig = false): Steps<PlannedScore> {
+  return { score, scene: yield* planSceneSteps(score, noPig) };
 }
 
 /**
@@ -77,6 +79,7 @@ export function* planScoreSteps(score: Score): Steps<PlannedScore> {
  * @param bytes The bytes of the file.
  * @param sectionSize The section size.
  * @param name The name of the file, for the error.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns The steps, which return the score and its scene.
  * @throws Error if `buildScore()` refuses the file.
  */
@@ -84,6 +87,7 @@ export function* planFileSteps(
   bytes: Uint8Array,
   sectionSize: SectionSize,
   name: string,
+  noPig = false,
 ): Steps<PlannedScore> {
-  return yield* planScoreSteps(yield* scoreSteps(bytes, sectionSize, name));
+  return yield* planScoreSteps(yield* scoreSteps(bytes, sectionSize, name), noPig);
 }
