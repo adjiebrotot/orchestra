@@ -11,6 +11,18 @@ export interface RenderPanelActions {
 }
 
 /**
+ * The state of the render that the panel shows. The progress bar has a different look in each
+ * state, so a render that works, a render that waits, and a render that failed look different.
+ *
+ * - `idle`: no render runs.
+ * - `busy`: the render works. The bar moves.
+ * - `warn`: the render waits for something that can fail. The bar stops and changes its color.
+ * - `error`: the render failed. The bar is full, in the color of an error.
+ * - `done`: the file is ready.
+ */
+export type RenderPanelState = 'idle' | 'busy' | 'warn' | 'error' | 'done';
+
+/**
  * The panel of the MP4 render: the format menu and the start button, then the progress of the
  * render, and at the end the download link of the file.
  */
@@ -20,6 +32,7 @@ export class RenderPanel {
   readonly #start: HTMLButtonElement;
   readonly #stop: HTMLButtonElement;
   readonly #bar: HTMLElement;
+  readonly #track: HTMLElement;
   readonly #status: HTMLElement;
   readonly #link: HTMLAnchorElement;
   #running = false;
@@ -75,8 +88,14 @@ export class RenderPanel {
     const track = createElement('div', 'render-track');
     this.#bar = createElement('div', 'render-fill');
     track.append(this.#bar);
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', 'Render progress');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', '100');
+    this.#track = track;
     this.#status = createElement('p', 'render-status');
     this.#status.setAttribute('aria-live', 'polite');
+    this.element.dataset['state'] = 'idle';
     this.#link = createElement('a', 'director-button is-accent render-link');
     this.#link.hidden = true;
     this.element.append(head, text, row, track, this.#status, this.#link);
@@ -99,16 +118,22 @@ export class RenderPanel {
   /**
    * Shows the state of the render.
    *
-   * @param running True while a render runs.
-   * @param progress The part that is done, from 0 to 1.
+   * @param state The state. A render runs in the states `busy` and `warn`.
+   * @param progress The part that is done, from 0 to 1. The state `error` shows a full bar.
    * @param status The status line.
    */
-  show(running: boolean, progress: number, status: string): void {
+  show(state: RenderPanelState, progress: number, status: string): void {
+    const running = state === 'busy' || state === 'warn';
+    const part = state === 'error' ? 1 : Math.max(0, Math.min(1, progress));
     this.#running = running;
     this.#start.hidden = running;
     this.#stop.hidden = !running;
     this.#format.disabled = running;
-    this.#bar.style.transform = `scaleX(${Math.max(0, Math.min(1, progress))})`;
+    if (this.element.dataset['state'] !== state) {
+      this.element.dataset['state'] = state;
+    }
+    this.#bar.style.transform = `scaleX(${part})`;
+    this.#track.setAttribute('aria-valuenow', String(Math.round(part * 100)));
     if (this.#status.textContent !== status) {
       this.#status.textContent = status;
     }

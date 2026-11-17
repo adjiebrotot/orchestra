@@ -2509,6 +2509,7 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 }
 
 .render-track {
+  position: relative;
   height: 6px;
   border-radius: 3px;
   background: var(--track);
@@ -2520,6 +2521,86 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   background: var(--accent);
   transform-origin: left;
   transform: scaleX(0);
+}
+
+/* The states of the render. A render that works has stripes that move on the bar. */
+.render-track::after {
+  content: '';
+  position: absolute;
+  inset: 0 -24px 0 0;
+  background: repeating-linear-gradient(
+    110deg,
+    transparent 0 8px,
+    rgba(255, 255, 255, 0.35) 8px 12px
+  );
+  opacity: 0;
+}
+
+.render-panel[data-state='busy'] .render-track::after {
+  opacity: 1;
+  animation: render-stripes 0.6s linear infinite;
+}
+
+/* A render that waits: the stripes stop, and the bar has the color of a warning. */
+.render-panel[data-state='warn'] .render-track::after {
+  opacity: 1;
+}
+
+.render-panel[data-state='warn'] .render-fill {
+  background: color-mix(in srgb, var(--accent), var(--danger));
+}
+
+.render-panel[data-state='warn'] .render-status {
+  color: color-mix(in srgb, var(--accent), var(--danger));
+}
+
+.render-panel[data-state='error'] .render-fill {
+  background: var(--danger);
+}
+
+.render-panel[data-state='error'] .render-status {
+  color: var(--danger);
+}
+
+.render-panel[data-state='done'] .render-status {
+  color: var(--text);
+}
+
+.render-status::before {
+  display: inline-block;
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.render-panel[data-state='busy'] .render-status::before {
+  content: 'Working';
+  color: var(--accent);
+}
+
+.render-panel[data-state='warn'] .render-status::before {
+  content: 'Waiting';
+}
+
+.render-panel[data-state='error'] .render-status::before {
+  content: 'Error';
+}
+
+.render-panel[data-state='done'] .render-status::before {
+  content: 'Done';
+  color: var(--accent);
+}
+
+@keyframes render-stripes {
+  to {
+    translate: -24px 0;
+  }
+}
+
+/* With reduced motion, the stripes do not move: the word before the status line tells the state. */
+@media (prefers-reduced-motion: reduce) {
+  .render-panel[data-state='busy'] .render-track::after {
+    animation: none;
+  }
 }
 
 .render-link {
