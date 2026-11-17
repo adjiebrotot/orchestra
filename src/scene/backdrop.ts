@@ -22,6 +22,7 @@ import { STAGE_THICKNESS } from '../models/stage.ts';
 import { rimLightPlace } from '../models/beam.ts';
 import { DEFAULT_BACKDROP, screenFrame } from './backdrop-settings.ts';
 import type {
+  Arrangement,
   BackdropSettings,
   BannerCut,
   BannerSettings,
@@ -497,21 +498,63 @@ export function rowSlots(count: number, inner: number | null, outer: number): nu
 }
 
 /**
- * Gives the image of each slot of a row. When the pairs of the row can show each image, the outer
- * pair shows the first image, the next pair the second, and so on, so the row stays symmetrical.
- * Else the slots show the images in their order from left to right, so each image shows.
+ * Gives the image of a slot in a list of slots (design 4.5, backdrop).
+ *
+ * - `mirror`: when the pairs of the row can show each image, the outer pair shows the first
+ *   image, the next pair the second, and so on, so the row stays symmetrical (ABCCBA). Else the
+ *   slots show the images in their order from left to right, so each image shows.
+ * - `repeat`: the images repeat from left to right (ABCABC).
+ * - `group`: each image fills a block of next slots (AABBCC). With more images than slots, each
+ *   slot shows the next image.
  *
  * @param count The number of slots.
  * @param images The images.
- * @returns The image of each slot, or `null` with no image.
+ * @param arrangement The order of the images.
+ * @returns The image of each slot, from the left, or `null` with no image.
  */
-export function slotImages(count: number, images: readonly string[]): (string | null)[] {
+export function slotImages(
+  count: number,
+  images: readonly string[],
+  arrangement: Arrangement = 'mirror',
+): (string | null)[] {
+  const n = images.length;
   const pairs = Math.ceil(count / 2);
-  const mirror = images.length <= pairs;
+  const mirror = arrangement === 'mirror' && n <= pairs;
   return Array.from({ length: count }, (_, i) => {
-    const rank = mirror ? Math.min(i, count - 1 - i) : i;
-    return images.length === 0 ? null : (images[rank % images.length] ?? null);
+    let rank = i;
+    if (mirror) {
+      rank = Math.min(i, count - 1 - i);
+    } else if (arrangement === 'group' && n < count) {
+      rank = Math.floor((i * n) / count);
+    }
+    return n === 0 ? null : (images[rank % n] ?? null);
   });
+}
+
+/**
+ * Gives the flags of one flagpole group (design 4.5, backdrop). Each group has a staff for each
+ * flag. A symmetrical or an alternating order gives each group all the flags. A grouped order
+ * runs over the staffs of all the groups from the left, so each flag fills a block of next
+ * staffs (AABBCC), and a group can show one flag on all its staffs.
+ *
+ * @param images The flags.
+ * @param arrangement The order of the flags.
+ * @param group The place of the group from the left.
+ * @param groups The number of groups.
+ * @returns The flag of each staff of the group.
+ */
+export function flagsOfGroup(
+  images: readonly string[],
+  arrangement: Arrangement,
+  group: number,
+  groups: number,
+): (string | null)[] {
+  if (arrangement !== 'group') {
+    return [...images];
+  }
+  const n = images.length;
+  const all = slotImages(n * groups, images, 'group');
+  return all.slice(group * n, group * n + n);
 }
 
 const CLOTH_VERTEX = /* glsl */ `
@@ -754,6 +797,7 @@ export class Backdrop {
         stageSide,
         settings.flags.groups,
         settings.flags.images,
+        settings.flags.arrangement,
         settings.screen.on,
         used,
       );
@@ -1019,7 +1063,7 @@ export class Backdrop {
     const inner = screen ? screenWidth(side) / 2 + place.screenGap + place.width / 2 : null;
     const metal = new Triangles();
     const cloths: { texture: ClothTexture; add: (list: Triangles) => void }[] = [];
-    const images = slotImages(set.count, set.images);
+    const images = slotImages(set.count, set.images, set.arrangement);
     const slots = rowSlots(set.count, inner, Math.max(outer, (inner ?? 0) + place.width));
     for (const [i, x] of slots.entries()) {
       const id = images[i] ?? null;
@@ -1090,7 +1134,7 @@ export class Backdrop {
       addRod(dark, new Vector3(x, battenY, z), new Vector3(x, battenY + 12, z), 0.006);
     }
     const cloths: { texture: ClothTexture; add: (list: Triangles) => void }[] = [];
-    const images = slotImages(set.count, set.images);
+    const images = slotImages(set.count, set.images, set.arrangement);
     for (const [i, x] of slots.entries()) {
       const id = images[i] ?? null;
       const aspect = this.#aspectOf(id, set.aspect, place.flagAspect);
@@ -1125,11 +1169,13 @@ export class Backdrop {
   /**
    * Builds the flagpole groups: a pole with staffs in pairs that lean out to each side, each with
    * a flag, as the third reference image of the dressing. The groups stand beside the back
-   * corners of the stage, and the right side mirrors the left side.
+   * corners of the stage. In a symmetrical order, the right side mirrors the left side (design
+   * 4.5, backdrop).
    *
    * @param side The stage side.
    * @param groups The number of groups.
    * @param images The flags of each group.
+   * @param arrangement The order of the flags on the groups.
    * @param screen True if the screen shows.
    * @param used The keys of the textures.
    */
@@ -1137,6 +1183,7 @@ export class Backdrop {
     side: number,
     groups: number,
     images: readonly string[],
+    arrangement: Arrangement,
     screen: boolean,
     used: Set<string>,
   ): void {
@@ -1161,6 +1208,7 @@ export class Backdrop {
     const planeZ = Math.min(...places.map(([, z]) => z)) - 0.3;
     const metal = new Triangles();
     const cloths: { texture: ClothTexture; add: (list: Triangles) => void }[] = [];
+    const order = places.map(([gx]) => gx).toSorted((a, b) => a - b);
     for (const [gx, gz, foot, poleHeight] of places) {
       const base = new Vector3(gx, foot, gz);
       const poleTop = foot + poleHeight;
@@ -1169,9 +1217,11 @@ export class Backdrop {
       }
       addRod(metal, base, new Vector3(gx, poleTop, gz), place.poleRadius);
       addKnob(metal, new Vector3(gx, poleTop + 0.06, gz), 0.07);
-      // The right group mirrors the left group, so the flag order runs from the outside in.
-      const mirrorGroup = gx > 0;
-      const count = images.length;
+      // In a symmetrical order, the right group mirrors the left group, so the flag order runs
+      // from the outside in.
+      const mirrorGroup = arrangement === 'mirror' && gx > 0;
+      const groupFlags = flagsOfGroup(images, arrangement, order.indexOf(gx), places.length);
+      const count = groupFlags.length;
       const pairs = Math.floor(count / 2);
       for (let k = 0; k < count; k++) {
         const odd = count % 2 === 1;
@@ -1181,7 +1231,7 @@ export class Backdrop {
         if (mirrorGroup) {
           leftSide = !leftSide;
         }
-        const id = images[k];
+        const id = groupFlags[k];
         if (!id) {
           continue;
         }

@@ -1470,17 +1470,24 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
 - **Flags.** Flagpole groups beside the back corners. Each staff leans out. The hall has no
   wind, so each flag hangs limp: gravity bends the cloth down toward the fly (`flags.droop`),
   with soft folds and a slow sway. A flag on the left of its staff shows its mirrored back. With
-  the screen, the middle group of an odd count stands on top of the screen frame.
+  the screen, the middle group of an odd count stands on top of the screen frame. Each group has
+  a staff for each flag (`flagsOfGroup()`).
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
   inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide
   shot shows no moire.
 
 The rules of the layout:
 
-- Each row is symmetrical (`rowSlots()`). When the pairs can show each image, the outer pair
-  shows the first image, the next pair the second image, and so on. Else the slots show the
-  images in their order from left to right, so each image shows (`slotImages()`). With the
-  screen, the two banner rows leave a gap for it. The hanging row has a wider gap, so the two rows do not stand in one line.
+- The places of each row are symmetrical (`rowSlots()`). The setting "Arrangement" of each
+  banner row and of the flags sets the order of the images (`ARRANGEMENTS`, `slotImages()`):
+  - **Symmetrical (ABCCBA).** When the pairs can show each image, the outer pair shows the first
+    image, the next pair the second image, and so on. Else the slots show the images in their
+    order from left to right, so each image shows. The right flag groups mirror the left groups.
+  - **Alternating (ABCABC).** The images repeat from left to right. Each flag group shows the
+    flags in the same order.
+  - **Grouped (AABBCC).** Each image fills a block of next slots. The flags run over the staffs of
+    all the groups from the left, so a group can show one flag on all its staffs.
+- With the screen, the two banner rows leave a gap for it. The hanging row has a wider gap, so the two rows do not stand in one line.
 - The wide shots look down on the stage from high in the hall (5.6). Thus the objects stand low and
   near the back edge, and the screen is just above the heads of the back row.
 - A banner of a user image keeps its aspect, or takes the aspect of the setting with a crop of the
