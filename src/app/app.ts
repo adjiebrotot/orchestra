@@ -23,6 +23,8 @@ import { RenderPanel } from '../ui/render-panel.ts';
 import { directedPlan } from '../shots/directed.ts';
 import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
+import { BackdropControl } from './backdrop-control.ts';
+import { effectTime } from '../scene/stage-scene.ts';
 import type { RenderFormat } from './render-formats.ts';
 import type { VideoRender } from './render-video.ts';
 import { songTimeAt } from '../audio/clock.ts';
@@ -394,6 +396,8 @@ export class App {
   readonly #director: Director;
   /** The panel of the MP4 render. */
   readonly #renderPanel: RenderPanel;
+  /** The stage dressing behind the stage and its panel (design 4.5, backdrop). */
+  readonly #backdrop: BackdropControl;
   /** The buttons at the top of the stage that open the director and the render. */
   readonly #studio: HTMLElement;
   /** The render that runs, or `null`. */
@@ -553,7 +557,14 @@ export class App {
           this.#clickPlay();
         }
       },
+      onScreenChange: (cues) => {
+        this.#backdrop.setScreenCues(cues);
+      },
     });
+    this.#backdrop = new BackdropControl((images) => {
+      this.#director.setScreenImages(images);
+    });
+    scene.setBackdrop(this.#backdrop.group);
     this.#renderPanel = new RenderPanel({
       onStart: (format) => {
         this.#startRender(format).catch((error: Error) => {
@@ -579,6 +590,19 @@ export class App {
       this.#director.setOpen(!this.#director.open);
       directorButton.setAttribute('aria-pressed', String(this.#director.open));
     });
+    const stageButton = document.createElement('button');
+    stageButton.className = 'studio-button';
+    stageButton.textContent = 'Stage design';
+    stageButton.addEventListener('click', () => {
+      const panel = this.#backdrop.panel;
+      panel.setOpen(!panel.open);
+      stageButton.setAttribute('aria-pressed', String(panel.open));
+    });
+    this.#backdrop.panel.element.addEventListener('click', (event) => {
+      if (event.target instanceof HTMLElement && event.target.closest('.director-close')) {
+        stageButton.setAttribute('aria-pressed', 'false');
+      }
+    });
     const renderButton = document.createElement('button');
     renderButton.className = 'studio-button is-accent';
     renderButton.textContent = 'Render MP4';
@@ -592,9 +616,14 @@ export class App {
         );
       }
     });
-    this.#studio.append(directorButton, renderButton);
+    this.#studio.append(directorButton, stageButton, renderButton);
     this.#studio.hidden = true;
-    document.body.append(this.#studio, this.#director.element, this.#renderPanel.element);
+    document.body.append(
+      this.#studio,
+      this.#director.element,
+      this.#backdrop.panel.element,
+      this.#renderPanel.element,
+    );
     // The renderer made its listener first, so it makes its own state again before the steps.
     canvas.addEventListener('webglcontextrestored', () => {
       this.#restoreScene();
@@ -726,6 +755,8 @@ export class App {
     piece.glow = seatSpans(score.notes, score.seats.length);
     piece.poses = createScenePose(plan);
     this.#scene.show(prepared);
+    // A new section size can change the stage side.
+    this.#backdrop.setStage(this.#scene.stageSide);
     // The player counts of the seat rows change with the section size (design 2.8).
     this.#showSeats(piece);
     this.#ui.seatList.update(piece.flags, piece.audible);
@@ -1231,6 +1262,8 @@ export class App {
     this.#showSeats(piece);
     this.#director.setPiece(this.#directorPiece(piece));
     this.#updateDirected(piece);
+    this.#backdrop.setStage(this.#scene.stageSide);
+    this.#backdrop.setScreenCues(this.#director.screenCues);
     // The button "Auto" of the section size names the size of the new piece (design 2.8).
     this.#applySettings();
     this.#loadAudio(piece);
@@ -1720,6 +1753,7 @@ export class App {
     });
     // The sheet of a phone covers the first screen, so the stage does not need to clear it.
     const ring = this.#phone.matches && drawer.open ? null : this.#ui.firstScreen.ringBox;
+    this.#backdrop.frame(this.#songTime, effectTime(performance.now(), this.#scene.reducedMotion));
     this.#scene.render(shot, cover, ring, poser);
     this.#director.update(this.#songTime);
     this.#followRender(wallTime);
@@ -1815,6 +1849,7 @@ export class App {
         !status.playing ||
         this.#studio.matches(':hover') ||
         this.#director.open ||
+        this.#backdrop.panel.open ||
         this.#renderPanel.open ||
         this.#render
       );
