@@ -31,6 +31,8 @@ import type {
 } from './backdrop-settings.ts';
 import { FLAG_ASPECT, drawFlag } from './country-flags.ts';
 import { HALL, HALL_LIGHT, hallUnit } from './hall.ts';
+import { STAGE_STYLES } from './stage-style.ts';
+import type { DressingStyle } from './stage-style.ts';
 
 /**
  * The places and the sizes of the stage dressing (design 4.5, backdrop), in meters, or in stage
@@ -104,14 +106,17 @@ export const BACKDROP = {
     /** The height step between two pairs of staffs on a pole. */
     pairStep: 1.1,
     /**
-     * The share of the turn of a flag from its first direction to straight down at its fly. The
-     * hall has no wind, so a flag hangs limp from its staff.
+     * The hang of a flag at the limpness 0 and at the limpness 1 (`FlagSettings.limpness`). The
+     * hall has no wind, so a flag hangs from its staff. `droop` is the share of the turn from the
+     * first direction of the cloth to straight down at its fly. `bend` is the power of the turn
+     * along the cloth: a small power turns the cloth down near the hoist, so the flag falls from
+     * its staff. `folds` gives the count of the gravity folds from the hoist to the fly and their
+     * depth in widths. `wave` is the sway at the fly, in meters: the slow drift of the air.
      */
-    droop: 0.8,
-    /** The gravity folds of a flag: their count from the hoist to the fly, and their depth in widths. */
-    folds: { count: 1.6, depth: 0.09 },
-    /** The sway of a flag at its fly, in meters: the slow drift of the air of the hall. */
-    wave: 0.05,
+    hang: {
+      stiff: { droop: 0.5, bend: 2.1, folds: 1.3, depth: 0.06, wave: 0.07 },
+      limp: { droop: 1, bend: 0.45, folds: 2.2, depth: 0.15, wave: 0.03 },
+    },
   },
   /** The screen behind the orchestra, above the heads of the back row. */
   screen: {
@@ -128,25 +133,14 @@ export const BACKDROP = {
     bezel: 0.12,
     /**
      * The light of a full white pixel, as a part of 1. A low value keeps the screen below the
-     * players and the lit stage, as an LED wall that a lighting designer dims for a concert.
+     * players and the lit stage, as an LED wall that a lighting designer dims for a concert. The
+     * stage style scales it (`DressingStyle.screenLevel`).
      */
     level: { led: 0.22, cloth: 0.17 },
     /** The LED dots across the width, which show only in a close shot. */
     ledColumns: 192,
   },
-  /**
-   * The light of the cloth, as a part of the baked light of the hall at the same place. A cloth
-   * near the stage gets more of the stage glow, as the hall walls do.
-   */
-  level: 0.5,
-  /** The sheen of a satin banner, and of a metal pole. */
-  sheen: { cloth: 0.08, metal: 0.55 },
   colors: {
-    metal: '#b9b6b0',
-    /** The batten, the rods, and the frame of the screen. */
-    dark: '#1b1714',
-    /** The wood of a banner rod. */
-    rod: '#5a3d26',
     /** The color under a transparent part of an image. */
     cloth: '#e9e4da',
   },
@@ -287,12 +281,45 @@ function addCloth(
   }
 }
 
+/** The hang of a flag at one limpness: a mix of the two ends of {@link BACKDROP}.flags.hang. */
+export interface FlagHang {
+  /** The share of the turn from the first direction to straight down at the fly. */
+  readonly droop: number;
+  /** The power of the turn along the cloth. A small power turns the cloth near the hoist. */
+  readonly bend: number;
+  /** The count of the gravity folds from the hoist to the fly. */
+  readonly folds: number;
+  /** The depth of the folds, in widths. */
+  readonly depth: number;
+  /** The sway at the fly, in meters. */
+  readonly wave: number;
+}
+
 /**
- * Adds a flag on a staff that hangs limp in the still air of the hall. The hoist runs down the
- * staff from its tip. The cloth leaves the staff at a right angle, and gravity bends it down toward
- * the floor more and more toward the fly ({@link BACKDROP}.flags.droop). Fabric shears easily, so
- * each row of the cloth takes the same bend. Soft folds that hang along the bend grow from the
- * hoist to the fly. The wave weight grows from the hoist to the fly.
+ * Gives the hang of a flag at a limpness (design 4.5, backdrop).
+ *
+ * @param limpness The limpness, from 0 to 1.
+ * @returns The mix of the stiff hang and the limp hang.
+ */
+export function flagHang(limpness: number): FlagHang {
+  const { stiff, limp } = BACKDROP.flags.hang;
+  const t = Math.min(1, Math.max(0, limpness));
+  const mix = (a: number, b: number): number => a + (b - a) * t;
+  return {
+    droop: mix(stiff.droop, limp.droop),
+    bend: mix(stiff.bend, limp.bend),
+    folds: mix(stiff.folds, limp.folds),
+    depth: mix(stiff.depth, limp.depth),
+    wave: mix(stiff.wave, limp.wave),
+  };
+}
+
+/**
+ * Adds a flag on a staff that hangs in the still air of the hall. The hoist runs down the staff
+ * from its tip. The cloth leaves the staff at a right angle, and gravity bends it down toward the
+ * floor more and more toward the fly ({@link FlagHang}). Fabric shears easily, so each row of the
+ * cloth takes the same bend. Soft folds that hang along the bend grow from the hoist to the fly.
+ * The wave weight grows from the hoist to the fly.
  *
  * @param list The triangles.
  * @param tip The tip of the staff.
@@ -301,6 +328,7 @@ function addCloth(
  * @param width The width, from the hoist to the fly.
  * @param height The height, along the staff.
  * @param mirror True to show the image mirrored, as the back of the flag.
+ * @param hang The hang of the flag.
  */
 function addFlag(
   list: Triangles,
@@ -310,10 +338,11 @@ function addFlag(
   width: number,
   height: number,
   mirror: boolean,
+  hang: FlagHang,
 ): void {
   const cols = 18;
   const rows = 10;
-  const { droop, folds } = BACKDROP.flags;
+  const { droop, bend } = hang;
   // The center line of the cloth from the hoist to the fly, in the plane x-y: each step turns a
   // part of the way from the first direction to straight down.
   const first = Math.atan2(out.y, out.x);
@@ -324,7 +353,7 @@ function addFlag(
   let y = 0;
   for (let i = 1; i <= cols; i++) {
     const f = (i - 0.5) / cols;
-    const angle = first + turn * droop * f ** 1.3;
+    const angle = first + turn * droop * f ** bend;
     x += (Math.cos(angle) * width) / cols;
     y += (Math.sin(angle) * width) / cols;
     line.push([x, y]);
@@ -336,7 +365,7 @@ function addFlag(
     const [lx, ly] = line[i] ?? [0, 0];
     // The folds run down the hanging cloth. A small slant with the height keeps them soft.
     const fold =
-      folds.depth * width * f ** 0.8 * Math.sin(Math.PI * 2 * folds.count * f + 0.6 + 1.1 * s);
+      hang.depth * width * f ** 0.8 * Math.sin(Math.PI * 2 * hang.folds * f + 0.6 + 1.1 * s);
     point.copy(tip).addScaledVector(along, s * height);
     point.x += lx;
     point.y += ly;
@@ -594,6 +623,7 @@ uniform float uUnit;
 uniform float uLevel;
 uniform float uSheen;
 uniform vec3 uSheenLight;
+uniform vec3 uSheenColor;
 uniform float uAmbient;
 uniform float uGlow;
 uniform float uReach;
@@ -618,7 +648,7 @@ void main() {
   vec3 albedo = mix(uBase, image.rgb, image.a) * uTint;
   vec3 h = normalize(normalize(uSheenLight - vWorld) + view);
   float sheen = uSheen * pow(max(dot(n, h), 0.0), 28.0);
-  gl_FragColor = vec4((albedo * light + sheen * vec3(1.0, 0.86, 0.68)) * uLevel, 1.0);
+  gl_FragColor = vec4((albedo * light + sheen * uSheenColor) * uLevel, 1.0);
   #include <colorspace_fragment>
 }
 `;
@@ -651,6 +681,7 @@ uniform vec2 uToFit;
 uniform float uMix;
 uniform float uLed;
 uniform float uLevel;
+uniform vec3 uTint;
 uniform vec2 uGrid;
 uniform float uUnit;
 uniform float uGlow;
@@ -664,7 +695,7 @@ vec3 fitted(sampler2D map, vec2 fit) {
   return color.rgb * color.a * inside.x * inside.y;
 }
 void main() {
-  vec3 image = mix(fitted(uFrom, uFromFit), fitted(uTo, uToFit), uMix);
+  vec3 image = mix(fitted(uFrom, uFromFit), fitted(uTo, uToFit), uMix) * uTint;
   vec3 color;
   if (uLed > 0.5) {
     vec2 cell = vUv * uGrid;
@@ -749,6 +780,8 @@ export class Backdrop {
   /** The keys of the textures of the last build. */
   #used = new Set<string>();
   #settings: BackdropSettings = DEFAULT_BACKDROP;
+  /** The look of the dressing in the stage style of the settings. */
+  #style: DressingStyle = STAGE_STYLES[DEFAULT_BACKDROP.style].dressing;
   #stageSide = 0;
   #screenCues: readonly ScreenCue[] = [];
   #screen: ShaderMaterial | null = null;
@@ -778,6 +811,7 @@ export class Backdrop {
   build(stageSide: number, settings: BackdropSettings): void {
     this.#stageSide = stageSide;
     this.#settings = settings;
+    this.#style = STAGE_STYLES[settings.style].dressing;
     this.#clear();
     if (stageSide <= 0) {
       return;
@@ -798,6 +832,7 @@ export class Backdrop {
         settings.flags.groups,
         settings.flags.images,
         settings.flags.arrangement,
+        flagHang(settings.flags.limpness),
         settings.screen.on,
         used,
       );
@@ -975,9 +1010,10 @@ export class Backdrop {
         uBase: { value: new Color(BACKDROP.colors.cloth) },
         uTint: { value: new Color(tint) },
         uUnit: { value: unit },
-        uLevel: { value: BACKDROP.level },
+        uLevel: { value: this.#style.level },
         uSheen: { value: sheen },
         uSheenLight: { value: new Vector3(...rimLightPlace(this.#stageSide)) },
+        uSheenColor: { value: new Vector3(...this.#style.sheenColor) },
         uAmbient: { value: HALL_LIGHT.ambient },
         uGlow: { value: HALL_LIGHT.glow },
         uReach: { value: HALL_LIGHT.glowReach * unit },
@@ -1038,7 +1074,7 @@ export class Backdrop {
     }
     const materials: ShaderMaterial[] = [];
     for (const [texture, { box, list }] of groups) {
-      const material = this.#material(planeZ, texture, box, '#ffffff', BACKDROP.sheen.cloth);
+      const material = this.#material(planeZ, texture, box, '#ffffff', this.#style.sheen.cloth);
       materials.push(material);
       this.#add(list, material, name);
     }
@@ -1103,7 +1139,7 @@ export class Backdrop {
     }
     this.#add(
       metal,
-      this.#material(z, null, FULL_BOX, BACKDROP.colors.metal, BACKDROP.sheen.metal),
+      this.#material(z, null, FULL_BOX, this.#style.metal, this.#style.sheen.metal),
       'standing-poles',
     );
     this.#addCloths(z, cloths, 'standing-banners');
@@ -1161,8 +1197,8 @@ export class Backdrop {
         });
       }
     }
-    this.#add(dark, this.#material(z, null, FULL_BOX, BACKDROP.colors.dark, 0.1), 'batten');
-    this.#add(rods, this.#material(z, null, FULL_BOX, BACKDROP.colors.rod, 0.2), 'banner-rods');
+    this.#add(dark, this.#material(z, null, FULL_BOX, this.#style.dark, 0.1), 'batten');
+    this.#add(rods, this.#material(z, null, FULL_BOX, this.#style.rod, 0.2), 'banner-rods');
     this.#addCloths(z, cloths, 'hanging-banners');
   }
 
@@ -1176,6 +1212,7 @@ export class Backdrop {
    * @param groups The number of groups.
    * @param images The flags of each group.
    * @param arrangement The order of the flags on the groups.
+   * @param hang The hang of the flags.
    * @param screen True if the screen shows.
    * @param used The keys of the textures.
    */
@@ -1184,6 +1221,7 @@ export class Backdrop {
     groups: number,
     images: readonly string[],
     arrangement: Arrangement,
+    hang: FlagHang,
     screen: boolean,
     used: Set<string>,
   ): void {
@@ -1265,7 +1303,7 @@ export class Backdrop {
           cloths.push({
             texture,
             add: (list) => {
-              addFlag(list, start, along, out, width, height, mirror);
+              addFlag(list, start, along, out, width, height, mirror, hang);
             },
           });
         }
@@ -1273,13 +1311,13 @@ export class Backdrop {
     }
     this.#add(
       metal,
-      this.#material(planeZ, null, FULL_BOX, BACKDROP.colors.metal, BACKDROP.sheen.metal),
+      this.#material(planeZ, null, FULL_BOX, this.#style.metal, this.#style.sheen.metal),
       'flag-poles',
     );
     for (const material of this.#addCloths(planeZ, cloths, 'flags')) {
       const wave = material.uniforms['uWave'];
       if (wave) {
-        wave.value = place.wave;
+        wave.value = hang.wave;
       }
       this.#waving.push(material);
     }
@@ -1338,7 +1376,7 @@ export class Backdrop {
     }
     this.#add(
       frame,
-      this.#material(z - 0.3, null, FULL_BOX, BACKDROP.colors.dark, 0.12),
+      this.#material(z - 0.3, null, FULL_BOX, this.#style.dark, 0.12),
       'screen-frame',
     );
     const surface = new Triangles();
@@ -1366,7 +1404,8 @@ export class Backdrop {
         uToFit: { value: new Vector2(1, 1) },
         uMix: { value: 1 },
         uLed: { value: led ? 1 : 0 },
-        uLevel: { value: led ? place.level.led : place.level.cloth },
+        uLevel: { value: (led ? place.level.led : place.level.cloth) * this.#style.screenLevel },
+        uTint: { value: new Vector3(...this.#style.screenTint) },
         uGrid: { value: new Vector2(place.ledColumns, Math.round((place.ledColumns * 9) / 16)) },
         uUnit: { value: unit },
         uGlow: { value: HALL_LIGHT.glow },

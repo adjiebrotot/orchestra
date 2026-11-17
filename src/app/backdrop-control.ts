@@ -4,6 +4,7 @@ import { Backdrop } from '../scene/backdrop.ts';
 import type { BackdropSettings, ScreenCue } from '../scene/backdrop-settings.ts';
 import { FLAG_ASPECT, drawFlag, flagName } from '../scene/country-flags.ts';
 import { StageText } from '../scene/stage-text.ts';
+import type { StageStyleId } from '../scene/stage-style.ts';
 import type { StageTextUniforms } from '../scene/stage-text.ts';
 import type { ScreenImage } from '../ui/director.ts';
 import { StagePanel } from '../ui/stage-panel.ts';
@@ -56,6 +57,7 @@ export class BackdropControl {
   readonly #uploads = new Map<string, Upload>();
   readonly #flagThumbs = new Map<string, string>();
   readonly #onScreenImages: (images: readonly ScreenImage[]) => void;
+  readonly #onStyle: (style: StageStyleId) => void;
   #settings: BackdropSettings;
   #stageSide = 0;
 
@@ -66,13 +68,18 @@ export class BackdropControl {
    *   not show, for the row "Screen" of the camera director.
    * @param stageText The uniforms of the stage text of the stage material (design 4.5, stage
    *   text).
+   * @param onStyle Gets the stage style of the settings at the start and after each change, for
+   *   the colors of the stage lights (design 4.5, stage style).
    */
   constructor(
     onScreenImages: (images: readonly ScreenImage[]) => void,
     stageText: StageTextUniforms,
+    onStyle: (style: StageStyleId) => void,
   ) {
     this.#onScreenImages = onScreenImages;
+    this.#onStyle = onStyle;
     this.#settings = loadBackdropSettings();
+    onStyle(this.#settings.style);
     this.#stageText = new StageText(stageText);
     this.#stageText.set(this.#settings.text);
     this.#backdrop = new Backdrop({
@@ -140,7 +147,10 @@ export class BackdropControl {
     saveBackdropSettings(settings);
     this.#stageText.set(settings.text);
     // A change of the stage text alone builds no object again, so each key of the text is fast.
-    const dressing = ['standing', 'hanging', 'flags', 'screen'] as const;
+    const dressing = ['style', 'standing', 'hanging', 'flags', 'screen'] as const;
+    if (settings.style !== old.style) {
+      this.#onStyle(settings.style);
+    }
     if (dressing.some((key) => settings[key] !== old[key])) {
       this.#backdrop.build(this.#stageSide, settings);
       this.#tellScreen();
@@ -241,11 +251,11 @@ export class BackdropControl {
     const without = (images: readonly string[]): readonly string[] =>
       images.filter((image) => image !== id);
     this.#apply({
+      ...s,
       standing: { ...s.standing, images: without(s.standing.images) },
       hanging: { ...s.hanging, images: without(s.hanging.images) },
       flags: { ...s.flags, images: without(s.flags.images) },
       screen: { ...s.screen, images: without(s.screen.images) },
-      text: s.text,
     });
     this.panel.setSettings(this.#settings);
     await deleteImage(id);

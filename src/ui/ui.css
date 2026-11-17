@@ -2992,3 +2992,23 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
     padding-top: 0;
   }
 }
+
+.stage-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stage-slider input {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-slider-value {
+  min-width: 44px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  text-align: right;
+}

@@ -17,6 +17,7 @@ import type {
   StageTextSettings,
 } from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
+import { STAGE_STYLE_OPTIONS } from '../scene/stage-style.ts';
 import { createButton, createElement } from './dom.ts';
 
 /** An image that the panel can show: its id, its name, and a small picture. */
@@ -137,6 +138,7 @@ export class StagePanel {
     const s = this.#settings;
     const scroll = this.#body.scrollTop;
     this.#body.replaceChildren(
+      this.#styleSection(),
       this.#textSection(),
       this.#bannerSection(
         'standing',
@@ -150,7 +152,7 @@ export class StagePanel {
       ),
       this.#section(
         'Flags',
-        'Flagpole groups beside the back corners. Each group carries all the flags.',
+        'Flagpole groups beside the back corners. Each group carries all the flags. A higher limpness lets each flag fall from its staff in deeper folds.',
         s.flags.on,
         (on) => {
           this.#change({ ...this.#settings, flags: { ...s.flags, on } });
@@ -166,6 +168,16 @@ export class StagePanel {
             'Arrangement',
             this.#select(ARRANGEMENTS, s.flags.arrangement, (arrangement) => {
               this.#change({ ...this.#settings, flags: { ...s.flags, arrangement } });
+            }),
+          ),
+          this.#row(
+            'Limpness',
+            this.#slider('Limpness of the flags', s.flags.limpness, (limpness) => {
+              this.#settings = {
+                ...this.#settings,
+                flags: { ...this.#settings.flags, limpness },
+              };
+              this.#actions.onChange(this.#settings);
             }),
           ),
           this.#row('Flags', this.#images('flags')),
@@ -191,6 +203,31 @@ export class StagePanel {
       this.#uploadsSection(),
     );
     this.#body.scrollTop = scroll;
+  }
+
+  /**
+   * Creates the section of the stage style: a menu that sets the look of the poles, the rods,
+   * the cloth, and the screen, and the colors of the stage lights (design 4.5, stage style).
+   *
+   * @returns The section.
+   */
+  #styleSection(): HTMLElement {
+    const section = createElement('div', 'stage-section');
+    section.append(
+      createElement('div', 'stage-section-head', 'Stage style'),
+      createElement(
+        'p',
+        'render-hint',
+        'Sets the look of the banners, the flags, and the screen, and the color of the stage lights.',
+      ),
+      this.#row(
+        'Style',
+        this.#select(STAGE_STYLE_OPTIONS, this.#settings.style, (style) => {
+          this.#change({ ...this.#settings, style });
+        }),
+      ),
+    );
+    return section;
   }
 
   /**
@@ -389,6 +426,33 @@ export class StagePanel {
     });
     more.setAttribute('aria-label', 'More');
     box.append(less, input, more);
+    return box;
+  }
+
+  /**
+   * Creates a slider of a share from 0 to 1, with its value in percent. Each move applies at
+   * once. The panel does not write its controls again, so the drag goes on.
+   *
+   * @param label The name of the slider, for a screen reader.
+   * @param value The share.
+   * @param onSet The action of a new share.
+   * @returns The slider and its value.
+   */
+  #slider(label: string, value: number, onSet: (value: number) => void): HTMLElement {
+    const box = createElement('div', 'stage-slider');
+    const input = createElement('input');
+    input.type = 'range';
+    input.min = '0';
+    input.max = '100';
+    input.step = '1';
+    input.value = String(Math.round(value * 100));
+    input.setAttribute('aria-label', label);
+    const text = createElement('span', 'stage-slider-value', `${input.value} %`);
+    input.addEventListener('input', () => {
+      text.textContent = `${input.value} %`;
+      onSet(Number(input.value) / 100);
+    });
+    box.append(input, text);
     return box;
   }
 

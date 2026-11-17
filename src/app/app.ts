@@ -24,6 +24,7 @@ import { directedPlan } from '../shots/directed.ts';
 import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
 import { BackdropControl } from './backdrop-control.ts';
+import { STAGE_STYLES } from '../scene/stage-style.ts';
 import { effectTime } from '../scene/stage-scene.ts';
 import type { RenderFormat, RenderOptions } from './render-formats.ts';
 import { drawTitleCard, pageFonts } from './render-titles.ts';
@@ -616,9 +617,15 @@ export class App {
         this.#backdrop.setScreenCues(cues);
       },
     });
-    this.#backdrop = new BackdropControl((images) => {
-      this.#director.setScreenImages(images);
-    }, scene.stageText);
+    this.#backdrop = new BackdropControl(
+      (images) => {
+        this.#director.setScreenImages(images);
+      },
+      scene.stageText,
+      (style) => {
+        scene.setLightStyle(STAGE_STYLES[style].light);
+      },
+    );
     scene.setBackdrop(this.#backdrop.group);
     this.#renderPanel = new RenderPanel({
       onStart: (format, options) => {

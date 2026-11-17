@@ -1,3 +1,6 @@
+import { STAGE_STYLE_OPTIONS } from './stage-style.ts';
+import type { StageStyleId } from './stage-style.ts';
+
 /**
  * The settings of the stage dressing behind the stage (design 4.5, backdrop): the standing
  * banners, the hanging banners, the flags, and the screen. An image of a setting is an id: a
@@ -76,6 +79,11 @@ export interface FlagSettings {
   readonly groups: number;
   /** The order of the flags on the groups. */
   readonly arrangement: Arrangement;
+  /**
+   * How limp each flag hangs, from 0 to 1: 0 holds the cloth out from its staff, and 1 lets it
+   * fall from the hoist and hang down in deep folds (`flagHang()` of `backdrop.ts`).
+   */
+  readonly limpness: number;
   /** The flags of each group, from the left of the left groups. */
   readonly images: readonly string[];
 }
@@ -147,6 +155,8 @@ export interface StageTextSettings {
 
 /** All the stage dressing. */
 export interface BackdropSettings {
+  /** The stage style: the look of the dressing and the colors of the stage lights. */
+  readonly style: StageStyleId;
   readonly standing: BannerSettings;
   readonly hanging: BannerSettings;
   readonly flags: FlagSettings;
@@ -169,6 +179,7 @@ export const BACKDROP_LIMITS = {
 
 /** The settings of a new user: each object is on, with country flags. */
 export const DEFAULT_BACKDROP: BackdropSettings = {
+  style: 'classic',
   standing: {
     on: true,
     count: 4,
@@ -189,6 +200,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     on: true,
     groups: 2,
     arrangement: 'mirror',
+    limpness: 0.8,
     images: ['flag:id', 'flag:jp'],
   },
   screen: {
@@ -273,6 +285,17 @@ function readCount(value: Json | undefined, min: number, max: number, fallback: 
 }
 
 /**
+ * Reads a share from 0 to 1, or gives the fallback.
+ *
+ * @param value A value of JSON.
+ * @param fallback The value for a missing or a bad value.
+ * @returns The share.
+ */
+function readShare(value: Json | undefined, fallback: number): number {
+  return isNumber(value) ? Math.min(1, Math.max(0, value)) : fallback;
+}
+
+/**
  * Reads a list of image ids, or gives the fallback.
  *
  * @param value A value of JSON.
@@ -340,12 +363,14 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const text = isRecord(data['text']) ? data['text'] : {};
   const base = DEFAULT_BACKDROP;
   return {
+    style: readOption(data['style'], STAGE_STYLE_OPTIONS, base.style),
     standing: readBanners(data['standing'], base.standing, BACKDROP_LIMITS.standing),
     hanging: readBanners(data['hanging'], base.hanging, BACKDROP_LIMITS.hanging),
     flags: {
       on: isBoolean(flags['on']) ? flags['on'] : base.flags.on,
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
       arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
+      limpness: readShare(flags['limpness'], base.flags.limpness),
       images: readImages(flags['images'], base.flags.images).slice(0, BACKDROP_LIMITS.flags),
     },
     screen: {

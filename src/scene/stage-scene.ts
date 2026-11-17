@@ -65,6 +65,7 @@ import {
   aimRimLights,
   fitKeyShadow,
   createLights,
+  styleLights,
   keyLightPosition,
   keyShadowView,
   setLightsTier,
@@ -104,6 +105,8 @@ import type { StageBakeUniforms } from './stage.ts';
 import { bakeStageSteps } from './stage-bake.ts';
 import { compileInto, gpuDoneSteps, programsReadySteps } from './programs.ts';
 import { depthGeometryOf } from './shared-corners.ts';
+import { STAGE_STYLES } from './stage-style.ts';
+import type { LightStyle } from './stage-style.ts';
 
 /**
  * Gives the strength of the vignette of a frame (design 4.5, post effects). A close shot gets the
@@ -540,6 +543,8 @@ export class StageScene {
   #blendCamera = false;
   /** The stage dressing (design 4.5, backdrop), which the hall of the shown layout holds. */
   #backdrop: Group | null = null;
+  /** The colors of the stage lights of the stage style (design 4.5, stage style). */
+  #lightStyle: LightStyle = STAGE_STYLES.classic.light;
   /**
    * The uniforms of the stage text (design 4.5, stage text). The stage of each layout shares
    * them, so a new text shows at once on the shown stage.
@@ -632,6 +637,8 @@ export class StageScene {
     scene.add(stageGroup);
     yield;
     const lights = createLights(layout.stageSide, this.#tier, layout.conductor);
+    // The bake and the capture of the environment then see the lights of the stage style.
+    styleLights(lights, this.#lightStyle);
     scene.add(lights);
     setRimLights(this.#rim, lights);
     yield;
@@ -750,6 +757,22 @@ export class StageScene {
     this.#backdrop = group;
     if (group && this.#view) {
       this.#view.hall.add(group);
+    }
+  }
+
+  /**
+   * Sets the colors of the stage lights of a stage style (design 4.5, stage style). The shown
+   * layout changes at once. Its bake and its captured environment keep the lights of its build
+   * until the next build.
+   *
+   * @param style The colors of the style.
+   */
+  setLightStyle(style: LightStyle): void {
+    this.#lightStyle = style;
+    const view = this.#view;
+    if (view) {
+      styleLights(view.lights, style);
+      setRimLights(this.#rim, view.lights);
     }
   }
 
@@ -1407,7 +1430,7 @@ export class StageScene {
     const rig = shotRig(camera.position.toArray(), view.camera.target, camera.fov, spot);
     setShotLight(this.#shot, rig, light, spot);
     const stops = SHOT_LOOK.exposure * light * rig.shade;
-    this.#renderer.toneMappingExposure = this.#exposure * 2 ** stops;
+    this.#renderer.toneMappingExposure = this.#exposure * 2 ** (stops + this.#lightStyle.exposure);
   }
 
   /**
