@@ -381,9 +381,11 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
     buttons "Mute" and "Solo" ("Mute {name}", "Solo {name}"). Only a screen reader reads the source
     line. The dot is small and faint while its seat is silent, and full with a soft glow while it
     plays (`seatLevels()`). A dark fur gets a lighter glow that keeps 3:1 (`ringColor()`).
-  - **Settings**: "Section size" (Auto, One per part, Full), "Quality" (Auto, High, Medium, Low),
-    and "Frame rate" (Auto, 60 fps, 30 fps). "Auto" names its current value, such as "Auto
-    (Full)". `SETTING_HELP` gives the help lines. A counter beside "Frame rate" shows the drawn
+  - **Settings**: "Section size" (Auto, One per part, Full), the checkbox "No pig", "Quality"
+    (Auto, High, Medium, Low), and "Frame rate" (Auto, 60 fps, 30 fps). "Auto" names its current
+    value, such as "Auto (Full)". `SETTING_HELP` gives the help lines. "No pig" builds the scene
+    again with no pig on the stage (4.3), and the local storage keeps it. Reason: a pig on the
+    stage can offend the audience of some pieces, such as a national anthem. A counter beside "Frame rate" shows the drawn
     rate (`measuredFrameRate()`).
   - **Credits**: the link "Credits" is a `button` with `aria-haspopup="dialog"`, because it opens a
     native `<dialog>` and goes to no page. The dialog has the layout of the end credits of a film:
