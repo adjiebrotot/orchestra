@@ -27,6 +27,18 @@ Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqia
   plays the piece with the cinematic camera. The cues of each piece stay in your browser, and
   **Export** / **Import** save and load them as JSON (`src/shots/directed.ts`,
   `src/ui/director.ts`).
+- **Stage design.** Click **Stage design** at the top of the stage to dress the back of the stage.
+  Each object has a switch, and each starts with country flags:
+  - **Standing banners** and **Hanging banners:** the number (the row stays symmetrical), the
+    shape (pointed, swallowtail, straight, curved point, or rounded), the aspect ratio (it follows
+    the image by default), and the images.
+  - **Flags:** the number of flagpole groups, and the flags of each group.
+  - **Screen:** an LED screen or a cloth with a projection, and its images. In the Camera director,
+    click the **Screen** row at a time (or use **+ Screen cue at playhead**) to change the screen
+    image there, with a fade or a cut.
+
+  Upload your own images, or pick a built-in country flag. The settings and the images stay in your
+  browser (`src/scene/backdrop.ts`, `src/ui/stage-panel.ts`).
 - **Render MP4.** Click **Render MP4**, choose a format (1080p at 30 or 60 fps, 720p, or
   ultrawide 21:9), and click **Render**. The piece plays once from the start with the cinematic camera (your
   camera path when it is on), and the page encodes the canvas and the audio with WebCodecs into an

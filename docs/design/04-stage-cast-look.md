@@ -1456,6 +1456,43 @@ there floated above the orchestra and near the title of the first screen (2.8). 
 soft glow disc. The shell and the floor hold a baked light, because lights cost GPU time on large
 surfaces.
 
+**Backdrop**
+
+The stage dressing behind the stage (`Backdrop` of `scene/backdrop.ts`, `BACKDROP`) has four
+objects. The panel "Stage design" turns each one on or off (`ui/stage-panel.ts`). The defaults
+show country flags, which `scene/country-flags.ts` draws on a canvas at any aspect.
+
+- **Standing banners.** Chrome poles on round bases, each with a cross bar and a banner.
+- **Hanging banners.** Banners on wooden rods below a dark batten.
+- **Flags.** Flagpole groups beside the back corners. Each staff leans out, and each flag hangs
+  from its staff with a slow wave. A flag on the left of its staff shows its mirrored back. With
+  the screen, the middle group of an odd count stands on top of the screen frame.
+- **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
+  inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide
+  shot shows no moire.
+
+The rules of the layout:
+
+- Each row is symmetrical (`rowSlots()`). The outer pair shows the first image, the next pair the
+  second image, and so on (`slotImages()`). With the screen, the two banner rows leave a gap for
+  it. The hanging row has a wider gap, so the two rows do not stand in one line.
+- The wide shots look down on the stage from high in the hall (5.6). Thus the objects stand low and
+  near the back edge, and the screen is just above the heads of the back row.
+- A banner of a user image keeps its aspect, or takes the aspect of the setting with a crop of the
+  middle (`coverBox()`). A built-in flag draws again at the aspect of the banner.
+- The objects take no light and cast no shadow, as the hall. Each cloth takes the baked light of
+  the hall at its place (`hallLight()`), times `BACKDROP.level`, so the lit players stay the
+  brightest part of the frame. The screen light is low (`BACKDROP.screen.level`) for the same
+  reason.
+- The group lives in the hall group of the shown layout. Thus the depth of field reads its depth,
+  and the depth pass of the beam skips it. A camera behind an object sees nothing of it.
+- The screen cues of a piece change the screen image over time (`screenFrame()`). The camera
+  director keeps them with the camera cues of the piece, and shows them in its row "Screen". A
+  cue fades over `SCREEN_FADE_SEC`, or cuts. Before the first cue, the screen shows the first image
+  of its list.
+- The settings stay in the local storage. The images of the user stay in IndexedDB, at most
+  `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). No image leaves the browser (2.7).
+
 **Post effects**
 
 The scene renders into a target with MSAA, then the post effects make the image of the canvas
