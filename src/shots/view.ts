@@ -272,15 +272,16 @@ export function farPlane(distance: number, stageSide: number): number {
  * The largest growth of the vertical field of view of a shot in a frame that is narrower than
  * 21:9, for each kind of shot (design 2.5, render): the factor of the tangent of the half angle.
  * The open matte keeps the horizontal angle of the 21:9 shot, but in a vertical video of 9:16 it
- * needs a factor of 4.15, and a close subject became a small figure in the middle of the floor and
- * the hall. Thus a close shot grows less and keeps the middle of its width, where its camera looks
- * at the subject. A wide and a high shot keep the full width, so no player leaves the frame. Each
- * factor is at least 1.31, the factor of a 16:9 video, so a 16:9 video keeps the full width of
- * each shot.
+ * needs a factor of 4.15: the field of view became 96°, and the orchestra of a wide shot filled
+ * about a tenth of the height, between a large hall and a dark floor. A wide shot shows the stage
+ * in about the middle quarter of its 21:9 width, so a wide and a high shot keep about the middle
+ * half of the width of a 9:16 frame and all the width of a 4:5 frame. A close shot grows less and
+ * keeps the middle of its width, where `thirdShareOf()` puts its subject. Each factor is at least
+ * 1.31, the factor of a 16:9 video, so a 16:9 video keeps the full width of each shot.
  */
 export const MATTE_GROW = {
-  wide: Number.POSITIVE_INFINITY,
-  high: Number.POSITIVE_INFINITY,
+  wide: 2.2,
+  high: 2.2,
   // The conductor shot frames the bear and the podium.
   conductor: 1.7,
   // A side shot shows a large part of the orchestra.

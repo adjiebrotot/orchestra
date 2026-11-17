@@ -171,8 +171,9 @@ page starts in Free mode (`app/camera-mode.ts`).
 - **Vertical render.** The formats 9:16 and 4:5 are for Reels, Shorts, and the feed of Instagram.
   The open matte of a 9:16 frame needs a factor of 4.15 on the tangent of the half angle, and a
   close subject became a small figure. Thus the growth stops at a factor for each kind of shot
-  (`MATTE_GROW`). A wide and a high shot keep the full width, so no player leaves the frame. A
-  close shot keeps the middle of its width, and a frame narrower than `VERTICAL_FRAME.aspect`
+  (`MATTE_GROW`). A wide shot shows the stage in about the middle quarter of its 21:9 width, so a
+  wide and a high shot keep about the middle half of a 9:16 frame, and the whole stage stays in
+  the frame. A close shot keeps the middle of its width, and a frame narrower than `VERTICAL_FRAME.aspect`
   puts its subject in the middle of the width in place of on a third line (`thirdShareOf()`).
   The eyes keep the upper third line. Each factor is at least the factor of 16:9, so a 16:9
   video keeps the full width.
