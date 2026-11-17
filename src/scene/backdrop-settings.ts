@@ -30,6 +30,19 @@ export const BANNER_ASPECTS: readonly (readonly [number, string])[] = [
   [4, '1 : 4'],
 ];
 
+/**
+ * The order of the images on a row of banners or on the flagpoles: symmetrical from the outside
+ * in (ABCCBA), alternating (ABCABC), or grouped (AABBCC).
+ */
+export type Arrangement = 'mirror' | 'repeat' | 'group';
+
+/** The arrangements, in the order of the menu, with their labels. */
+export const ARRANGEMENTS: readonly (readonly [Arrangement, string])[] = [
+  ['mirror', 'Symmetrical (ABCCBA)'],
+  ['repeat', 'Alternating (ABCABC)'],
+  ['group', 'Grouped (AABBCC)'],
+];
+
 /** The material of the screen: an LED wall that gives light, or a cloth with a projection. */
 export type ScreenMaterial = 'led' | 'cloth';
 
@@ -47,9 +60,11 @@ export interface BannerSettings {
   readonly cut: BannerCut;
   /** The height over the width, or 0 to follow the image. */
   readonly aspect: number;
+  /** The order of the images on the row. */
+  readonly arrangement: Arrangement;
   /**
-   * The images, from the outside in: the two outer banners show the first image, the next two
-   * the second, and so on. Thus the row stays symmetrical.
+   * The images. In a symmetrical row, the two outer banners show the first image, the next two
+   * the second, and so on. Else the images run from left to right.
    */
   readonly images: readonly string[];
 }
@@ -59,6 +74,8 @@ export interface FlagSettings {
   readonly on: boolean;
   /** The number of flagpole groups. */
   readonly groups: number;
+  /** The order of the flags on the groups. */
+  readonly arrangement: Arrangement;
   /** The flags of each group, from the left of the left groups. */
   readonly images: readonly string[];
 }
@@ -141,6 +158,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     count: 4,
     cut: 'point',
     aspect: 0,
+    arrangement: 'mirror',
     images: ['flag:id'],
   },
   hanging: {
@@ -148,11 +166,13 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     count: 6,
     cut: 'swallowtail',
     aspect: 0,
+    arrangement: 'mirror',
     images: ['flag:id', 'flag:jp', 'flag:gb'],
   },
   flags: {
     on: true,
     groups: 2,
+    arrangement: 'mirror',
     images: ['flag:id', 'flag:jp'],
   },
   screen: {
@@ -285,6 +305,7 @@ function readBanners(
     count: readCount(data['count'], 1, max, fallback.count),
     cut: readOption(data['cut'], BANNER_CUTS, fallback.cut),
     aspect: readOption(data['aspect'], BANNER_ASPECTS, fallback.aspect),
+    arrangement: readOption(data['arrangement'], ARRANGEMENTS, fallback.arrangement),
     images: readImages(data['images'], fallback.images),
   };
 }
@@ -308,6 +329,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
     flags: {
       on: isBoolean(flags['on']) ? flags['on'] : base.flags.on,
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
+      arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
       images: readImages(flags['images'], base.flags.images).slice(0, BACKDROP_LIMITS.flags),
     },
     screen: {

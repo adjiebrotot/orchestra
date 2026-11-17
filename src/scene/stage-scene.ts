@@ -56,7 +56,7 @@ import { createHall, setHallCamera } from './hall.ts';
 import { BeamDepth, setBeamFrame } from './beam.ts';
 import { setBodyMapScale } from './body-texture.ts';
 import { letterbox, mixBox, uvRectOf } from './letterbox.ts';
-import type { UvRect } from './letterbox.ts';
+import type { FrameBox, UvRect } from './letterbox.ts';
 import { blendFocus, blendShare, mix, modeBlendWeight } from './mode-blend.ts';
 import { boneSpheres, fitPoseSphere } from './bounds.ts';
 import type { BoneSpheres } from './bounds.ts';
@@ -514,6 +514,8 @@ export class StageScene {
    */
   readonly #compileTarget = new WebGLRenderTarget(1, 1);
   #width = 1;
+  /** The aspect of the frame of Cinematic mode (design 2.5, render). */
+  #frameAspect = CINEMA_ASPECT;
   #height = 1;
   #devicePixelRatio = 1;
   /** The focus distance of the last frame, in meters, or `null` before the first frame. */
@@ -655,6 +657,7 @@ export class StageScene {
       playersTop(layout, models),
     );
     pending.camera = camera;
+    camera.setFrameAspect(this.#frameAspect);
     camera.resize(this.#width, this.#height);
     yield;
     const stage = stageGroup.children.find((child) => child instanceof Mesh);
@@ -711,6 +714,7 @@ export class StageScene {
    */
   show(prepared: PreparedLayout): void {
     const { view, aim } = prepared;
+    view.camera.setFrameAspect(this.#frameAspect);
     view.camera.resize(this.#width, this.#height);
     // A change of the tier during the build changed only the lights of the shown layout.
     setLightsTier(view.lights, this.#tier);
@@ -1103,7 +1107,7 @@ export class StageScene {
    * the bar of the controls to the middle of the window.
    */
   get letterboxBar(): number {
-    return this.#barSize(this.#height, letterbox(this.#width, this.#height).height);
+    return this.#barSize(this.#height, this.#frame().height);
   }
 
   /**
@@ -1111,7 +1115,27 @@ export class StageScene {
    * mode and on a canvas narrower than 21:9. It has the source of {@link StageScene.letterboxBar}.
    */
   get letterboxSide(): number {
-    return this.#barSize(this.#width, letterbox(this.#width, this.#height).width);
+    return this.#barSize(this.#width, this.#frame().width);
+  }
+
+  /**
+   * Sets the aspect of the frame of Cinematic mode (design 2.5, render): `CINEMA_ASPECT`, or the
+   * aspect of the video of a full-frame render, which then has no bars.
+   *
+   * @param aspect The aspect of the frame.
+   */
+  setFrameAspect(aspect: number): void {
+    this.#frameAspect = aspect;
+    this.#view?.camera.setFrameAspect(aspect);
+  }
+
+  /**
+   * Gives the frame of Cinematic mode on the canvas.
+   *
+   * @returns The box, in CSS pixels.
+   */
+  #frame(): FrameBox {
+    return letterbox(this.#width, this.#height, this.#frameAspect);
   }
 
   /**
@@ -1188,7 +1212,7 @@ export class StageScene {
 
     const width = this.#width;
     const height = this.#height;
-    const frame = letterbox(width, height);
+    const frame = this.#frame();
     const visible = mixBox({ x: width / 2, y: height / 2, width, height }, frame, share);
     return {
       rect: uvRectOf(visible, width, height),
@@ -1452,7 +1476,7 @@ export class StageScene {
     const target = view.camera.target;
     let focus: Focus;
     if (shot) {
-      const focusView = { position, target, fov: camera.fov, aspect: CINEMA_ASPECT };
+      const focusView = { position, target, fov: camera.fov, aspect: this.#frameAspect };
       const detail = shot.detail ?? false;
       const to = heroDepth(view, focusView, shot.hero ?? null, detail);
       const from = heroDepth(view, focusView, shot.heroFrom ?? shot.hero ?? null, detail);

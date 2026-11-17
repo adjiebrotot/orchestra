@@ -1,4 +1,5 @@
 import {
+  ARRANGEMENTS,
   BACKDROP_LIMITS,
   BANNER_ASPECTS,
   BANNER_CUTS,
@@ -160,6 +161,12 @@ export class StagePanel {
               this.#change({ ...this.#settings, flags: { ...s.flags, groups } });
             }),
           ),
+          this.#row(
+            'Arrangement',
+            this.#select(ARRANGEMENTS, s.flags.arrangement, (arrangement) => {
+              this.#change({ ...this.#settings, flags: { ...s.flags, arrangement } });
+            }),
+          ),
           this.#row('Flags', this.#images('flags')),
         ],
       ),
@@ -278,6 +285,12 @@ export class StagePanel {
           'Aspect ratio',
           this.#select(BANNER_ASPECTS, set.aspect, (aspect) => {
             update({ aspect });
+          }),
+        ),
+        this.#row(
+          'Arrangement',
+          this.#select(ARRANGEMENTS, set.arrangement, (arrangement) => {
+            update({ arrangement });
           }),
         ),
         this.#row('Images', this.#images(key)),

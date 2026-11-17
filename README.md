@@ -45,7 +45,8 @@ Orchestra is based on [Pawchestra](https://github.com/qiao/pawchestra) by Xueqia
   Upload your own images, or pick a built-in country flag. The settings and the images stay in your
   browser (`src/scene/backdrop.ts`, `src/ui/stage-panel.ts`).
 - **Render MP4.** Click **Render MP4**, choose a format (1080p at 30 or 60 fps, 720p, or
-  ultrawide 21:9), and click **Render**. The piece plays once from the start with the cinematic camera (your
+  ultrawide 21:9), and click **Render**. A 16:9 format is full frame, or keeps the 21:9 film with
+  black bars. The piece plays once from the start with the cinematic camera (your
   camera path when it is on), and the page encodes the canvas and the audio with WebCodecs into an
   MP4 file (H.264 or VP9/AV1 video, AAC or Opus audio, whichever the browser can encode). Keep the
   tab visible: the render runs in real time. The file downloads at the end
