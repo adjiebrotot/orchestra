@@ -776,9 +776,9 @@ export class Director {
     context.fillRect(LABEL_PX, 0, songWidth, RULER_PX);
     for (let t = 0; t <= duration; t += step) {
       const x = this.#timeX(t);
-      context.fillStyle = 'rgba(255, 240, 220, 0.18)';
+      context.fillStyle = 'rgba(141, 187, 255, 0.25)';
       context.fillRect(x, RULER_PX - 6, 1, height);
-      context.fillStyle = '#b5aa99';
+      context.fillStyle = '#a8b6cf';
       context.fillText(cueTime(t).replace(/\.0$/u, ''), x + 3, 8);
     }
     // The row of the screen, with a block for each image from its cue to the next cue.
@@ -792,10 +792,10 @@ export class Director {
       rowOf.set(row.seatIndex, i);
       const y = top + i * ROW_PX;
       if (i % 2 === 0) {
-        context.fillStyle = 'rgba(255, 240, 220, 0.035)';
+        context.fillStyle = 'rgba(141, 187, 255, 0.05)';
         context.fillRect(0, y, LABEL_PX + songWidth, ROW_PX);
       }
-      context.fillStyle = row.onStage ? '#efe8dc' : '#857b6d';
+      context.fillStyle = row.onStage ? '#eaf1ff' : '#6b7a96';
       context.fillText(row.name, 6, y + ROW_PX / 2, LABEL_PX - 10);
     }
     for (const note of piece.notes) {
@@ -812,7 +812,7 @@ export class Director {
     // The cues: a line over all rows, and the name of the focus in the cue track.
     for (const cue of this.#cues) {
       const x = this.#timeX(cue.timeSec);
-      context.fillStyle = '#e7b45a';
+      context.fillStyle = '#ffd28c';
       context.fillRect(x - 1, RULER_PX - 8, 2, height);
       const seat = focusSeat(cue.focus);
       const i = seat === null ? undefined : rowOf.get(seat);
