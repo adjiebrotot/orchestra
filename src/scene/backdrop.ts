@@ -497,16 +497,19 @@ export function rowSlots(count: number, inner: number | null, outer: number): nu
 }
 
 /**
- * Gives the image of each slot of a row: the outer pair shows the first image, the next pair the
- * second, and so on, so the row stays symmetrical.
+ * Gives the image of each slot of a row. When the pairs of the row can show each image, the outer
+ * pair shows the first image, the next pair the second, and so on, so the row stays symmetrical.
+ * Else the slots show the images in their order from left to right, so each image shows.
  *
  * @param count The number of slots.
  * @param images The images.
  * @returns The image of each slot, or `null` with no image.
  */
 export function slotImages(count: number, images: readonly string[]): (string | null)[] {
+  const pairs = Math.ceil(count / 2);
+  const mirror = images.length <= pairs;
   return Array.from({ length: count }, (_, i) => {
-    const rank = Math.min(i, count - 1 - i);
+    const rank = mirror ? Math.min(i, count - 1 - i) : i;
     return images.length === 0 ? null : (images[rank % images.length] ?? null);
   });
 }

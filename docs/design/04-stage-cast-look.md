@@ -1477,9 +1477,10 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
 
 The rules of the layout:
 
-- Each row is symmetrical (`rowSlots()`). The outer pair shows the first image, the next pair the
-  second image, and so on (`slotImages()`). With the screen, the two banner rows leave a gap for
-  it. The hanging row has a wider gap, so the two rows do not stand in one line.
+- Each row is symmetrical (`rowSlots()`). When the pairs can show each image, the outer pair
+  shows the first image, the next pair the second image, and so on. Else the slots show the
+  images in their order from left to right, so each image shows (`slotImages()`). With the
+  screen, the two banner rows leave a gap for it. The hanging row has a wider gap, so the two rows do not stand in one line.
 - The wide shots look down on the stage from high in the hall (5.6). Thus the objects stand low and
   near the back edge, and the screen is just above the heads of the back row.
 - A banner of a user image keeps its aspect, or takes the aspect of the setting with a crop of the
