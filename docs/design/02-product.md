@@ -291,13 +291,13 @@ The page `/privacy` (7.4) gives these facts to the visitors, from `PRIVACY` of
 The prototype [`prototype/ui.html`](../prototype/ui.html) and its screenshots show the layout,
 and `reference/mockup.png` is the target of the stage. The CSS of the app is in `ui/ui.css`.
 
-The controls use the night theme of the sticker design system of adjiebrotots.com (its
-`DESIGN.md`), so that a visitor from that site sees one family of pages. A sticker has a flat
+The controls use the shapes of the sticker design system of adjiebrotots.com (its `DESIGN.md`),
+so that a visitor from that site sees one family of pages. The colors stay the warm colors of the
+stage, because the blue and navy of the site did not match the spotlight. A sticker has a flat
 fill, a 2 px outline in `--outline`, a hard offset shadow (`--pop-0` to `--pop-4`), and a corner
 from the scale. A hover lifts it by one step and can tilt it, and a press pushes it down to
 `--pop-0`. A control that is on, such as play, the current tab, or a pressed toggle, has the soft
-gold fill `--accent` with the dark ink `--on-accent`. The tokens below override the colors of the
-prototype. The app loads no font file, so it keeps the system font, with bold labels in place of
+gold fill `--accent` with the dark ink `--on-accent`. The app loads no font file, so it keeps the system font, with bold labels in place of
 the DM Sans of the site. The handwriting of the site is not used, because each text of the app
 gives a fact.
 
@@ -305,23 +305,23 @@ gives a fact.
 
 | Token | Value |
 |---|---|
-| `--bg-overlay` | `rgba(14, 20, 34, 0.8)`, with `backdrop-filter: blur(10px)` |
-| `--panel` | `#162033` (the card color of the site at night) |
-| `--panel-2` | `#1c2942` (a raised row, such as the current demo) |
-| `--panel-glass` | `rgba(22, 32, 51, 0.96)`, with `backdrop-filter: blur(16px)` (the floating panel of the drawer) |
-| `--line-faint` | `rgba(141, 187, 255, 0.07)` (the line between two rows of a list, and the hover of a seat row) |
-| `--line` | `rgba(141, 187, 255, 0.2)` (the outline of a quiet control) |
-| `--outline` | `#8dbbff` (the 2 px outline of a sticker, and the focus ring) |
-| `--pop-c`, `--pop-0` to `--pop-4` | `#4a6fae`, and offsets of 1, 2, 3, 4, and 6 px: 0 pressed, 1 small parts (a tab, a tooltip), 2 round buttons, 3 panels and the bar, 4 the hover of a large part |
-| `--text` | `#eaf1ff` |
-| `--text-dim` | `#a8b6cf` |
-| `--accent` | `#ffd28c` (the soft gold of the site) |
-| `--accent-strong` | `#ffe2b3` (hover) |
-| `--on-accent` | `#14203a` (an icon or a text on `--accent`) |
-| `--link` | `#8dbbff` (a link of text) |
-| `--danger` | `#ff8b8b` |
+| `--bg-overlay` | `rgba(16, 13, 11, 0.72)`, with `backdrop-filter: blur(10px)` |
+| `--panel` | `#17130f` |
+| `--panel-2` | `#241e18` (a raised row, such as the current demo) |
+| `--panel-glass` | `rgba(21, 18, 16, 0.96)`, with `backdrop-filter: blur(16px)` (the floating panel of the drawer) |
+| `--line-faint` | `rgba(255, 240, 220, 0.06)` (the line between two rows of a list, and the hover of a seat row) |
+| `--line` | `rgba(255, 240, 220, 0.14)` (the outline of a quiet control) |
+| `--outline` | `#d8c3a0` (the warm cream 2 px outline of a sticker, and the focus ring) |
+| `--pop-c`, `--pop-0` to `--pop-4` | `#7a5a2c` (a deep amber), and offsets of 1, 2, 3, 4, and 6 px: 0 pressed, 1 small parts (a tab, a tooltip), 2 round buttons, 3 panels and the bar, 4 the hover of a large part |
+| `--text` | `#efe8dc` |
+| `--text-dim` | `#b5aa99` |
+| `--accent` | `#e7b45a` (the warm gold of the spotlight) |
+| `--accent-strong` | `#f0c676` (hover) |
+| `--on-accent` | `#1a140d` (an icon or a text on `--accent`) |
+| `--link` | `#e7b45a` (a link of text) |
+| `--danger` | `#e0796a` |
 | `--title-shade` | `rgba(11, 9, 8, 0.8)` (the darkest part of the title shade) |
-| `--track` | `rgba(141, 187, 255, 0.22)` (the track of a slider, where it is not filled) |
+| `--track` | `rgba(255, 240, 220, 0.22)` (the track of a slider, where it is not filled) |
 | Font | `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` |
 | `--font-serif` | `"Palatino Linotype", Palatino, "Book Antiqua", "Iowan Old Style", Georgia, "Noto Serif", serif` (the piece title) |
 | Font sizes | 12 px for times (tabular numbers), 13 px for secondary text, 14 px body. The piece title is `clamp(24px, 2.5vw, 36px)` (32 px at 1280 px), and the composer `clamp(13px, 1.15vw, 16px)` |
