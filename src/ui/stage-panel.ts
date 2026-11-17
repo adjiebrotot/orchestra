@@ -4,8 +4,16 @@ import {
   BANNER_CUTS,
   DEFAULT_BACKDROP,
   SCREEN_MATERIALS,
+  STAGE_TEXT_FONTS,
+  STAGE_TEXT_PLACES,
+  STAGE_TEXT_TONES,
+  cleanStageText,
 } from '../scene/backdrop-settings.ts';
-import type { BackdropSettings, BannerSettings } from '../scene/backdrop-settings.ts';
+import type {
+  BackdropSettings,
+  BannerSettings,
+  StageTextSettings,
+} from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
 import { createButton, createElement } from './dom.ts';
 
@@ -127,6 +135,7 @@ export class StagePanel {
     const s = this.#settings;
     const scroll = this.#body.scrollTop;
     this.#body.replaceChildren(
+      this.#textSection(),
       this.#bannerSection(
         'standing',
         'Standing banners',
@@ -142,13 +151,13 @@ export class StagePanel {
         'Flagpole groups beside the back corners. Each group carries all the flags.',
         s.flags.on,
         (on) => {
-          this.#change({ ...s, flags: { ...s.flags, on } });
+          this.#change({ ...this.#settings, flags: { ...s.flags, on } });
         },
         [
           this.#row(
             'Flagpole groups',
             this.#number(s.flags.groups, 1, BACKDROP_LIMITS.groups, (groups) => {
-              this.#change({ ...s, flags: { ...s.flags, groups } });
+              this.#change({ ...this.#settings, flags: { ...s.flags, groups } });
             }),
           ),
           this.#row('Flags', this.#images('flags')),
@@ -159,13 +168,13 @@ export class StagePanel {
         'A screen above the back row. Change its image over time in the Camera director: click its Screen row.',
         s.screen.on,
         (on) => {
-          this.#change({ ...s, screen: { ...s.screen, on } });
+          this.#change({ ...this.#settings, screen: { ...s.screen, on } });
         },
         [
           this.#row(
             'Material',
             this.#select(SCREEN_MATERIALS, s.screen.material, (material) => {
-              this.#change({ ...s, screen: { ...s.screen, material } });
+              this.#change({ ...this.#settings, screen: { ...s.screen, material } });
             }),
           ),
           this.#row('Images', this.#images('screen')),
@@ -174,6 +183,61 @@ export class StagePanel {
       this.#uploadsSection(),
     );
     this.#body.scrollTop = scroll;
+  }
+
+  /**
+   * Creates the section of the stage text: one line in the wood of the stage, near the conductor.
+   *
+   * @returns The section.
+   */
+  #textSection(): HTMLElement {
+    const s = this.#settings;
+    const set = s.text;
+    const update = (change: Partial<StageTextSettings>): void => {
+      this.#change({ ...this.#settings, text: { ...this.#settings.text, ...change } });
+    };
+    const input = createElement('input', 'stage-text-input');
+    input.type = 'text';
+    input.maxLength = BACKDROP_LIMITS.text;
+    input.placeholder = 'For example: Orchestra of the Woods';
+    input.value = set.text;
+    input.setAttribute('aria-label', 'Stage text');
+    // Each key shows at once. The panel does not write its controls again, so the field keeps the
+    // focus and the caret.
+    input.addEventListener('input', () => {
+      const text = cleanStageText(input.value);
+      this.#settings = { ...this.#settings, text: { ...this.#settings.text, text } };
+      this.#actions.onChange(this.#settings);
+    });
+    return this.#section(
+      'Stage text',
+      'A line of text in the wood of the stage, near the conductor, as the logo of the stage floor.',
+      set.on,
+      (on) => {
+        update({ on });
+      },
+      [
+        this.#row('Text', input),
+        this.#row(
+          'Place',
+          this.#select(STAGE_TEXT_PLACES, set.place, (place) => {
+            update({ place });
+          }),
+        ),
+        this.#row(
+          'Wood',
+          this.#select(STAGE_TEXT_TONES, set.tone, (tone) => {
+            update({ tone });
+          }),
+        ),
+        this.#row(
+          'Letters',
+          this.#select(STAGE_TEXT_FONTS, set.font, (font) => {
+            update({ font });
+          }),
+        ),
+      ],
+    );
   }
 
   /**
@@ -188,7 +252,7 @@ export class StagePanel {
     const s = this.#settings;
     const set = s[key];
     const update = (change: Partial<BannerSettings>): void => {
-      this.#change({ ...s, [key]: { ...set, ...change } });
+      this.#change({ ...this.#settings, [key]: { ...set, ...change } });
     };
     return this.#section(
       title,
@@ -370,7 +434,10 @@ export class StagePanel {
    */
   #setList(key: ListKey, images: readonly string[]): void {
     const s = this.#settings;
-    this.#change({ ...s, [key]: { ...s[key], images: images.slice(0, LIST_LIMITS[key]) } });
+    this.#change({
+      ...this.#settings,
+      [key]: { ...s[key], images: images.slice(0, LIST_LIMITS[key]) },
+    });
   }
 
   /**
