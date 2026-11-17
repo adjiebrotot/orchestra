@@ -2517,6 +2517,39 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   gap: 8px;
 }
 
+/* The choices of the render: the ending, the titles, and the lines of the title card. */
+.render-options {
+  display: grid;
+  gap: 6px;
+}
+
+.render-options input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
+.render-field {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.render-field[hidden] {
+  display: none;
+}
+
+.render-text {
+  min-height: 30px;
+  padding: 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  color: var(--text);
+}
+
 .render-row select {
   flex: 1;
   min-width: 0;

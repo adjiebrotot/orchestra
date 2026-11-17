@@ -137,6 +137,8 @@ const LOOK_STEPS = 3;
  * @param fov The vertical field of view, in degrees.
  * @param aspect The width of the frame divided by its height.
  * @param out The point to write.
+ * @param thirdShare The share of the third line that the target keeps: 1 for the third line, 0
+ *   for the middle of the width, as in a vertical frame (`VERTICAL_FRAME` of `view.ts`).
  * @returns The height of the target in the frame, as a part of half the frame height above the
  *   middle: 0 for no composition.
  */
@@ -147,6 +149,7 @@ export function writeLookPoint(
   fov: number,
   aspect: number,
   out: [number, number, number],
+  thirdShare = 1,
 ): number {
   out[0] = target[0];
   out[1] = target[1];
@@ -158,7 +161,7 @@ export function writeLookPoint(
   const rules = FILM_GRAMMAR;
   const tanV = Math.tan(((fov / 2) * Math.PI) / 180);
   const tanH = tanV * aspect;
-  const wantedX = composition.third * rules.thirdLine;
+  const wantedX = composition.third * rules.thirdLine * thirdShare;
   const [ex, ey, ez] = composition.eyes;
   const tx = target[0] - camera[0];
   const ty = target[1] - camera[1];

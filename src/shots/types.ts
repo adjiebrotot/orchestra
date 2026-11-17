@@ -172,6 +172,12 @@ export interface CameraPose {
    * value, holds the whole stage.
    */
   readonly shadowFit?: readonly [number, number, number, number];
+  /**
+   * The largest growth of the vertical field of view in a frame narrower than 21:9
+   * (`MATTE_GROW` of `view.ts`, design 2.5): the factor of the tangent of the half angle. A blend
+   * blends it with the camera. A pose with no value keeps the full width of the shot.
+   */
+  readonly matteGrow?: number;
 }
 
 /** A `CameraPose` with writable values. `cameraAt()` writes each frame into it. */
@@ -189,6 +195,7 @@ export interface CameraPoseBuffer {
   heroShare: number;
   detail: boolean;
   shadowFit: [number, number, number, number];
+  matteGrow: number;
 }
 
 /** The view of one frame. */
@@ -197,4 +204,10 @@ export interface CameraView {
   readonly aspect: number;
   /** True if the user prefers reduced motion: each shot holds its `from` key, with no blend. */
   readonly still: boolean;
+  /**
+   * The aspect of the frame that shows the shots (design 2.5, render), or none for the aspect
+   * {@link CameraView.aspect}. A frame narrower than `VERTICAL_FRAME.aspect` of `view.ts` puts
+   * the subject of a close shot in the middle of its width.
+   */
+  readonly frameAspect?: number;
 }

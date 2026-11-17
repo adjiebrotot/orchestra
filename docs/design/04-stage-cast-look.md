@@ -1519,6 +1519,13 @@ and the letters.
   the skirt below the front edge (`stageTextBoxes()`).
 - The line keeps the aspect of its texture inside its box, and it stays clear of the corner cuts.
   A long text gets smaller letters.
+- The floor in front of the podium has the same depth on each stage, so on the large stage of a
+  large orchestra the letters read small. The setting "Size" makes the letters on the floor taller
+  (`STAGE_TEXT.sizes`). A larger line keeps its front edge at the lip and grows to the back, past
+  the sides of the podium, and the podium covers the middle of a tall line. A long line already
+  fills the width of its box at "Fit", so a larger size also lets it use the full straight part of
+  the front edge. The skirt has a fixed
+  height, so the place "Front" keeps the size "Fit".
 - The tones are a pale inlay, a dark stain, and a gold leaf (`STAGE_TEXT.floorTint`,
   `STAGE_TEXT.frontTint`). The skirt is darker than the planks, so its factors are larger.
 - A change of the text draws only the texture again, so each key shows at once.

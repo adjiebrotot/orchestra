@@ -103,6 +103,7 @@ uniform vec3 uStageTextMode;
 uniform vec3 uStageTextTint;
 uniform vec4 uStageTextFloor;
 uniform vec4 uStageTextFront;
+uniform float uStageTextWide;
 
 // The circled A logo of adjiebrotots.com (logos/logo.svg of the personal site), as a coverage of
 // its disc and of its letter at a point. The point is in the units of the logo: the disc has the
@@ -271,10 +272,16 @@ if (vWoodNormal.y > 0.5 && abs(vWoodPosition.y) < 0.03) {
 if (uStageTextMode.y > 0.5) {
   bool textFloor = uStageTextMode.y < 1.5;
   vec4 textBox = textFloor ? uStageTextFloor : uStageTextFront;
-  float textHalfHeight = min(textBox.w, textBox.z / uStageTextMode.x);
+  // A larger size on the floor keeps the front edge of the line and grows it to the back.
+  // It can also use the full straight part of the front edge, because a long line is as wide as
+  // its box at the size "Fit".
+  float textSize = textFloor ? uStageTextMode.z : 1.0;
+  float textHalfWidth = textSize > 1.0 ? uStageTextWide : textBox.z;
+  float textHalfHeight = min(textBox.w * textSize, textHalfWidth / uStageTextMode.x);
   vec2 textHalf = vec2(textHalfHeight * uStageTextMode.x, textHalfHeight);
+  float textFloorZ = textBox.y + textBox.w - textHalfHeight;
   vec2 textPoint = textFloor
-    ? vec2(vWoodPosition.x - textBox.x, textBox.y - vWoodPosition.z)
+    ? vec2(vWoodPosition.x - textBox.x, textFloorZ - vWoodPosition.z)
     : vec2(vWoodPosition.x - textBox.x, vWoodPosition.y - textBox.y);
   vec2 textUv = textPoint / (2.0 * textHalf) + 0.5;
   float textCover = texture2D(uStageText, textUv).r;
@@ -300,10 +307,11 @@ const STAGE_TEXT_MARGIN = 0.06;
  *
  * @param stageSide The stage side `S`, in meters.
  * @param podium The podium center, or `null` for a layout with no podium.
- * @returns The floor box (x, z, half width, half height) and the front box (x, y, half width,
- *   half height).
+ * @returns The floor box (x, z, half width, half height), the front box (x, y, half width,
+ *   half height), and the half width of the straight part of the front edge, which a larger size
+ *   on the floor can use.
  */
-export function stageTextBoxes(stageSide: number, podium: Vec3 | null): [Vector4, Vector4] {
+export function stageTextBoxes(stageSide: number, podium: Vec3 | null): [Vector4, Vector4, number] {
   const half = stageSide / 2;
   const margin = STAGE_TEXT_MARGIN;
   const back = (podium ? podium[2] + PODIUM_SIZE[2] / 2 : half - PODIUM_FROM_FRONT) + margin;
@@ -320,7 +328,7 @@ export function stageTextBoxes(stageSide: number, podium: Vec3 | null): [Vector4
     Math.min(width, 0.3 * stageSide),
     (top - bottom) / 2,
   );
-  return [floor, face];
+  return [floor, face, width];
 }
 
 /** The shadow of the key light in the light chunk of three.js r186. */
@@ -442,7 +450,7 @@ export function createStageMaterial(
   podium: Vec3 | null = null,
   text: StageTextUniforms = noStageTextUniforms(),
 ): MeshPhysicalMaterial {
-  const [textFloor, textFront] = stageTextBoxes(stageSide, podium);
+  const [textFloor, textFront, textWide] = stageTextBoxes(stageSide, podium);
   const material = new MeshPhysicalMaterial({
     vertexColors: true,
     flatShading: true,
@@ -477,6 +485,7 @@ export function createStageMaterial(
     shader.uniforms['uStageTextTint'] = text.uStageTextTint;
     shader.uniforms['uStageTextFloor'] = { value: textFloor };
     shader.uniforms['uStageTextFront'] = { value: textFront };
+    shader.uniforms['uStageTextWide'] = { value: textWide };
     shader.uniforms['uSideGlow'] = {
       value: new Vector3(SIDE_GLOW.skirt, SIDE_GLOW.edge, SIDE_GLOW.fade),
     };

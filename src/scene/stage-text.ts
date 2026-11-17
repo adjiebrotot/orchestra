@@ -21,6 +21,16 @@ export const STAGE_TEXT = {
   letterSpacing: 0.08,
   /** The widest canvas, in pixels. */
   maxWidth: 4096,
+  /**
+   * The factor of the height of the letters on the floor for each size (design 4.5, stage text).
+   * The floor in front of the podium is about 0.26 m deep on each stage, so on the large stage of
+   * a large orchestra, the camera stands far away and the letters of `fit` read small. A larger
+   * line keeps its front edge at the lip and grows to the back, past the sides of the podium. The
+   * podium covers the middle of a tall line. A long line is as wide as its box at `fit`, so a
+   * larger size also lets it use the full straight part of the front edge. The front of the stage is as tall as the skirt, so
+   * its letters keep the size `fit`.
+   */
+  sizes: { fit: 1, large: 1.6, larger: 2.4, largest: 3.2 },
   fonts: {
     serif: "600 {px}px 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, 'Noto Serif', serif",
     sans: "600 {px}px system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif",
@@ -53,7 +63,8 @@ export interface StageTextUniforms {
   readonly uStageText: { value: Texture };
   /**
    * x: the width of the text over its height. y: the place: 0 for no text, 1 on the floor in front
-   * of the podium, 2 on the front of the stage.
+   * of the podium, 2 on the front of the stage. z: the factor of the height on the floor
+   * (`STAGE_TEXT.sizes`).
    */
   readonly uStageTextMode: { value: Vector3 };
   /** The factor of the wood color under the letters. */
@@ -68,7 +79,7 @@ export interface StageTextUniforms {
 export function noStageTextUniforms(): StageTextUniforms {
   return {
     uStageText: { value: noBakeTexture() },
-    uStageTextMode: { value: new Vector3(1, 0, 0) },
+    uStageTextMode: { value: new Vector3(1, 0, 1) },
     uStageTextTint: { value: new Vector3(1, 1, 1) },
   };
 }
@@ -160,6 +171,7 @@ export class StageText {
       uniforms.uStageTextMode.value.x = canvas.width / canvas.height;
     }
     uniforms.uStageTextMode.value.y = settings.place === 'floor' ? 1 : 2;
+    uniforms.uStageTextMode.value.z = STAGE_TEXT.sizes[settings.size];
     const tint = (settings.place === 'floor' ? STAGE_TEXT.floorTint : STAGE_TEXT.frontTint)[
       settings.tone
     ];

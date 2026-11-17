@@ -25,7 +25,11 @@ import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
 import { BackdropControl } from './backdrop-control.ts';
 import { effectTime } from '../scene/stage-scene.ts';
-import type { RenderFormat } from './render-formats.ts';
+import type { RenderFormat, RenderOptions } from './render-formats.ts';
+import { drawTitleCard, pageFonts } from './render-titles.ts';
+import type { RenderTitleFonts, RenderTitleLines } from './render-titles.ts';
+import { letterbox } from '../scene/letterbox.ts';
+import { END_BOW_SEC } from '../pose/end-bow.ts';
 import type { VideoRender } from './render-video.ts';
 import { songTimeAt } from '../audio/clock.ts';
 import type { ClockAnchor } from '../audio/clock.ts';
@@ -100,6 +104,12 @@ const EMPTY_FIRST_SCREEN: FirstScreenView = {
 /** The song seconds after the song end that a render keeps, for the release and the hall. */
 const RENDER_TAIL_SEC = 2.5;
 
+/**
+ * The seconds after the bow of the conductor that a render with the ending keeps (design 5.4):
+ * the bear faces the orchestra again, and the film holds this time before its end.
+ */
+const RENDER_BOW_HOLD_SEC = 1;
+
 /** The time without a move of the playback after which a render shows a warning, in seconds. */
 const RENDER_IDLE_WARN_SEC = 3;
 
@@ -114,6 +124,12 @@ interface RunningRender {
   readonly video: VideoRender;
   readonly durationSec: number;
   readonly format: RenderFormat;
+  /** The song seconds after the song end that the video keeps. */
+  readonly tailSec: number;
+  /** The lines of the title card of the video, or `null` for no titles. */
+  readonly titles: RenderTitleLines | null;
+  /** The font families of the title card. */
+  readonly fonts: RenderTitleFonts;
   /** The wall time at which the piece ended, or `null` before its end. */
   endedAt: number | null;
   /** The song time before the render went back to the start of the piece, in seconds. */
@@ -605,11 +621,14 @@ export class App {
     }, scene.stageText);
     scene.setBackdrop(this.#backdrop.group);
     this.#renderPanel = new RenderPanel({
-      onStart: (format) => {
-        this.#startRender(format).catch((error: Error) => {
+      onStart: (format, options) => {
+        this.#startRender(format, options).catch((error: Error) => {
           this.#renderStarting = false;
           this.#renderPanel.show('error', 0, `The render did not start: ${error.message}`);
         });
+      },
+      onTitles: (lines) => {
+        this.#ui.titleCard.setPiece(lines.title, lines.subtitle);
       },
       onCancel: () => {
         // In the last step, the stop ends the wait for the encoders.
@@ -1349,6 +1368,7 @@ export class App {
   #showTitle(lines: TitleLines, stageFile: boolean): void {
     this.#ui.title.show(lines.title, lines.composer);
     this.#ui.titleCard.setPiece(lines.title, lines.composer);
+    this.#renderPanel.setTitles({ title: lines.title, subtitle: lines.composer });
     this.#media.showPiece(lines);
     document.title = pageTitle(lines, stageFile);
   }
@@ -1393,12 +1413,24 @@ export class App {
   }
 
   /**
+   * Gives the aspect of the frame of the film: the aspect of the video of a full-frame render, or
+   * else `CINEMA_ASPECT` (design 2.5, render).
+   *
+   * @returns The aspect.
+   */
+  #renderFrameAspect(): number {
+    const format = this.#render?.format;
+    return format && !format.bars ? format.width / format.height : CINEMA_ASPECT;
+  }
+
+  /**
    * Starts a render of the film to an MP4 file: the piece plays from the start in Cinematic mode
    * at the speed 1, and the canvas renders at the size of the format.
    *
    * @param format The size and the frame rate.
+   * @param options The ending and the titles.
    */
-  async #startRender(format: RenderFormat): Promise<void> {
+  async #startRender(format: RenderFormat, options: RenderOptions): Promise<void> {
     const piece = this.#piece;
     const audio = this.#audio;
     if (this.#render || this.#renderStarting || this.#writing) {
@@ -1417,6 +1449,7 @@ export class App {
     await record.context.resume();
     const { VideoRender } = await import('./render-video.ts');
     const durationSec = piece.score.durationSec;
+    const tailSec = options.bow ? END_BOW_SEC + RENDER_BOW_HOLD_SEC : RENDER_TAIL_SEC;
     const video = new VideoRender(
       this.#canvas,
       {
@@ -1425,7 +1458,7 @@ export class App {
         songTimeAt: (contextTime) => songTimeAt(record.anchors(), contextTime, durationSec),
       },
       format,
-      durationSec + RENDER_TAIL_SEC,
+      durationSec + tailSec,
     );
     await video.start((status) => {
       this.#renderPanel.show('busy', 0, status);
@@ -1460,6 +1493,9 @@ export class App {
       video,
       durationSec,
       format,
+      tailSec,
+      titles: options.titles ? this.#renderPanel.titles : null,
+      fonts: pageFonts(),
       endedAt: null,
       staleSec,
       armed: false,
@@ -1509,7 +1545,7 @@ export class App {
       return;
     }
     const { video, durationSec, format } = render;
-    const total = durationSec + RENDER_TAIL_SEC;
+    const total = durationSec + render.tailSec;
     // The first frames after the seek can have the song time from before the render. A frame
     // from that time is not a part of the film, and a time at the end of the piece is not the end
     // of the render. The recording thus starts when the song time is back at the start.
@@ -1541,7 +1577,7 @@ export class App {
       }
       songSec = render.endedAt === null ? this.#songTime : durationSec + wallTime - render.endedAt;
       if (playing || render.endedAt !== null) {
-        video.frame(songSec);
+        video.frame(songSec, this.#renderTitles(render, songSec));
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1571,6 +1607,38 @@ export class App {
         `The playback does not move at ${clock}`,
       );
     }
+  }
+
+  /**
+   * Gives the drawing of the title card of a frame of a render (design 2.5, render; 2.8): the
+   * card of the page at the same song times, in the frame of the film.
+   *
+   * @param render The render.
+   * @param songSec The song time of the frame, in seconds.
+   * @returns The drawing, or `undefined` for a frame with no card.
+   */
+  #renderTitles(
+    render: RunningRender,
+    songSec: number,
+  ): ((context: CanvasRenderingContext2D) => void) | undefined {
+    const { titles, format, fonts } = render;
+    if (!titles) {
+      return undefined;
+    }
+    const level = titleCardLevel({
+      cinematic: true,
+      played: true,
+      songSec,
+      still: this.#scene.reducedMotion,
+    });
+    if (level <= 0) {
+      return undefined;
+    }
+    const aspect = format.bars ? CINEMA_ASPECT : format.width / format.height;
+    const box = letterbox(format.width, format.height, aspect);
+    return (context) => {
+      drawTitleCard(context, box, titles, level, fonts);
+    };
   }
 
   /**
@@ -1808,8 +1876,13 @@ export class App {
       this.#scene.solo(piece.flags);
       if (this.#cameraMode === 'cinematic') {
         // The shots fill the letterbox of the aspect 21:9 in each viewport. With reduced motion,
-        // each shot holds its first camera, and each cut is hard (2.5).
-        const view = { aspect: CINEMA_ASPECT, still: this.#scene.reducedMotion };
+        // each shot holds its first camera, and each cut is hard (2.5). A full-frame render gives
+        // the aspect of its video, so a vertical video puts each subject in its middle.
+        const view = {
+          aspect: CINEMA_ASPECT,
+          still: this.#scene.reducedMotion,
+          frameAspect: this.#renderFrameAspect(),
+        };
         const shots = piece.directed ?? piece.shots;
         shot = cameraAt(shots, this.#songTime, transport, view, this.#shotCamera);
       }
