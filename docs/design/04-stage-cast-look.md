@@ -1365,7 +1365,8 @@ edges of the triangles, so such a line breaks into dashes that move with the cam
 **Light and render**
 
 `scene/lights.ts` holds the lights, `scene/light-pool.ts` the pool, `models/beam.ts` and
-`scene/beam.ts` the light places and the beams, and `scene/solo-light.ts` the solo light.
+`scene/beam.ts` the light places and the beams, `scene/beam-lamp.ts` the lamps of the beams, and
+`scene/solo-light.ts` the solo light.
 
 ```text
           rim light (behind, high, no shadow) ── visible beam in the haze
@@ -1430,8 +1431,16 @@ edges of the triangles, so such a line breaks into dashes that move with the cam
   - It adds only a highlight: the ball keeps the dark of the bead eyes. Each other body keeps its
     material (`eyeLightMaterial()` of `scene/player.ts`).
 - **Beam** (`BEAM_LOOK`). The haze cone leans toward its rim light, which stands at the x of the
-  beam, so the beam has a visible source and stands upright. The camera dims it in a close shot,
-  because a near camera sees the additive haze as a veil over the image (5.6).
+  beam, so the beam stands upright. The camera dims it in a close shot, because a near camera sees
+  the additive haze as a veil over the image (5.6).
+- **Beam lamp** (`BEAM_LAMP`, `scene/beam-lamp.ts`). The rim light stands above the hall walls and
+  out of each frame. Thus a lamp on a batten over the back of the stage gives the beam a visible
+  source (`beamSourcePlace()`). The lamp stands on the line from the foot of the beam to the rim
+  light, at `BEAM_SOURCE_HEIGHT_IN_SIDES`. A narrow throat of haze goes from the tip of the haze
+  cone up to the lens, and the lens glows. A tall frame shows the lamp, and the default view of a
+  wide window does not. A solo moves the foot of the beam, and the lamp turns to the new foot. The
+  haze uses centroid sampling, because the cone and the throat meet at two flat caps, and an
+  edge-on cap gave a dark line with multisampling.
 - **Beam in Free mode** (`freeBeamOpacity()`). The beam dims with the distance from the camera to
   the stage center over the range `FREE_BEAM_FADE`, down to `CLOSE_BEAM_OPACITY`. The fade is a
   smoothstep on the logarithm of the distance, because a wheel step multiplies the distance by a
