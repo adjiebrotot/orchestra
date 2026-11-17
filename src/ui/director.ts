@@ -1,6 +1,12 @@
 import { isScreenCue, screenFrame } from '../scene/backdrop-settings.ts';
 import type { Json, ScreenCue } from '../scene/backdrop-settings.ts';
-import { DIRECTOR_MOTIONS, focusSeat, isScenicFocus } from '../shots/directed.ts';
+import {
+  CONDUCTOR_VIEWS,
+  DIRECTOR_MOTIONS,
+  focusSeat,
+  isConductorFocus,
+  isScenicFocus,
+} from '../shots/directed.ts';
 import { SCENIC_MOVES } from '../shots/scenic.ts';
 import type { DirectorCue, DirectorFocus, DirectorMotion } from '../shots/directed.ts';
 import { createButton, createElement } from './dom.ts';
@@ -125,7 +131,9 @@ function isCue(value: unknown): value is DirectorCue {
   return (
     typeof cue['timeSec'] === 'number' &&
     typeof cue['focus'] === 'string' &&
-    (/^(wide|high|conductor|seat:\d+)$/u.test(cue['focus']) || isScenicFocus(cue['focus'])) &&
+    (/^(wide|high|seat:\d+)$/u.test(cue['focus']) ||
+      isScenicFocus(cue['focus']) ||
+      isConductorFocus(cue['focus'])) &&
     DIRECTOR_MOTIONS.some(([motion]) => motion === cue['motion']) &&
     typeof cue['cut'] === 'boolean'
   );
@@ -543,13 +551,11 @@ export class Director {
     if (seat !== null) {
       return this.#piece?.rows.find((row) => row.seatIndex === seat)?.name ?? `Seat ${seat + 1}`;
     }
-    const scenic = SCENIC_MOVES.find(([move]) => move === focus);
-    if (scenic) {
-      return scenic[1];
+    const named = [...SCENIC_MOVES, ...CONDUCTOR_VIEWS].find(([view]) => view === focus);
+    if (named) {
+      return named[1];
     }
-    return { wide: 'Whole stage', high: 'High view', conductor: 'Conductor' }[
-      focus as 'wide' | 'high' | 'conductor'
-    ];
+    return focus === 'high' ? 'High view' : 'Whole stage';
   }
 
   /**
@@ -571,7 +577,11 @@ export class Director {
     views.label = 'Views';
     add('wide', 'Whole stage', views);
     add('high', 'High view', views);
-    add('conductor', 'Conductor', views);
+    const conductor = createElement('optgroup');
+    conductor.label = 'Conductor';
+    for (const [view, label] of CONDUCTOR_VIEWS) {
+      add(view, label, conductor);
+    }
     const scenic = createElement('optgroup');
     scenic.label = 'Background';
     for (const [move, label] of SCENIC_MOVES) {
@@ -584,7 +594,7 @@ export class Director {
         add(`seat:${row.seatIndex}`, row.name, seats);
       }
     }
-    select.append(views, scenic, seats);
+    select.append(views, conductor, scenic, seats);
     return select;
   }
 

@@ -145,7 +145,9 @@ The app follows these facts:
   dressing behind the orchestra: a helicopter orbit, a low-angle orbit, and an orbit around the
   screen (`SCENIC_SHOTS`, design 5.6). They keep the spacing of the wide shots.
 - **The conductor (section 5).** The conductor shots come between the other shots, with some
-  shots between them (`SHOT_TIMES.conductorSpacing`).
+  shots between them (`SHOT_TIMES.conductorSpacing`). The camera director also shows the front
+  of the bear: a close shot of the face, a low-angle shot that looks up from near the podium
+  [24], and a high view over the back rows at the bear (`CONDUCTOR_VIEWS`, design 5.6).
 - **The moves (section 4).** Each move starts and ends at rest (a smoothstep), and the close
   shots push in slowly.
 - **The change of the camera mode (section 4).** The toggle between Free mode and Cinematic mode

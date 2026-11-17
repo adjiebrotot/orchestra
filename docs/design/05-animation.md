@@ -1735,6 +1735,13 @@ focus of the shot, the directed move nearest to the move of the shot, and its cu
 that is a scenic move gets that move. The detail inserts get no cue. The user then changes the
 focus of each cue. The focus menu has no item "Automatic", because the button replaces it.
 
+The group "Conductor" of the focus menu has four views (`CONDUCTOR_VIEWS`). "From behind" is the
+close shot from the audience side. "Face" is a close shot from the orchestra side. "Low angle"
+uses a wide lens near the podium and looks up at the bear. It stands to one side of the axis
+(`LOW_TURNS`), because the clearance does not see the desk of the conductor, which is a part of
+the conductor. "Over the orchestra" stands high over the back rows, inside the back edge of the
+stage, and looks at the bear over the players (`ORCHESTRA_VIEW`).
+
 **Film grammar.** The shots obey the rules of a concert film of
 `docs/reference/camera-technique.md`, with the limits of `FILM_GRAMMAR` (`shots/grammar.ts`).
 `pnpm shot-trace --rules` counts the breaks of each rule over all demos.
