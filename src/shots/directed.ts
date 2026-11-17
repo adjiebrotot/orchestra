@@ -460,3 +460,102 @@ export function directedPlan(
     insertStarts: Float64Array.from(inserts, (shot) => shot.startSec),
   };
 }
+
+/**
+ * The least part of a full directed move that a move of the automatic plan must have to count as
+ * a move, and not as a still camera.
+ */
+const MOVE_SHARE = 0.25;
+
+/**
+ * Gives the directed move that is nearest to the move of a shot of the automatic plan: the axis
+ * with the largest change, as a part of the full directed move on that axis.
+ *
+ * @param from The key at the start of the move.
+ * @param to The key at the end of the move.
+ * @returns The move.
+ */
+function nearestMotion(from: ShotKey, to: ShotKey): DirectorMotion {
+  const zoom = Math.log(to.zoom / from.zoom) / Math.log(PUSH_ZOOM);
+  const arc = (to.azimuth - from.azimuth) / (2 * ORBIT_DEG.close * DEG);
+  const crane = (to.elevation - from.elevation) / ((CRANE_DEG.low + CRANE_DEG.high) * DEG);
+  const axes: readonly (readonly [number, DirectorMotion, DirectorMotion])[] = [
+    [zoom, 'push-in', 'pull-out'],
+    [arc, 'orbit-right', 'orbit-left'],
+    [crane, 'crane-up', 'crane-down'],
+  ];
+  let best: DirectorMotion = 'static';
+  let size = MOVE_SHARE;
+  for (const [value, up, down] of axes) {
+    if (Math.abs(value) >= size) {
+      size = Math.abs(value);
+      best = value > 0 ? up : down;
+    }
+  }
+  return best;
+}
+
+/**
+ * Gives the scenic move of a high shot of the automatic plan, with the direction of its orbit.
+ *
+ * @param shot The high shot.
+ * @param stageSide The stage side `S`, in meters.
+ * @returns The scenic move and its directed move, or `null` for a plain high shot.
+ */
+function scenicOf(shot: Shot, stageSide: number): readonly [ScenicMove, DirectorMotion] | null {
+  for (const [move] of SCENIC_MOVES) {
+    for (const direction of [-1, 1] as const) {
+      const framing = scenicFraming(move, stageSide, direction);
+      if (
+        Math.abs(framing.from.azimuth - shot.from.azimuth) < 1e-6 &&
+        Math.abs(framing.from.elevation - shot.from.elevation) < 1e-6 &&
+        Math.abs(framing.from.zoom - shot.from.zoom) < 1e-6
+      ) {
+        return [move, direction < 0 ? 'orbit-left' : 'orbit-right'];
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Gives the cues of the automatic plan (the button "Automatic built-in" of the camera director):
+ * one cue at the start of each main shot, with the focus, the move, and the cut that are nearest
+ * to the shot. The cut times follow the music, as the planner put them. The user can then change
+ * the focus of each cue. The detail inserts have no cue. Pure: the same plan gives the same cues.
+ *
+ * @param auto The automatic plan of the score, from `prepareShots()`.
+ * @returns The cues, sorted by time.
+ */
+export function automaticCues(auto: ShotPlan): DirectorCue[] {
+  const cues: DirectorCue[] = [];
+  for (const shot of auto.shots) {
+    const timeSec = Math.round(Math.max(0, shot.startSec) * 10) / 10;
+    let focus: DirectorFocus;
+    let motion = nearestMotion(shot.from, shot.to);
+    const seat = shot.seats[0];
+    if (shot.kind === 'high') {
+      const scenic = scenicOf(shot, auto.stageSide);
+      focus = scenic?.[0] ?? 'high';
+      motion = scenic?.[1] ?? motion;
+    } else if (shot.kind === 'conductor') {
+      focus = 'conductor';
+    } else if (shot.kind !== 'wide' && seat !== undefined) {
+      focus = `seat:${seat}`;
+    } else {
+      focus = 'wide';
+    }
+    const cue: DirectorCue = {
+      timeSec,
+      focus,
+      motion,
+      cut: shot.blendSec === 0,
+    };
+    // Two shots in one tenth of a second keep the later shot, as the director does.
+    if (cues.at(-1)?.timeSec === timeSec) {
+      cues.pop();
+    }
+    cues.push(cue);
+  }
+  return cues;
+}
