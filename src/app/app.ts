@@ -1391,7 +1391,7 @@ export class App {
       (row, seatIndex): DirectorRow => ({
         seatIndex,
         name: row.name,
-        color: row.ring ?? row.color ?? '#a8b6cf',
+        color: row.ring ?? row.color ?? '#b5aa99',
         onStage: (counts[seatIndex] ?? 0) > 0 && seats[seatIndex]?.section !== 'sound-only',
       }),
     );
