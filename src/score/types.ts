@@ -98,6 +98,13 @@ export interface Beat {
  */
 export type SectionSize = 'auto' | 'one-per-part' | 'full';
 
+/**
+ * The player count of each seat of a section that the panel "Orchestra" sets (design 3.8). The
+ * count 0 takes the players of the section off the stage, and the notes still sound. A missing
+ * section keeps the rules of 3.8.
+ */
+export type SectionCounts = Readonly<Partial<Record<SectionId, number>>>;
+
 /** All that the scene and the synth play of one file (design 3.2). */
 export interface Score {
   /**

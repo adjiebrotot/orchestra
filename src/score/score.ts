@@ -6,7 +6,7 @@ import { runAll } from './steps.ts';
 import type { Steps } from './steps.ts';
 import { buildSynthEvents, listPresets } from './synth.ts';
 import { buildTimelineSteps } from './timeline.ts';
-import type { ScoreResult, SectionSize } from './types.ts';
+import type { ScoreResult, SectionCounts, SectionSize } from './types.ts';
 
 /**
  * Builds the score of a Standard MIDI File: the seats, the player notes, the beats, the synth
@@ -15,11 +15,16 @@ import type { ScoreResult, SectionSize } from './types.ts';
  *
  * @param bytes The bytes of the file.
  * @param sectionSize The value of the setting "Section size" (2.8, 3.8).
+ * @param counts The player counts of the panel "Orchestra" (3.8).
  * @returns The score, or the reason to refuse the file. The UI shows the text of design 2.8 for
  *   each reason. A file with more than 100,000 beats is `not-midi` (3.3).
  */
-export function buildScore(bytes: Uint8Array, sectionSize: SectionSize): ScoreResult {
-  return runAll(buildScoreSteps(bytes, sectionSize));
+export function buildScore(
+  bytes: Uint8Array,
+  sectionSize: SectionSize,
+  counts: SectionCounts = {},
+): ScoreResult {
+  return runAll(buildScoreSteps(bytes, sectionSize, counts));
 }
 
 /**
@@ -27,9 +32,14 @@ export function buildScore(bytes: Uint8Array, sectionSize: SectionSize): ScoreRe
  *
  * @param bytes The bytes of the file.
  * @param sectionSize The value of the setting "Section size" (2.8, 3.8).
+ * @param counts The player counts of the panel "Orchestra" (3.8).
  * @returns The steps, which return the score or the reason to refuse the file.
  */
-export function* buildScoreSteps(bytes: Uint8Array, sectionSize: SectionSize): Steps<ScoreResult> {
+export function* buildScoreSteps(
+  bytes: Uint8Array,
+  sectionSize: SectionSize,
+  counts: SectionCounts = {},
+): Steps<ScoreResult> {
   const result = yield* buildTimelineSteps(bytes);
   if (!result.ok) {
     return result;
@@ -42,7 +52,7 @@ export function* buildScoreSteps(bytes: Uint8Array, sectionSize: SectionSize): S
   yield;
   const seating = yield* assignSeatsSteps(timeline);
   yield;
-  const cast = yield* assignPlayersSteps(timeline, seating, sectionSize);
+  const cast = yield* assignPlayersSteps(timeline, seating, sectionSize, counts);
   yield;
   return {
     ok: true,

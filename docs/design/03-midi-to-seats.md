@@ -267,6 +267,12 @@ A **seat** is one group of animals of one section. The seat key is (port, channe
   bass guitars do not count, because many pop files use them.
 - The setting "Section size": "Auto" uses the rule above, "One per part" gives one player for each
   simultaneous note, and "Full" gives the base sizes.
+- The panel "Orchestra" can set the player count of each seat of a section (`SectionCounts`),
+  from 0 to `MAX_SEAT_COUNT`. The count 0 takes the players off the stage, and the notes still
+  sound. A seat of one player or of drum parts can only go to 0, because its notes go to fixed
+  players. Another seat takes the count, with divisi when the count is larger than its "One per
+  part" count (`setCount()`). A section with a count of the panel has no soloist and no vocal
+  soloists.
 - The scene has at most `MAX_PLAYERS` players. The conductor is not a player.
 - Above `MAX_PLAYERS`, the app removes one player at a time: first from the largest string or
   choir seat, down to its "One per part" size, then from the largest other seat. A seat keeps at
