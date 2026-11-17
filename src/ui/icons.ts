@@ -26,8 +26,8 @@ const GITHUB_MARKUP =
 
 /**
  * The inner SVG markup of each icon of the UI (design 2.8). The icons have a view box of 24 × 24
- * and show at 20 × 20 px, with a stroke width of 1.75, round caps and joins, and `currentColor`.
- * The paw of the logo and the GitHub mark are filled.
+ * and show at 20 × 20 px, with the stroke width 2.2 of the icons of adjiebrotots.com, round caps
+ * and joins, and `currentColor`. The paw of the logo and the GitHub mark are filled.
  */
 const ICONS = {
   paw: PAW_MARKUP,
