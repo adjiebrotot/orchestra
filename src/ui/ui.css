@@ -1515,6 +1515,20 @@ body.is-building #stage {
   color: var(--text-dim);
 }
 
+/* The head line of a setting with a checkbox: the checkbox, then the label (design 2.8). */
+.setting-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--target-compact);
+  cursor: pointer;
+}
+
+.setting-check input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 /* The dim line below a setting, which explains its values (design 2.8). */
 .setting-help {
   margin: 8px 2px 0;
