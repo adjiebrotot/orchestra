@@ -25,7 +25,7 @@ import {
   orbitMinDistance,
 } from '../shots/view.ts';
 
-import { letterbox, mixBox } from './letterbox.ts';
+import { letterbox, mixBox, openMatteFov } from './letterbox.ts';
 import type { FrameBox } from './letterbox.ts';
 import { blendShare, mix, modeBlendWeight, startOrbitBlend, stepOrbitBlend } from './mode-blend.ts';
 import type { OrbitBlend, OrbitView } from './mode-blend.ts';
@@ -207,6 +207,11 @@ export class StageCamera {
    * the aspect `CINEMA_ASPECT`, and between them while the bars move.
    */
   #cinema = 0;
+  /**
+   * The aspect of the frame of Cinematic mode: `CINEMA_ASPECT`, or the aspect of the video of a
+   * full-frame render (design 2.5, render).
+   */
+  #frameAspect = CINEMA_ASPECT;
   /** The highest point of the players above the stage top, in meters. */
   readonly #stageTop: number;
   /** The blend after a change of the mode, or `null` (design 2.5). */
@@ -248,6 +253,15 @@ export class StageCamera {
       this.#input = true;
     });
     this.#controls = controls;
+  }
+
+  /**
+   * Sets the aspect of the frame of Cinematic mode (design 2.5, render). The next frame uses it.
+   *
+   * @param aspect `CINEMA_ASPECT`, or the aspect of the video of a full-frame render.
+   */
+  setFrameAspect(aspect: number): void {
+    this.#frameAspect = aspect;
   }
 
   /**
@@ -453,7 +467,7 @@ export class StageCamera {
     this.camera.position.set(...view.position);
     this.#controls.target.set(...view.target);
     this.camera.lookAt(this.#controls.target);
-    this.camera.fov = view.fov;
+    this.camera.fov = openMatteFov(view.fov, this.#frameAspect);
     this.#moved = true;
     this.#following = true;
     this.#glide = null;
@@ -664,7 +678,7 @@ export class StageCamera {
    */
   #imageBox(frame: ViewFrame): FrameBox {
     const free = boxOfFrame(frame, this.#width, this.#height);
-    return mixBox(free, letterbox(this.#width, this.#height), this.#cinema);
+    return mixBox(free, letterbox(this.#width, this.#height, this.#frameAspect), this.#cinema);
   }
 
   /**
@@ -683,7 +697,7 @@ export class StageCamera {
 
     const box = clearedBox(this.#imageBox(frame), this.#clear);
     this.#frame = { x: box.x, y: box.y, scale: box.height / this.#height };
-    this.camera.aspect = this.#cinema >= 1 ? CINEMA_ASPECT : box.width / box.height;
+    this.camera.aspect = this.#cinema >= 1 ? this.#frameAspect : box.width / box.height;
     this.camera.setViewOffset(
       box.width,
       box.height,

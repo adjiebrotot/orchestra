@@ -26,17 +26,37 @@ export interface UvRect {
 /**
  * Gives the frame of Cinematic mode (design 2.5): the largest box of the aspect
  * {@link CINEMA_ASPECT} inside the canvas, at its middle. A canvas narrower than 21:9 gets bars at
- * the top and the bottom, and a wider canvas gets bars at the sides.
+ * the top and the bottom, and a wider canvas gets bars at the sides. A full-frame render gives
+ * the aspect of its video, so the frame fills the canvas (design 2.5, render).
  *
  * @param width The width of the canvas, in CSS pixels.
  * @param height The height of the canvas, in CSS pixels.
+ * @param aspect The aspect of the frame.
  * @returns The box.
  */
-export function letterbox(width: number, height: number): FrameBox {
-  if (width / height > CINEMA_ASPECT) {
-    return { x: width / 2, y: height / 2, width: height * CINEMA_ASPECT, height };
+export function letterbox(width: number, height: number, aspect = CINEMA_ASPECT): FrameBox {
+  if (width / height > aspect) {
+    return { x: width / 2, y: height / 2, width: height * aspect, height };
   }
-  return { x: width / 2, y: height / 2, width, height: width / CINEMA_ASPECT };
+  return { x: width / 2, y: height / 2, width, height: width / aspect };
+}
+
+/**
+ * Gives the vertical field of view of a shot in a frame that is narrower than 21:9 (design 2.5,
+ * render). The frame keeps the horizontal angle of the shot and shows more above and below it, as
+ * the open matte of a film. A frame of 21:9 or wider keeps the field of view.
+ *
+ * @param fov The vertical field of view of the shot at the aspect {@link CINEMA_ASPECT}, in
+ *   degrees.
+ * @param aspect The aspect of the frame.
+ * @returns The vertical field of view, in degrees.
+ */
+export function openMatteFov(fov: number, aspect: number): number {
+  if (aspect >= CINEMA_ASPECT) {
+    return fov;
+  }
+  const half = (fov / 2) * (Math.PI / 180);
+  return 2 * Math.atan((Math.tan(half) * CINEMA_ASPECT) / aspect) * (180 / Math.PI);
 }
 
 /**
