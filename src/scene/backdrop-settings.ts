@@ -119,6 +119,21 @@ export const STAGE_TEXT_FONTS: readonly (readonly [StageTextFont, string])[] = [
   ['sans', 'Sans serif'],
 ];
 
+/**
+ * The size of the stage text (design 4.5, stage text): `fit` fills the floor in front of the
+ * podium, and each larger size makes the letters taller by its factor
+ * (`STAGE_TEXT.sizes` of `stage-text.ts`).
+ */
+export type StageTextSize = 'fit' | 'large' | 'larger' | 'largest';
+
+/** The sizes of the stage text, in the order of the menu, with their labels. */
+export const STAGE_TEXT_SIZES: readonly (readonly [StageTextSize, string])[] = [
+  ['fit', 'Fit in front of the podium'],
+  ['large', 'Large (1.6 ×)'],
+  ['larger', 'Larger (2.4 ×)'],
+  ['largest', 'Largest (3.2 ×)'],
+];
+
 /** The text in the wood of the stage, near the conductor, as the logo of the stage top. */
 export interface StageTextSettings {
   readonly on: boolean;
@@ -127,6 +142,7 @@ export interface StageTextSettings {
   readonly place: StageTextPlace;
   readonly tone: StageTextTone;
   readonly font: StageTextFont;
+  readonly size: StageTextSize;
 }
 
 /** All the stage dressing. */
@@ -180,7 +196,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     material: 'led',
     images: ['flag:id', 'flag:jp', 'flag:gb', 'flag:fr'],
   },
-  text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif' },
+  text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif', size: 'fit' },
 };
 
 /** A value of JSON text. */
@@ -197,7 +213,7 @@ export interface JsonRecord {
  * @param value A value of JSON.
  * @returns True for an object that is not a list.
  */
-function isRecord(value: Json | undefined): value is JsonRecord {
+export function isRecord(value: Json | undefined): value is JsonRecord {
   return value !== null && value !== undefined && !Array.isArray(value) && Object(value) === value;
 }
 
@@ -343,6 +359,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       place: readOption(text['place'], STAGE_TEXT_PLACES, base.text.place),
       tone: readOption(text['tone'], STAGE_TEXT_TONES, base.text.tone),
       font: readOption(text['font'], STAGE_TEXT_FONTS, base.text.font),
+      size: readOption(text['size'], STAGE_TEXT_SIZES, base.text.size),
     },
   };
 }

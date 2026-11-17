@@ -271,10 +271,13 @@ if (vWoodNormal.y > 0.5 && abs(vWoodPosition.y) < 0.03) {
 if (uStageTextMode.y > 0.5) {
   bool textFloor = uStageTextMode.y < 1.5;
   vec4 textBox = textFloor ? uStageTextFloor : uStageTextFront;
-  float textHalfHeight = min(textBox.w, textBox.z / uStageTextMode.x);
+  // A larger size on the floor keeps the front edge of the line and grows it to the back.
+  float textSize = textFloor ? uStageTextMode.z : 1.0;
+  float textHalfHeight = min(textBox.w * textSize, textBox.z / uStageTextMode.x);
   vec2 textHalf = vec2(textHalfHeight * uStageTextMode.x, textHalfHeight);
+  float textFloorZ = textBox.y + textBox.w - textHalfHeight;
   vec2 textPoint = textFloor
-    ? vec2(vWoodPosition.x - textBox.x, textBox.y - vWoodPosition.z)
+    ? vec2(vWoodPosition.x - textBox.x, textFloorZ - vWoodPosition.z)
     : vec2(vWoodPosition.x - textBox.x, vWoodPosition.y - textBox.y);
   vec2 textUv = textPoint / (2.0 * textHalf) + 0.5;
   float textCover = texture2D(uStageText, textUv).r;

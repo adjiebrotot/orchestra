@@ -6,6 +6,7 @@ import {
   DEFAULT_BACKDROP,
   SCREEN_MATERIALS,
   STAGE_TEXT_FONTS,
+  STAGE_TEXT_SIZES,
   STAGE_TEXT_PLACES,
   STAGE_TEXT_TONES,
   cleanStageText,
@@ -218,7 +219,7 @@ export class StagePanel {
     });
     return this.#section(
       'Stage text',
-      'A line of text in the wood of the stage, near the conductor, as the logo of the stage floor.',
+      'A line of text in the wood of the stage, near the conductor, as the logo of the stage floor. On a large stage, a larger size on the floor reads better from far away.',
       set.on,
       (on) => {
         update({ on });
@@ -241,6 +242,12 @@ export class StagePanel {
           'Letters',
           this.#select(STAGE_TEXT_FONTS, set.font, (font) => {
             update({ font });
+          }),
+        ),
+        this.#row(
+          'Size',
+          this.#select(STAGE_TEXT_SIZES, set.size, (size) => {
+            update({ size });
           }),
         ),
       ],
