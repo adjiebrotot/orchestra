@@ -2693,7 +2693,8 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 }
 
 .stage-panel select,
-.stage-panel input[type='number'] {
+.stage-panel input[type='number'],
+.stage-panel input[type='text'] {
   min-height: 30px;
   padding: 0 8px;
   background: var(--panel);
@@ -2705,6 +2706,12 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 .stage-row > select {
   justify-self: start;
   max-width: 100%;
+}
+
+.stage-text-input {
+  width: 100%;
+  min-width: 0;
+  color: inherit;
 }
 
 .stage-stepper {

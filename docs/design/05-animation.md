@@ -1707,6 +1707,26 @@ in this order (`CHOICE_WEIGHTS`, `SHOT_TIMES`):
 A score with fewer than `SMALL_GROUP_SEATS` seats gets no conductor shot, because the back of the
 bear gives weak frames of a solo. Mute and solo do not change the plan.
 
+**Scenic shots** (`shots/scenic.ts`, `SCENIC_SHOTS`). A scenic shot is a far shot that shows the
+stage dressing behind the orchestra (4.5, backdrop), as the crane and drone shots of a concert
+film. The plan makes it a high shot, so it keeps the spacing of the wide and high shots and their
+beam and light. Its candidate has its own weight (`CHOICE_WEIGHTS.scenic`).
+
+- **Helicopter.** A high orbit over the orchestra that sinks and pulls in while it turns. The
+  target is above the middle of the stage, so the dressing stays in the upper part of the frame.
+- **Low-angle orbit.** The camera stands just above the stage top, in front of the front edge,
+  and looks up a little. The screen and the banners stand above the heads.
+- **Backdrop orbit.** The camera turns around the middle of the screen, over the front of the
+  stage. The orchestra fills the lower part of the frame.
+
+The scenic shots of a plan take the three moves in turn, from a seeded first move. The orbit goes
+in the direction of the arc of the previous shot. A jump cut turns the orbit the other way, and
+then the next move tries. Each camera stays out of the box of the stage and the players: the
+helicopter is high above the heads, and the other cameras stand in front of the front edge. Each
+distance is a factor of the default distance, so it grows with the stage. The camera director
+offers the three moves in its group "Background". There, an orbit to the left or the right sets
+the direction, and each other move goes around the middle of the orbit.
+
 **Film grammar.** The shots obey the rules of a concert film of
 `docs/reference/camera-technique.md`, with the limits of `FILM_GRAMMAR` (`shots/grammar.ts`).
 `pnpm shot-trace --rules` counts the breaks of each rule over all demos.

@@ -74,12 +74,51 @@ export interface ScreenSettings {
   readonly images: readonly string[];
 }
 
+/** The place of the stage text: the floor in front of the podium, or the front of the stage. */
+export type StageTextPlace = 'floor' | 'front';
+
+/** The places of the stage text, in the order of the menu, with their labels. */
+export const STAGE_TEXT_PLACES: readonly (readonly [StageTextPlace, string])[] = [
+  ['floor', 'Floor, in front of the podium'],
+  ['front', 'Front of the stage'],
+];
+
+/** The wood of the letters of the stage text: a pale inlay, a dark stain, or a gold leaf. */
+export type StageTextTone = 'light' | 'dark' | 'gold';
+
+/** The tones of the stage text, in the order of the menu, with their labels. */
+export const STAGE_TEXT_TONES: readonly (readonly [StageTextTone, string])[] = [
+  ['light', 'Pale inlay'],
+  ['dark', 'Dark stain'],
+  ['gold', 'Gold leaf'],
+];
+
+/** The typeface of the stage text. */
+export type StageTextFont = 'serif' | 'sans';
+
+/** The typefaces of the stage text, in the order of the menu, with their labels. */
+export const STAGE_TEXT_FONTS: readonly (readonly [StageTextFont, string])[] = [
+  ['serif', 'Serif'],
+  ['sans', 'Sans serif'],
+];
+
+/** The text in the wood of the stage, near the conductor, as the logo of the stage top. */
+export interface StageTextSettings {
+  readonly on: boolean;
+  /** One line of text. An empty text shows nothing. */
+  readonly text: string;
+  readonly place: StageTextPlace;
+  readonly tone: StageTextTone;
+  readonly font: StageTextFont;
+}
+
 /** All the stage dressing. */
 export interface BackdropSettings {
   readonly standing: BannerSettings;
   readonly hanging: BannerSettings;
   readonly flags: FlagSettings;
   readonly screen: ScreenSettings;
+  readonly text: StageTextSettings;
 }
 
 /** The limits of the counts. */
@@ -91,6 +130,8 @@ export const BACKDROP_LIMITS = {
   flags: 6,
   /** The most images in one list. */
   images: 12,
+  /** The most characters of the stage text. */
+  text: 48,
 } as const;
 
 /** The settings of a new user: each object is on, with country flags. */
@@ -119,6 +160,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     material: 'led',
     images: ['flag:id', 'flag:jp', 'flag:gb', 'flag:fr'],
   },
+  text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif' },
 };
 
 /** A value of JSON text. */
@@ -258,6 +300,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const data = isRecord(value) ? value : {};
   const flags = isRecord(data['flags']) ? data['flags'] : {};
   const screen = isRecord(data['screen']) ? data['screen'] : {};
+  const text = isRecord(data['text']) ? data['text'] : {};
   const base = DEFAULT_BACKDROP;
   return {
     standing: readBanners(data['standing'], base.standing, BACKDROP_LIMITS.standing),
@@ -272,7 +315,25 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       material: readOption(screen['material'], SCREEN_MATERIALS, base.screen.material),
       images: readImages(screen['images'], base.screen.images),
     },
+    text: {
+      on: isBoolean(text['on']) ? text['on'] : base.text.on,
+      text: isText(text['text']) ? cleanStageText(text['text']) : base.text.text,
+      place: readOption(text['place'], STAGE_TEXT_PLACES, base.text.place),
+      tone: readOption(text['tone'], STAGE_TEXT_TONES, base.text.tone),
+      font: readOption(text['font'], STAGE_TEXT_FONTS, base.text.font),
+    },
   };
+}
+
+/**
+ * Cleans a stage text: one line, with no control characters, and at most
+ * `BACKDROP_LIMITS.text` characters.
+ *
+ * @param text The text of the user.
+ * @returns The clean text.
+ */
+export function cleanStageText(text: string): string {
+  return [...text.replaceAll(/\p{Cc}+/gu, ' ')].slice(0, BACKDROP_LIMITS.text).join('');
 }
 
 /** One cue of the screen: from its time until the next cue, the screen shows its image. */

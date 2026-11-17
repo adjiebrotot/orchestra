@@ -97,6 +97,8 @@ import { gradeLutSteps } from './grade.ts';
 import { createRenderer } from './renderer.ts';
 import { aimGap, easeAim, easeShare, soloAim } from './solo-light.ts';
 import { STAGE_SHADOW, createStage, noBakeUniforms } from './stage.ts';
+import { noStageTextUniforms } from './stage-text.ts';
+import type { StageTextUniforms } from './stage-text.ts';
 import { VariantMaterials } from './variants.ts';
 import type { StageBakeUniforms } from './stage.ts';
 import { bakeStageSteps } from './stage-bake.ts';
@@ -536,6 +538,11 @@ export class StageScene {
   #blendCamera = false;
   /** The stage dressing (design 4.5, backdrop), which the hall of the shown layout holds. */
   #backdrop: Group | null = null;
+  /**
+   * The uniforms of the stage text (design 4.5, stage text). The stage of each layout shares
+   * them, so a new text shows at once on the shown stage.
+   */
+  readonly stageText: StageTextUniforms = noStageTextUniforms();
 
   /**
    * Creates the renderer on a canvas. The scene shows nothing until {@link StageScene.show}.
@@ -612,7 +619,14 @@ export class StageScene {
     // new layout. A shown layout is under the cover of the stage while a new one builds (PF1).
     setPoolAim(this.#pool, aim);
     const bakeUniforms = noBakeUniforms();
-    const stageGroup = createStage(layout.stageSide, podium, this.#pool, bakeUniforms, this.#rim);
+    const stageGroup = createStage(
+      layout.stageSide,
+      podium,
+      this.#pool,
+      bakeUniforms,
+      this.#rim,
+      this.stageText,
+    );
     scene.add(stageGroup);
     yield;
     const lights = createLights(layout.stageSide, this.#tier, layout.conductor);

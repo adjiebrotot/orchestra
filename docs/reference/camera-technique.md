@@ -139,6 +139,11 @@ The app follows these facts:
   `WIDE_FOV`, so the stage fills the width of the 21:9 frame.
 - **The score (section 5).** The planner reads the music after each cut, and a cut at an entry
   shows the player who enters (`CUT_BONUS.entry`, `TIERS`).
+- **Scenic shots (section 5).** A low-angle shot looks up at its subject from below the eye line
+  [24]. A crane shot comes from a camera on a moving crane or jib [25], and an airborne shot from
+  a moving aerial device, such as a drone [26]. The plan uses these far views to show the stage
+  dressing behind the orchestra: a helicopter orbit, a low-angle orbit, and an orbit around the
+  screen (`SCENIC_SHOTS`, design 5.6). They keep the spacing of the wide shots.
 - **The conductor (section 5).** The conductor shots come between the other shots, with some
   shots between them (`SHOT_TIMES.conductorSpacing`).
 - **The moves (section 4).** Each move starts and ends at rest (a smoothstep), and the close
@@ -240,7 +245,8 @@ The app does not follow these facts:
 
 ## 8. Sources
 
-Sources 1 to 12 opened on 2026-10-31, and sources 13 to 23 on 2026-11-12.
+Sources 1 to 12 opened on 2026-10-31, sources 13 to 23 on 2026-11-12, and sources 24 to 26 on
+2026-11-17.
 
 1. U.S. Navy, "Photography (Basic)", NAVEDTRA 14209, 1993, chapter 13 "Motion Media", pages 13-15
    to 13-20. https://everyspec.com/USN/NAVEDTRA/NAVEDTRA_14209_OCT1993_18402/ (text of the
@@ -300,3 +306,7 @@ Sources 1 to 12 opened on 2026-10-31, and sources 13 to 23 on 2026-11-12.
     eye?", CC BY-SA, as republished at
     https://www.uniquephoto.com/community/qa/why-do-portrait-photographers-focus-on-the-nearest-eye-instead-of-a-face-farther-back
     (a community answer: the weakest source of this file).
+24. Wikipedia, "Low-angle shot". https://en.wikipedia.org/wiki/Low-angle_shot
+25. Wikipedia, "Crane shot". https://en.wikipedia.org/wiki/Crane_shot
+26. Wikipedia, "Cinematic techniques", entry "Airborne shot".
+    https://en.wikipedia.org/wiki/Cinematic_techniques

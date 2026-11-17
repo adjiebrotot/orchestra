@@ -563,7 +563,7 @@ export class App {
     });
     this.#backdrop = new BackdropControl((images) => {
       this.#director.setScreenImages(images);
-    });
+    }, scene.stageText);
     scene.setBackdrop(this.#backdrop.group);
     this.#renderPanel = new RenderPanel({
       onStart: (format) => {

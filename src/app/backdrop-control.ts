@@ -3,6 +3,8 @@ import type { Group } from 'three';
 import { Backdrop } from '../scene/backdrop.ts';
 import type { BackdropSettings, ScreenCue } from '../scene/backdrop-settings.ts';
 import { FLAG_ASPECT, drawFlag, flagName } from '../scene/country-flags.ts';
+import { StageText } from '../scene/stage-text.ts';
+import type { StageTextUniforms } from '../scene/stage-text.ts';
 import type { ScreenImage } from '../ui/director.ts';
 import { StagePanel } from '../ui/stage-panel.ts';
 import type { PanelImage } from '../ui/stage-panel.ts';
@@ -50,6 +52,7 @@ function thumbOf(canvas: HTMLCanvasElement): string {
 export class BackdropControl {
   readonly panel: StagePanel;
   readonly #backdrop: Backdrop;
+  readonly #stageText: StageText;
   readonly #uploads = new Map<string, Upload>();
   readonly #flagThumbs = new Map<string, string>();
   readonly #onScreenImages: (images: readonly ScreenImage[]) => void;
@@ -61,10 +64,17 @@ export class BackdropControl {
    *
    * @param onScreenImages Gets the images of the screen, or an empty list when the screen does
    *   not show, for the row "Screen" of the camera director.
+   * @param stageText The uniforms of the stage text of the stage material (design 4.5, stage
+   *   text).
    */
-  constructor(onScreenImages: (images: readonly ScreenImage[]) => void) {
+  constructor(
+    onScreenImages: (images: readonly ScreenImage[]) => void,
+    stageText: StageTextUniforms,
+  ) {
     this.#onScreenImages = onScreenImages;
     this.#settings = loadBackdropSettings();
+    this.#stageText = new StageText(stageText);
+    this.#stageText.set(this.#settings.text);
     this.#backdrop = new Backdrop({
       canvasOf: (id) => this.#uploads.get(id)?.canvas ?? null,
     });
@@ -125,10 +135,16 @@ export class BackdropControl {
    * @param settings The settings.
    */
   #apply(settings: BackdropSettings): void {
+    const old = this.#settings;
     this.#settings = settings;
     saveBackdropSettings(settings);
-    this.#backdrop.build(this.#stageSide, settings);
-    this.#tellScreen();
+    this.#stageText.set(settings.text);
+    // A change of the stage text alone builds no object again, so each key of the text is fast.
+    const dressing = ['standing', 'hanging', 'flags', 'screen'] as const;
+    if (dressing.some((key) => settings[key] !== old[key])) {
+      this.#backdrop.build(this.#stageSide, settings);
+      this.#tellScreen();
+    }
   }
 
   /** Tells the camera director the images of the screen. */
@@ -229,6 +245,7 @@ export class BackdropControl {
       hanging: { ...s.hanging, images: without(s.hanging.images) },
       flags: { ...s.flags, images: without(s.flags.images) },
       screen: { ...s.screen, images: without(s.screen.images) },
+      text: s.text,
     });
     this.panel.setSettings(this.#settings);
     await deleteImage(id);

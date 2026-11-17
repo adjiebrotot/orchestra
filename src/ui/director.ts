@@ -1,6 +1,7 @@
 import { isScreenCue, screenFrame } from '../scene/backdrop-settings.ts';
 import type { Json, ScreenCue } from '../scene/backdrop-settings.ts';
-import { DIRECTOR_MOTIONS, focusSeat } from '../shots/directed.ts';
+import { DIRECTOR_MOTIONS, focusSeat, isScenicFocus } from '../shots/directed.ts';
+import { SCENIC_MOVES } from '../shots/scenic.ts';
 import type { DirectorCue, DirectorFocus, DirectorMotion } from '../shots/directed.ts';
 import { createButton, createElement } from './dom.ts';
 
@@ -119,7 +120,7 @@ function isCue(value: unknown): value is DirectorCue {
   return (
     typeof cue['timeSec'] === 'number' &&
     typeof cue['focus'] === 'string' &&
-    /^(auto|wide|high|conductor|seat:\d+)$/u.test(cue['focus']) &&
+    (/^(auto|wide|high|conductor|seat:\d+)$/u.test(cue['focus']) || isScenicFocus(cue['focus'])) &&
     DIRECTOR_MOTIONS.some(([motion]) => motion === cue['motion']) &&
     typeof cue['cut'] === 'boolean'
   );
@@ -513,6 +514,10 @@ export class Director {
     if (seat !== null) {
       return this.#piece?.rows.find((row) => row.seatIndex === seat)?.name ?? `Seat ${seat + 1}`;
     }
+    const scenic = SCENIC_MOVES.find(([move]) => move === focus);
+    if (scenic) {
+      return scenic[1];
+    }
     return { auto: 'Automatic', wide: 'Whole stage', high: 'High view', conductor: 'Conductor' }[
       focus as 'auto' | 'wide' | 'high' | 'conductor'
     ];
@@ -539,6 +544,11 @@ export class Director {
     add('wide', 'Whole stage', views);
     add('high', 'High view', views);
     add('conductor', 'Conductor', views);
+    const scenic = createElement('optgroup');
+    scenic.label = 'Background';
+    for (const [move, label] of SCENIC_MOVES) {
+      add(move, label, scenic);
+    }
     const seats = createElement('optgroup');
     seats.label = 'Instruments';
     for (const row of this.#piece?.rows ?? []) {
@@ -546,7 +556,7 @@ export class Director {
         add(`seat:${row.seatIndex}`, row.name, seats);
       }
     }
-    select.append(views, seats);
+    select.append(views, scenic, seats);
     return select;
   }
 

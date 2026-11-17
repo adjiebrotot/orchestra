@@ -6,6 +6,8 @@ import { keyDistance, writeKeyPosition } from './camera-keys.ts';
 import { CONDUCTOR_OWNER, cameraClear, prepareClearance } from './clearance.ts';
 import type { ClearBox, StageClearance } from './clearance.ts';
 import { thirdOf } from './grammar.ts';
+import { SCENIC_MOVES, scenicFraming } from './scenic.ts';
+import type { ScenicMove } from './scenic.ts';
 import { SHOT_SIZES, frameHalfHeight } from './shot-size.ts';
 import type { ShotSize } from './shot-size.ts';
 import { conductorCloseSubject, prepareSubjects, sectionSubject, soloSubject } from './subjects.ts';
@@ -18,9 +20,20 @@ const DEG = Math.PI / 180;
 
 /**
  * Where a cue points the camera: the automatic plan (`auto`), the whole stage (`wide`), the stage
- * from high in the hall (`high`), the conductor, or one seat of the score (`seat:<index>`).
+ * from high in the hall (`high`), a scenic move that shows the background (`ScenicMove`, design
+ * 5.6), the conductor, or one seat of the score (`seat:<index>`).
  */
-export type DirectorFocus = 'auto' | 'wide' | 'high' | 'conductor' | `seat:${number}`;
+export type DirectorFocus = 'auto' | 'wide' | 'high' | ScenicMove | 'conductor' | `seat:${number}`;
+
+/**
+ * Tells if a focus is a scenic move.
+ *
+ * @param focus The focus.
+ * @returns True for a scenic move.
+ */
+export function isScenicFocus(focus: string): focus is ScenicMove {
+  return SCENIC_MOVES.some(([move]) => move === focus);
+}
 
 /** The move of the camera during a directed shot. */
 export type DirectorMotion =
@@ -161,6 +174,33 @@ function farFraming(kind: 'wide' | 'high', stageSide: number, motion: DirectorMo
   return { kind, target, halfHeight: 0, composition: null, from, to, seats: [], hero: null };
 }
 
+/**
+ * Makes the framing of a scenic move (design 5.6, scenic shots). An orbit to the left or to the
+ * right sets the direction of the built-in orbit. `static` holds the middle of the orbit, and
+ * each other move goes around the middle, as on the far shots.
+ *
+ * @param move The scenic move.
+ * @param stageSide The stage side `S`, in meters.
+ * @param motion The move of the cue.
+ * @returns The framing, as a high shot: a far shot with no subject.
+ */
+function scenicDirected(move: ScenicMove, stageSide: number, motion: DirectorMotion): Framing {
+  const orbit = motion === 'orbit-left' ? -1 : motion === 'orbit-right' ? 1 : 0;
+  const framing = scenicFraming(move, stageSide, orbit);
+  const [from, to] =
+    orbit === 0 ? moveKeys(framing.from, motion, false) : [framing.from, framing.to];
+  return {
+    kind: 'high',
+    target: framing.target,
+    halfHeight: 0,
+    composition: null,
+    from,
+    to,
+    seats: [],
+    hero: null,
+  };
+}
+
 /** The turns of the camera from the front of a subject that the search tries, in degrees. */
 const SEARCH_TURNS = [0, 15, -15, 30, -30, 45, -45, 60, -60] as const;
 
@@ -272,6 +312,9 @@ function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: Dire
   const { stageSide } = subjects;
   if (cue.focus === 'high') {
     return farFraming('high', stageSide, cue.motion);
+  }
+  if (isScenicFocus(cue.focus)) {
+    return scenicDirected(cue.focus, stageSide, cue.motion);
   }
   if (cue.focus === 'conductor' && subjects.conductor) {
     const subject = conductorCloseSubject(subjects.conductor);

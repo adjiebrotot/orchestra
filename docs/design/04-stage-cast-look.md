@@ -1494,6 +1494,24 @@ The rules of the layout:
 - The settings stay in the local storage. The images of the user stay in IndexedDB, at most
   `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). No image leaves the browser (2.7).
 
+**Stage text**
+
+The stage text is one line of text in the wood of the stage, near the conductor
+(`scene/stage-text.ts`, `STAGE_TEXT`). The panel "Stage design" sets the text, the place, the wood,
+and the letters.
+
+- The stage shader reads the letters from a canvas texture and changes the tone of the wood under
+  them, as the logo of the stage top does. Thus the grain, the planks, and the seams show
+  through, and the text takes the light, the shadows, and the bake of the floor.
+- The place "Floor" puts the line between the front of the podium and the lip of the front edge,
+  with the top of the letters to the back, so the audience reads it. The place "Front" puts it on
+  the skirt below the front edge (`stageTextBoxes()`).
+- The line keeps the aspect of its texture inside its box, and it stays clear of the corner cuts.
+  A long text gets smaller letters.
+- The tones are a pale inlay, a dark stain, and a gold leaf (`STAGE_TEXT.floorTint`,
+  `STAGE_TEXT.frontTint`). The skirt is darker than the planks, so its factors are larger.
+- A change of the text draws only the texture again, so each key shows at once.
+
 **Post effects**
 
 The scene renders into a target with MSAA, then the post effects make the image of the canvas
