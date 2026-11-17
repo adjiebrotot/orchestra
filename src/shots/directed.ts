@@ -13,17 +13,55 @@ import type { ShotSize } from './shot-size.ts';
 import { conductorCloseSubject, prepareSubjects, sectionSubject, soloSubject } from './subjects.ts';
 import type { StageSubjects, Subject } from './subjects.ts';
 import type { Composition, Shot, ShotKey, ShotKind, ShotPlan } from './types.ts';
-import { CINEMA_ASPECT, DEFAULT_ELEVATION, DEFAULT_TARGET, FIELD_OF_VIEW } from './view.ts';
+import {
+  CINEMA_ASPECT,
+  DEFAULT_ELEVATION,
+  DEFAULT_TARGET,
+  FIELD_OF_VIEW,
+  defaultDistance,
+} from './view.ts';
 
 /** Degrees to radians. */
 const DEG = Math.PI / 180;
 
 /**
- * Where a cue points the camera: the automatic plan (`auto`), the whole stage (`wide`), the stage
- * from high in the hall (`high`), a scenic move that shows the background (`ScenicMove`, design
- * 5.6), the conductor, or one seat of the score (`seat:<index>`).
+ * Where a cue points the camera: the whole stage (`wide`), the stage from high in the hall
+ * (`high`), a scenic move that shows the background (`ScenicMove`, design 5.6), a view of the
+ * conductor ({@link ConductorFocus}), or one seat of the score (`seat:<index>`).
  */
-export type DirectorFocus = 'auto' | 'wide' | 'high' | ScenicMove | 'conductor' | `seat:${number}`;
+export type DirectorFocus = 'wide' | 'high' | ScenicMove | ConductorFocus | `seat:${number}`;
+
+/**
+ * The views of the conductor (design 5.6, camera director):
+ *
+ * - `conductor`: the bear from behind, from the audience side.
+ * - `conductor-face`: a close shot of the face and the hands, from the orchestra side.
+ * - `conductor-low`: a low camera near the podium looks up at the bear, from the orchestra side.
+ * - `conductor-orchestra`: a high camera over the back rows looks over the orchestra at the bear.
+ */
+export type ConductorFocus =
+  | 'conductor'
+  | 'conductor-face'
+  | 'conductor-low'
+  | 'conductor-orchestra';
+
+/** The views of the conductor, in the order of the menu, with their labels. */
+export const CONDUCTOR_VIEWS: readonly (readonly [ConductorFocus, string])[] = [
+  ['conductor', 'Conductor from behind'],
+  ['conductor-face', 'Conductor face (zoom in)'],
+  ['conductor-low', 'Conductor low angle'],
+  ['conductor-orchestra', 'Conductor over the orchestra (zoom out)'],
+];
+
+/**
+ * Tells if a focus is a view of the conductor.
+ *
+ * @param focus The focus.
+ * @returns True for a view of the conductor.
+ */
+export function isConductorFocus(focus: string): focus is ConductorFocus {
+  return CONDUCTOR_VIEWS.some(([view]) => view === focus);
+}
 
 /**
  * Tells if a focus is a scenic move.
@@ -84,14 +122,45 @@ const CRANE_DEG = { low: 5, high: 10 } as const;
  */
 const WIDE_FOV = (2 * Math.atan((Math.tan((FIELD_OF_VIEW / 2) * DEG) * 1.6) / CINEMA_ASPECT)) / DEG;
 
-/** The values of the key of each kind of directed close shot. */
+/**
+ * The values of the key of each kind of directed close shot. `conductorFace` and `conductorLow`
+ * look at the front of the conductor. The low camera has a wide field of view, so it stands near
+ * the podium, in front of the first row, and its negative elevation looks up at the bear.
+ */
 const CLOSE_KEYS = {
   conductor: { fov: 26, elevation: 8, backRise: 0, size: SHOT_SIZES.conductor },
+  conductorFace: { fov: 24, elevation: 6, backRise: 0, size: SHOT_SIZES.solo },
+  conductorLow: { fov: 60, elevation: -16, backRise: 0, size: SHOT_SIZES.conductor },
   section: { fov: 30, elevation: 11, backRise: 8, size: SHOT_SIZES.section },
   solo: { fov: 24, elevation: 9, backRise: 10, size: SHOT_SIZES.solo },
 } as const satisfies Readonly<
   Record<string, { fov: number; elevation: number; backRise: number; size: ShotSize }>
 >;
+
+/**
+ * The turns of the low camera of the conductor (`conductor-low`) from the front of the bear that
+ * the search tries, in degrees. On the axis, the desk of the conductor stands between the low
+ * camera and the bear. A larger turn moves the camera toward the free audience side.
+ */
+const LOW_TURNS = [55, 75, 95] as const;
+
+/**
+ * The view over the orchestra at the conductor (`conductor-orchestra`): the camera stands high
+ * over the back rows, inside the back edge of the stage, and looks at the front of the bear. The
+ * target is between the podium and the middle of the orchestra, so the bear stands in the upper
+ * part of the frame, and the players fill the lower part.
+ */
+const ORCHESTRA_VIEW = {
+  /** The elevation of the camera, in degrees. */
+  elevation: 25,
+  /** The target: this part of the stage side `S` behind the podium, at this height in meters. */
+  backSides: 0.15,
+  height: 1.2,
+  /** The distance of the camera from the back edge of the stage, in meters. */
+  edge: 1.2,
+  /** The vertical field of view, in degrees. */
+  fov: 34,
+} as const;
 
 /** The framing of one directed shot, before its times. */
 interface Framing {
@@ -249,21 +318,25 @@ function moveClear(
  * a body of the stage is in the way, the camera turns around the subject and rises until it is
  * clear, as the cameras of the automatic plan do.
  *
- * @param kind The kind of the shot.
+ * @param keyName The name of the key of the shot in {@link CLOSE_KEYS}. It also gives the kind
+ *   of the shot.
  * @param subject The subject.
  * @param motion The move.
  * @param hero The hero of the shot.
  * @param clearance The obstacles of the layout.
+ * @param turns The turns from the front that the search tries, in degrees.
  * @returns The framing, or `null` for a search with no candidate.
  */
 function closeFraming(
-  kind: 'conductor' | 'section' | 'solo',
+  keyName: keyof typeof CLOSE_KEYS,
   subject: Subject,
   motion: DirectorMotion,
   hero: number | null,
   clearance: StageClearance,
+  turns: readonly number[] = SEARCH_TURNS,
 ): Framing | null {
-  const k = CLOSE_KEYS[kind];
+  const k = CLOSE_KEYS[keyName];
+  const kind = keyName === 'section' || keyName === 'solo' ? keyName : 'conductor';
   const members = new Set(subject.members);
   const skip = new Set(
     clearance.obstacles.filter((o) => members.has(o.owner)).flatMap((o) => o.boxes),
@@ -272,7 +345,7 @@ function closeFraming(
   let chosen: Framing | null = null;
   let fallback: Framing | null = null;
   search: for (const rise of SEARCH_RISES) {
-    for (const turn of SEARCH_TURNS) {
+    for (const turn of turns) {
       const elevation = base + rise * DEG;
       const azimuth = subject.front + turn * subject.spread * DEG;
       const key: ShotKey = { azimuth, elevation, zoom: 1, fov: k.fov };
@@ -302,10 +375,66 @@ function closeFraming(
 }
 
 /**
+ * Makes the framing of a view of the conductor.
+ *
+ * @param subjects The subjects of the layout. It has a conductor.
+ * @param clearance The obstacles of the layout.
+ * @param view The view.
+ * @param motion The move.
+ * @returns The framing, or `null` with no conductor or with no clear camera.
+ */
+function conductorFraming(
+  subjects: StageSubjects,
+  clearance: StageClearance,
+  view: ConductorFocus,
+  motion: DirectorMotion,
+): Framing | null {
+  const { conductor, stageSide } = subjects;
+  if (!conductor) {
+    return null;
+  }
+  const behind = conductorCloseSubject(conductor);
+  if (view === 'conductor') {
+    return closeFraming('conductor', behind, motion, CONDUCTOR_OWNER, clearance);
+  }
+  // The bear looks at the orchestra (-z), so its front is the azimuth π.
+  const front: Subject = { ...behind, front: Math.PI };
+  if (view === 'conductor-face') {
+    return closeFraming('conductorFace', front, motion, CONDUCTOR_OWNER, clearance);
+  }
+  if (view === 'conductor-low') {
+    // The low camera stands to one side of the axis, so the desk of the conductor does not hide
+    // the bear. The clearance does not see the desk, because it is a part of the conductor.
+    const turns = LOW_TURNS.flatMap((turn) => [turn, -turn]);
+    return closeFraming('conductorLow', front, motion, CONDUCTOR_OWNER, clearance, turns);
+  }
+  const v = ORCHESTRA_VIEW;
+  const [px, , pz] = conductor.feet;
+  const target: Vec3 = [px, v.height, pz - v.backSides * stageSide];
+  const elevation = v.elevation * DEG;
+  // The camera stands `edge` inside the back edge of the stage (z = -S / 2).
+  const across = Math.max(1, target[2] + stageSide / 2 - v.edge);
+  const distance = across / Math.cos(elevation);
+  const zoom = distance / defaultDistance(stageSide, CINEMA_ASPECT);
+  const key: ShotKey = { azimuth: Math.PI, elevation, zoom, fov: v.fov };
+  const [from, to] = moveKeys(key, motion, false);
+  return {
+    kind: 'high',
+    target,
+    halfHeight: 0,
+    composition: null,
+    from,
+    to,
+    seats: [],
+    hero: CONDUCTOR_OWNER,
+  };
+}
+
+/**
  * Makes the framing of a cue.
  *
  * @param subjects The subjects of the layout.
- * @param cue The cue. Its focus is not `auto`.
+ * @param cue The cue.
  * @returns The framing. A focus with no players on the stage gives the wide shot.
  */
 function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: DirectorCue): Framing {
@@ -316,9 +445,8 @@ function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: Dire
   if (isScenicFocus(cue.focus)) {
     return scenicDirected(cue.focus, stageSide, cue.motion);
   }
-  if (cue.focus === 'conductor' && subjects.conductor) {
-    const subject = conductorCloseSubject(subjects.conductor);
-    const framing = closeFraming('conductor', subject, cue.motion, CONDUCTOR_OWNER, clearance);
+  if (isConductorFocus(cue.focus) && subjects.conductor) {
+    const framing = conductorFraming(subjects, clearance, cue.focus, cue.motion);
     if (framing) {
       return framing;
     }
@@ -351,17 +479,16 @@ function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: Dire
  * @param shot The shot.
  * @param start The start of the span.
  * @param end The end of the span.
- * @param blendSec The blend into the shot when the span cuts its start.
  * @returns The shot in the span.
  */
-function clipShot(shot: Shot, start: number, end: number, blendSec: number): Shot {
+function clipShot(shot: Shot, start: number, end: number): Shot {
   const clipped = shot.startSec < start;
   return {
     ...shot,
     startSec: clipped ? start : shot.startSec,
     endSec: Math.min(shot.endSec, end),
     moveEndSec: Math.max(Math.min(shot.moveEndSec, end), clipped ? start : shot.startSec),
-    blendSec: clipped ? blendSec : shot.blendSec,
+    blendSec: clipped ? 0 : shot.blendSec,
   };
 }
 
@@ -377,9 +504,9 @@ function blendOf(cut: boolean, span: number): number {
 }
 
 /**
- * Makes the shot plan of the directed camera path. Before the first cue, and from each cue with
- * the focus `auto`, the shots of the automatic plan show. From each other cue to the next cue,
- * one shot shows its focus with its move. Pure: the same inputs give the same plan.
+ * Makes the shot plan of the directed camera path. Before the first cue, the shots of the
+ * automatic plan show. From each cue to the next cue, one shot shows its focus with its move.
+ * Pure: the same inputs give the same plan.
  *
  * @param auto The automatic plan of the score, from `prepareShots()`.
  * @param score The score.
@@ -406,10 +533,10 @@ export function directedPlan(
   const shots: Shot[] = [];
   const inserts: Shot[] = [];
   /** Adds the shots and the inserts of the automatic plan in a span. */
-  const addAuto = (start: number, end: number, blendSec: number): void => {
+  const addAuto = (start: number, end: number): void => {
     for (const shot of auto.shots) {
       if (shot.startSec < end && shot.endSec > start) {
-        shots.push(clipShot(shot, start, end, blendSec));
+        shots.push(clipShot(shot, start, end));
       }
     }
     for (const insert of auto.inserts) {
@@ -420,7 +547,7 @@ export function directedPlan(
   };
   const firstTime = Math.max(0, sorted[0]?.timeSec ?? 0);
   if (firstTime > 0) {
-    addAuto(-Infinity, firstTime, 0);
+    addAuto(-Infinity, firstTime);
   }
   for (const [i, cue] of sorted.entries()) {
     const start = i === 0 && firstTime <= 0 ? -Infinity : Math.max(0, cue.timeSec);
@@ -431,10 +558,6 @@ export function directedPlan(
     }
     const span = (Number.isFinite(end) ? end : score.durationSec) - Math.max(start, 0);
     const blendSec = shots.length === 0 ? 0 : blendOf(cue.cut, span);
-    if (cue.focus === 'auto') {
-      addAuto(start, end, blendSec);
-      continue;
-    }
     const framing = framingOf(subjects, clearance, cue);
     shots.push({
       kind: framing.kind,
@@ -459,4 +582,103 @@ export function directedPlan(
     inserts,
     insertStarts: Float64Array.from(inserts, (shot) => shot.startSec),
   };
+}
+
+/**
+ * The least part of a full directed move that a move of the automatic plan must have to count as
+ * a move, and not as a still camera.
+ */
+const MOVE_SHARE = 0.25;
+
+/**
+ * Gives the directed move that is nearest to the move of a shot of the automatic plan: the axis
+ * with the largest change, as a part of the full directed move on that axis.
+ *
+ * @param from The key at the start of the move.
+ * @param to The key at the end of the move.
+ * @returns The move.
+ */
+function nearestMotion(from: ShotKey, to: ShotKey): DirectorMotion {
+  const zoom = Math.log(to.zoom / from.zoom) / Math.log(PUSH_ZOOM);
+  const arc = (to.azimuth - from.azimuth) / (2 * ORBIT_DEG.close * DEG);
+  const crane = (to.elevation - from.elevation) / ((CRANE_DEG.low + CRANE_DEG.high) * DEG);
+  const axes: readonly (readonly [number, DirectorMotion, DirectorMotion])[] = [
+    [zoom, 'push-in', 'pull-out'],
+    [arc, 'orbit-right', 'orbit-left'],
+    [crane, 'crane-up', 'crane-down'],
+  ];
+  let best: DirectorMotion = 'static';
+  let size = MOVE_SHARE;
+  for (const [value, up, down] of axes) {
+    if (Math.abs(value) >= size) {
+      size = Math.abs(value);
+      best = value > 0 ? up : down;
+    }
+  }
+  return best;
+}
+
+/**
+ * Gives the scenic move of a high shot of the automatic plan, with the direction of its orbit.
+ *
+ * @param shot The high shot.
+ * @param stageSide The stage side `S`, in meters.
+ * @returns The scenic move and its directed move, or `null` for a plain high shot.
+ */
+function scenicOf(shot: Shot, stageSide: number): readonly [ScenicMove, DirectorMotion] | null {
+  for (const [move] of SCENIC_MOVES) {
+    for (const direction of [-1, 1] as const) {
+      const framing = scenicFraming(move, stageSide, direction);
+      if (
+        Math.abs(framing.from.azimuth - shot.from.azimuth) < 1e-6 &&
+        Math.abs(framing.from.elevation - shot.from.elevation) < 1e-6 &&
+        Math.abs(framing.from.zoom - shot.from.zoom) < 1e-6
+      ) {
+        return [move, direction < 0 ? 'orbit-left' : 'orbit-right'];
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Gives the cues of the automatic plan (the button "Automatic built-in" of the camera director):
+ * one cue at the start of each main shot, with the focus, the move, and the cut that are nearest
+ * to the shot. The cut times follow the music, as the planner put them. The user can then change
+ * the focus of each cue. The detail inserts have no cue. Pure: the same plan gives the same cues.
+ *
+ * @param auto The automatic plan of the score, from `prepareShots()`.
+ * @returns The cues, sorted by time.
+ */
+export function automaticCues(auto: ShotPlan): DirectorCue[] {
+  const cues: DirectorCue[] = [];
+  for (const shot of auto.shots) {
+    const timeSec = Math.round(Math.max(0, shot.startSec) * 10) / 10;
+    let focus: DirectorFocus;
+    let motion = nearestMotion(shot.from, shot.to);
+    const seat = shot.seats[0];
+    if (shot.kind === 'high') {
+      const scenic = scenicOf(shot, auto.stageSide);
+      focus = scenic?.[0] ?? 'high';
+      motion = scenic?.[1] ?? motion;
+    } else if (shot.kind === 'conductor') {
+      focus = 'conductor';
+    } else if (shot.kind !== 'wide' && seat !== undefined) {
+      focus = `seat:${seat}`;
+    } else {
+      focus = 'wide';
+    }
+    const cue: DirectorCue = {
+      timeSec,
+      focus,
+      motion,
+      cut: shot.blendSec === 0,
+    };
+    // Two shots in one tenth of a second keep the later shot, as the director does.
+    if (cues.at(-1)?.timeSec === timeSec) {
+      cues.pop();
+    }
+    cues.push(cue);
+  }
+  return cues;
 }

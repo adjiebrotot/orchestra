@@ -1,6 +1,12 @@
 import { isScreenCue, screenFrame } from '../scene/backdrop-settings.ts';
 import type { Json, ScreenCue } from '../scene/backdrop-settings.ts';
-import { DIRECTOR_MOTIONS, focusSeat, isScenicFocus } from '../shots/directed.ts';
+import {
+  CONDUCTOR_VIEWS,
+  DIRECTOR_MOTIONS,
+  focusSeat,
+  isConductorFocus,
+  isScenicFocus,
+} from '../shots/directed.ts';
 import { SCENIC_MOVES } from '../shots/scenic.ts';
 import type { DirectorCue, DirectorFocus, DirectorMotion } from '../shots/directed.ts';
 import { createButton, createElement } from './dom.ts';
@@ -39,6 +45,11 @@ export interface DirectorActions {
   readonly onSeek: (songSec: number) => void;
   /** A click on "Preview": play in Cinematic mode. */
   readonly onPreview: () => void;
+  /**
+   * A click on "Automatic built-in": gives the cues of the automatic plan of the piece
+   * (`automaticCues()`), or an empty list with no piece.
+   */
+  readonly automaticCues: () => readonly DirectorCue[];
   /** A change of the screen cues (design 4.5, backdrop). */
   readonly onScreenChange: (cues: readonly ScreenCue[]) => void;
 }
@@ -120,7 +131,9 @@ function isCue(value: unknown): value is DirectorCue {
   return (
     typeof cue['timeSec'] === 'number' &&
     typeof cue['focus'] === 'string' &&
-    (/^(auto|wide|high|conductor|seat:\d+)$/u.test(cue['focus']) || isScenicFocus(cue['focus'])) &&
+    (/^(wide|high|seat:\d+)$/u.test(cue['focus']) ||
+      isScenicFocus(cue['focus']) ||
+      isConductorFocus(cue['focus'])) &&
     DIRECTOR_MOTIONS.some(([motion]) => motion === cue['motion']) &&
     typeof cue['cut'] === 'boolean'
   );
@@ -210,6 +223,11 @@ export class Director {
       this.#addScreenCue(this.#songSec);
     });
     this.#addScreen.hidden = true;
+    const automatic = this.#textButton('Automatic built-in', () => {
+      this.#useAutomatic();
+    });
+    automatic.title =
+      'Fill the cue list with the camera focus of the built-in film. Its cuts and moves follow the music. Then change the focus of each cue as you like.';
     const preview = this.#textButton('Preview', () => {
       actions.onPreview();
     });
@@ -268,6 +286,7 @@ export class Director {
     });
     const tools = createElement('div', 'director-tools');
     tools.append(
+      automatic,
       add,
       this.#addScreen,
       preview,
@@ -459,6 +478,24 @@ export class Director {
     this.#changed();
   }
 
+  /**
+   * Replaces the cues with the cues of the automatic plan, after a confirmation when cues are
+   * there.
+   */
+  #useAutomatic(): void {
+    const cues = this.#actions.automaticCues();
+    if (
+      cues.length === 0 ||
+      (this.#cues.length > 0 &&
+        !window.confirm('Replace the cues of this piece with the cues of the built-in film?'))
+    ) {
+      return;
+    }
+    this.#cues = [...cues];
+    this.#enabled.checked = true;
+    this.#changed();
+  }
+
   /** Saves the cues, shows them, and tells the app. */
   #changed(): void {
     this.#sort();
@@ -514,13 +551,11 @@ export class Director {
     if (seat !== null) {
       return this.#piece?.rows.find((row) => row.seatIndex === seat)?.name ?? `Seat ${seat + 1}`;
     }
-    const scenic = SCENIC_MOVES.find(([move]) => move === focus);
-    if (scenic) {
-      return scenic[1];
+    const named = [...SCENIC_MOVES, ...CONDUCTOR_VIEWS].find(([view]) => view === focus);
+    if (named) {
+      return named[1];
     }
-    return { auto: 'Automatic', wide: 'Whole stage', high: 'High view', conductor: 'Conductor' }[
-      focus as 'auto' | 'wide' | 'high' | 'conductor'
-    ];
+    return focus === 'high' ? 'High view' : 'Whole stage';
   }
 
   /**
@@ -540,10 +575,13 @@ export class Director {
     };
     const views = createElement('optgroup');
     views.label = 'Views';
-    add('auto', 'Automatic (built-in film)', views);
     add('wide', 'Whole stage', views);
     add('high', 'High view', views);
-    add('conductor', 'Conductor', views);
+    const conductor = createElement('optgroup');
+    conductor.label = 'Conductor';
+    for (const [view, label] of CONDUCTOR_VIEWS) {
+      add(view, label, conductor);
+    }
     const scenic = createElement('optgroup');
     scenic.label = 'Background';
     for (const [move, label] of SCENIC_MOVES) {
@@ -556,7 +594,7 @@ export class Director {
         add(`seat:${row.seatIndex}`, row.name, seats);
       }
     }
-    select.append(views, scenic, seats);
+    select.append(views, conductor, scenic, seats);
     return select;
   }
 
@@ -608,7 +646,6 @@ export class Director {
         option.selected = value === cue.motion;
         motion.append(option);
       }
-      motion.disabled = cue.focus === 'auto';
       motion.addEventListener('change', () => {
         set({ motion: motion.value as DirectorMotion });
       });

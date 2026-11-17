@@ -20,7 +20,8 @@ import { Ui } from '../ui/ui.ts';
 import { Director } from '../ui/director.ts';
 import type { DirectorRow } from '../ui/director.ts';
 import { RenderPanel } from '../ui/render-panel.ts';
-import { directedPlan } from '../shots/directed.ts';
+import { automaticCues, directedPlan } from '../shots/directed.ts';
+import { withBowShot } from '../shots/bow-shot.ts';
 import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
 import { BackdropControl } from './backdrop-control.ts';
@@ -132,6 +133,11 @@ interface RunningRender {
   readonly tailSec: number;
   /** The lines of the title card of the video, or `null` for no titles. */
   readonly titles: RenderTitleLines | null;
+  /**
+   * The shots of the film with the bow shot at the end (`withBowShot()`, design 5.6), or `null`
+   * for a render with no ending.
+   */
+  readonly bowShots: ShotPlan | null;
   /** The font families of the title card. */
   readonly fonts: RenderTitleFonts;
   /** The wall time at which the piece ended, or `null` before its end. */
@@ -628,6 +634,7 @@ export class App {
       onScreenChange: (cues) => {
         this.#backdrop.setScreenCues(cues);
       },
+      automaticCues: () => (this.#piece ? automaticCues(this.#piece.shots) : []),
     });
     this.#backdrop = new BackdropControl(
       (images) => {
@@ -1566,6 +1573,14 @@ export class App {
       format,
       tailSec,
       titles: options.titles ? this.#renderPanel.titles : null,
+      bowShots: options.bow
+        ? withBowShot(
+            piece.directed ?? piece.shots,
+            piece.score,
+            piece.scene.layout,
+            piece.scene.models,
+          )
+        : null,
       fonts: pageFonts(),
       endedAt: null,
       staleSec,
@@ -1954,8 +1969,19 @@ export class App {
           still: this.#scene.reducedMotion,
           frameAspect: this.#renderFrameAspect(),
         };
-        const shots = piece.directed ?? piece.shots;
-        shot = cameraAt(shots, this.#songTime, transport, view, this.#shotCamera);
+        // A render with the ending films the bow (design 5.6, bow shot): after the stop at the
+        // song end, the time of the camera goes on with the wall time.
+        const bowShots = this.#render?.bowShots ?? null;
+        const shots = bowShots ?? piece.directed ?? piece.shots;
+        const ended =
+          bowShots !== null &&
+          !transport.playing &&
+          transport.endedAtSong &&
+          transport.changedAtWall !== null;
+        const cameraTime = ended
+          ? piece.score.durationSec + Math.max(0, wallTime - (transport.changedAtWall ?? wallTime))
+          : this.#songTime;
+        shot = cameraAt(shots, cameraTime, transport, view, this.#shotCamera);
       }
     }
     if (!this.#render) {

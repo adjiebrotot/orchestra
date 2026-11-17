@@ -145,7 +145,11 @@ The app follows these facts:
   dressing behind the orchestra: a helicopter orbit, a low-angle orbit, and an orbit around the
   screen (`SCENIC_SHOTS`, design 5.6). They keep the spacing of the wide shots.
 - **The conductor (section 5).** The conductor shots come between the other shots, with some
-  shots between them (`SHOT_TIMES.conductorSpacing`).
+  shots between them (`SHOT_TIMES.conductorSpacing`). The camera director also shows the front
+  of the bear: a close shot of the face, a low-angle shot that looks up from near the podium
+  [24], and a high view over the back rows at the bear (`CONDUCTOR_VIEWS`, design 5.6). A render
+  with the ending films the bow with a low-angle orbit on the audience side (`BOW_SHOT`,
+  derived).
 - **The moves (section 4).** Each move starts and ends at rest (a smoothstep), and the close
   shots push in slowly.
 - **The change of the camera mode (section 4).** The toggle between Free mode and Cinematic mode
@@ -156,7 +160,8 @@ The app follows these facts:
 - **The screen direction of a look (section 1).** A close camera shows each player or section
   look to the same side of the screen as in the master shot. A look within
   `FILM_GRAMMAR.neutral` (20°) of the camera axis is neutral, as a head-on or a tail-away shot.
-  The conductor shows only from behind, so its look is always neutral.
+  The automatic plan shows the conductor only from behind, so its look is neutral there. The
+  face view of the director looks at it head-on, and the low view from one side.
 - **The 30° rule (section 2).** Each shot turns the camera by at least `FILM_GRAMMAR.jumpAngle`
   (30°) around its target from the previous shot, or it changes the size of the frame by
   `FILM_GRAMMAR.jumpSize` (1.5 times, about one step from a medium shot to a close-up).

@@ -1727,6 +1727,28 @@ distance is a factor of the default distance, so it grows with the stage. The ca
 offers the three moves in its group "Background". There, an orbit to the left or the right sets
 the direction, and each other move goes around the middle of the orbit.
 
+**Camera director.** Each cue of the director holds one focus and one move until the next cue.
+Before the first cue, and with no cue, the automatic plan shows. The button "Automatic built-in"
+fills the cue list from the automatic plan (`automaticCues()` of `shots/directed.ts`): one cue at
+the start of each main shot, so the cuts stay on the phrases of the music. The cue takes the
+focus of the shot, the directed move nearest to the move of the shot, and its cut. A high shot
+that is a scenic move gets that move. The detail inserts get no cue. The user then changes the
+focus of each cue. The focus menu has no item "Automatic", because the button replaces it.
+
+The group "Conductor" of the focus menu has four views (`CONDUCTOR_VIEWS`). "From behind" is the
+close shot from the audience side. "Face" is a close shot from the orchestra side. "Low angle"
+uses a wide lens near the podium and looks up at the bear. It stands to one side of the axis
+(`LOW_TURNS`), because the clearance does not see the desk of the conductor, which is a part of
+the conductor. "Over the orchestra" stands high over the back rows, inside the back edge of the
+stage, and looks at the bear over the players (`ORCHESTRA_VIEW`).
+
+**Bow shot.** A render with "Include the ending" (design 2.5, render) films the bow of the conductor (5.4).
+`withBowShot()` of `shots/bow-shot.ts` ends the plan, automatic or directed, with a low camera on
+the audience side that orbits around the podium (`BOW_SHOT`). It starts after the release of the
+last chord, and the orbit ends when the bear faces the orchestra again. After the stop at the song
+end, the camera time is the song end plus the wall seconds since the stop, as the end motion of
+the conductor. The live playback keeps the last shot of the plan.
+
 **Film grammar.** The shots obey the rules of a concert film of
 `docs/reference/camera-technique.md`, with the limits of `FILM_GRAMMAR` (`shots/grammar.ts`).
 `pnpm shot-trace --rules` counts the breaks of each rule over all demos.
