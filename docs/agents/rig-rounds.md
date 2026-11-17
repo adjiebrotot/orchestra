@@ -97,7 +97,7 @@ Each brief of a round needs these rules. Copy this list into `<scratch>/rules-co
 - Use `perl -0pi -e` for a temporary edit, and the Edit tool for a lasting edit of code.
 - Never take ports 5173, 5190, or 4182. Stop each process that you start by its PID.
 - Do not edit the working tree while a tool builds the site.
-- No merge and no push. End with a clean tree and no rebase in progress.
+- No merge. End with a clean tree and no rebase in progress.
 - At the end, run `tools/round-checks.sh scratch/<round>/checks`, with `--fast` when the app and
   the UI do not change. Read the exit code of each line.
 - Ask no questions when the user is not available. Report each open choice.

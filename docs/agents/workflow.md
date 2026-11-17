@@ -60,8 +60,9 @@ that stay on. Each other check of this module runs on request.
 ## Where to work
 
 An agent that works alone commits on `main` in the main checkout, so that each commit shows at once
-in the running app. It needs no merge, and it pushes nothing. An agent uses its own worktree only
-when another agent works on the repository at the same time. Then these rules hold:
+in the running app. It needs no merge. A cloud session commits on its
+session branch, pushes that branch, and opens a pull request when the user asks. An agent uses its
+own worktree only when another agent works on the repository at the same time. Then these rules hold:
 
 - The manager makes the worktree with `git worktree add --detach .claude/worktrees/<name> main`.
   At the start, check its base. When `git merge-base HEAD main` differs from `git rev-parse main`,
