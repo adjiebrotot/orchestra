@@ -160,7 +160,8 @@ The app follows these facts:
 - **The screen direction of a look (section 1).** A close camera shows each player or section
   look to the same side of the screen as in the master shot. A look within
   `FILM_GRAMMAR.neutral` (20°) of the camera axis is neutral, as a head-on or a tail-away shot.
-  The conductor shows only from behind, so its look is always neutral.
+  The automatic plan shows the conductor only from behind, and the front views of the director
+  look at it head-on, so its look is always neutral.
 - **The 30° rule (section 2).** Each shot turns the camera by at least `FILM_GRAMMAR.jumpAngle`
   (30°) around its target from the previous shot, or it changes the size of the frame by
   `FILM_GRAMMAR.jumpSize` (1.5 times, about one step from a medium shot to a close-up).
