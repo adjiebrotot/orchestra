@@ -24,9 +24,10 @@ import {
 } from 'three';
 import type { Camera, Material, Object3D, PerspectiveCamera, Scene } from 'three';
 
-import { rimLightPlace, rimLightXs } from '../models/beam.ts';
+import { beamSourcePlace, rimLightXs } from '../models/beam.ts';
 import { plankHash } from '../models/stage.ts';
 import type { Vec3 } from '../models/tuples.ts';
+import { aimLamp, createLamp, createLampBatten } from './beam-lamp.ts';
 import { cropTarget } from './letterbox.ts';
 import type { UvRect } from './letterbox.ts';
 import type { StagePair } from './light-pool.ts';
@@ -93,6 +94,20 @@ export const BEAM_LOOK = {
    */
   maxConcentration: 3,
   /**
+   * The radius of the throat of the haze at the lamp, in meters. The throat is a narrow cone from
+   * the tip of the haze cone ({@link BEAM_LOOK}.tip) up to the lamp (`beamSourcePlace()`), so the
+   * beam comes out of the lens. It is a little smaller than the lens ({@link BEAM_LAMP}), so the
+   * housing hides the top of the throat.
+   */
+  lens: 0.17,
+  /**
+   * The largest growth of the density by the concentration of the light in the throat. The throat
+   * is narrow, so the view ray crosses only a short length of it. With the cap of the haze cone,
+   * the shaft got dim near the lamp. With 8, it stays as bright as the top of the haze cone, and
+   * it meets the glow of the lens.
+   */
+  lampConcentration: 8,
+  /**
    * The density at the stage top, as a part of the density at the light. Between the two heights
    * of {@link BEAM_LOOK}.rise, the density grows with a smoothstep to the full density. Thus the
    * beam is brightest at the top and fades toward the stage with no edge, as in `mockup.png`.
@@ -135,7 +150,7 @@ export const BEAM_LOOK = {
 
 /**
  * Gives a point in the axes of the beam (design 2.4, 4.5). The beam leans from the tip of the
- * haze ({@link hazeTip}), on the line to its rim light, to its foot on the stage top, which a solo
+ * haze ({@link hazeTip}), on the line to its lamp, to its foot on the stage top, which a solo
  * moves to the soloed players. Each height keeps its circle of the cone, and the center of the
  * circle moves on the line from the foot to the tip. In the axes of the beam, the cone stands straight around the y axis, so
  * the formulas of the haze hold there. The shaders of the beam use the same formula.
@@ -155,9 +170,10 @@ export function beamAxes(stageSide: number, point: Vec3, foot: StagePair, lightX
 
 /**
  * Gives the tip of the haze cone (design 4.5): the point at the height {@link BEAM_LOOK}.tip on
- * the line from the foot of the beam to its rim light (`rimLightPlace()`). The rim light
- * stands behind the stage at the x of the beam, so the beam leans only toward the back, and it
- * stands upright in the frontal default view, as the fan of `orchestra-latest.png`.
+ * the line from the foot of the beam to its lamp (`beamSourcePlace()`). The lamp stands on the
+ * line from the stage to the rim light, behind the stage at the x of the beam, so the beam leans
+ * only toward the back, and it stands upright in the frontal default view, as the fan of
+ * `orchestra-latest.png`. A solo moves the foot, and the beam leans to the same lamp.
  *
  * @param stageSide The stage side `S`, in meters.
  * @param foot The center of the foot of the beam on the stage top, as (x, z), in meters.
@@ -165,7 +181,7 @@ export function beamAxes(stageSide: number, point: Vec3, foot: StagePair, lightX
  * @returns The tip, in meters.
  */
 export function hazeTip(stageSide: number, foot: StagePair, lightX = 0): Vec3 {
-  const [, lightY, lightZ] = rimLightPlace(stageSide, lightX);
+  const [, lightY, lightZ] = beamSourcePlace(stageSide, lightX);
   const height = BEAM_LOOK.tip * stageSide;
   const t = height / lightY;
   return [foot[0] + (lightX - foot[0]) * t, height, foot[1] + (lightZ - foot[1]) * t];
@@ -184,6 +200,22 @@ export function hazeRadius(stageSide: number, y: number): number {
   const height = BEAM_LOOK.tip * stageSide;
   const bottom = BEAM_LOOK.column * stageSide;
   return bottom + (BEAM_LOOK.tipRadius * stageSide - bottom) * (y / height);
+}
+
+/**
+ * Gives the radius of the throat of the haze at a height (design 4.5): the radius of the top of
+ * the haze cone at its tip, and {@link BEAM_LOOK}.lens at the lamp. The shader of the beam uses the
+ * same formula.
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @param y The height above the stage top, in meters.
+ * @returns The radius, in meters.
+ */
+export function throatRadius(stageSide: number, y: number): number {
+  const base = BEAM_LOOK.tip * stageSide;
+  const top = beamSourcePlace(stageSide)[1];
+  const bottom = BEAM_LOOK.tipRadius * stageSide;
+  return bottom + (BEAM_LOOK.lens - bottom) * ((y - base) / (top - base));
 }
 
 /** The size of the tiling noise texture of the beam, in texels on each side. */
@@ -278,9 +310,13 @@ float sceneDistance(float hit, float viewZ) {
 }
 `;
 
+// The caps of the haze cone and of its throat meet at the tip, and a camera at about that height
+// sees them almost edge-on. With multisampling, a fragment of an edge-on triangle at the edge of a
+// pixel took the world point of the pixel center, far outside the triangle, and a dark line showed
+// at the tip. The centroid keeps the point inside the triangle.
 const BEAM_VERTEX = /* glsl */ `
-varying vec3 vWorld;
-varying float vViewZ;
+centroid varying vec3 vWorld;
+centroid varying float vViewZ;
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
   vWorld = world.xyz;
@@ -294,19 +330,22 @@ const BEAM_FRAGMENT = /* glsl */ `
 uniform vec3 uColor;
 uniform float uStrength;
 uniform float uHeight;
+uniform float uBase;
+uniform float uTop;
 uniform float uTopRadius;
 uniform float uInside;
 uniform float uCore;
 uniform float uColumn;
 uniform float uBottom;
+uniform vec3 uConcentration;
 uniform float uNoise;
 uniform float uNoiseScale;
 uniform vec3 uDrift;
 uniform sampler3D uNoiseTexture;
 uniform vec2 uFoot;
 uniform vec2 uApex;
-varying vec3 vWorld;
-varying float vViewZ;
+centroid varying vec3 vWorld;
+centroid varying float vViewZ;
 ${FADES}
 // A point in the axes of the beam, which leans from the light to its foot (beamAxes() in
 // TypeScript).
@@ -315,21 +354,23 @@ vec3 beamAxes(vec3 p) {
   return p - vec3(axis.x, 0.0, axis.y);
 }
 
-// The radius of the haze cone (hazeRadius() in TypeScript).
+// The radius of the haze segment, from uColumn at uBase to uTopRadius at uTop (hazeRadius() and
+// throatRadius() in TypeScript).
 float radiusAt(float y) {
-  return mix(uColumn, uTopRadius, y / uHeight);
+  return mix(uColumn, uTopRadius, (y - uBase) / (uTop - uBase));
 }
 
 // The density of the haze at a point, with the noise. The haze fills a cone of the radius uColumn
-// at the stage inside the light cone, so that it does not veil the full orchestra.
+// at the stage inside the light cone, so that it does not veil the full orchestra, and a throat
+// from the top of that cone up to the lamp.
 float density(vec3 p) {
   float radius = max(radiusAt(p.y), 1e-3);
   float r = length(p.xz) / radius;
   float radial = 1.0 - smoothstep(uCore, 1.0, r);
-  float height = clamp(p.y / uHeight, 0.0, 1.0);
-  // The light is more concentrated where the cone is narrow, so the haze is brighter there.
-  float concentration = min(pow(uColumn / radius, 0.8), ${BEAM_LOOK.maxConcentration.toFixed(1)});
-  float vertical = uBottom * concentration * smoothstep(1.0, 0.9, height) * heightFade(p.y);
+  // The light is more concentrated where the cone is narrow, so the haze is brighter there:
+  // gain × (reference / radius)^0.8, at most the cap (uConcentration).
+  float concentration = min(uConcentration.x * pow(uConcentration.y / radius, 0.8), uConcentration.z);
+  float vertical = uBottom * concentration * heightFade(p.y);
   vec3 q = p / uNoiseScale + uDrift;
   float n = texture(uNoiseTexture, q).r * 0.65 + texture(uNoiseTexture, q * 2.3 + 0.37).r * 0.35;
   return radial * vertical * (1.0 - uNoise + uNoise * 2.0 * n);
@@ -356,8 +397,8 @@ void main() {
     // ray leaves it at the first root after the entry and below the light. The equation also
     // holds a mirror cone above the apex. A ray that is steeper than the wall has its other root
     // on the mirror cone, so the stage top ends it.
-    float k = (uTopRadius - uColumn) / uHeight;
-    float rb = uColumn + k * beamOrigin.y;
+    float k = (uTopRadius - uColumn) / (uTop - uBase);
+    float rb = uColumn + k * (beamOrigin.y - uBase);
     float a = beamDir.x * beamDir.x + beamDir.z * beamDir.z - k * k * beamDir.y * beamDir.y;
     float b = 2.0 * (beamOrigin.x * beamDir.x + beamOrigin.z * beamDir.z - k * beamDir.y * rb);
     float c = beamOrigin.x * beamOrigin.x + beamOrigin.z * beamOrigin.z - rb * rb;
@@ -366,20 +407,21 @@ void main() {
     if (abs(a) > 1e-6) {
       float r0 = (-b - s) / (2.0 * a);
       float r1 = (-b + s) / (2.0 * a);
-      if (r0 > near + 1e-3 && origin.y + dir.y * r0 < uHeight) {
+      if (r0 > near + 1e-3 && origin.y + dir.y * r0 < uTop) {
         far = min(far, r0);
       }
-      if (r1 > near + 1e-3 && origin.y + dir.y * r1 < uHeight) {
+      if (r1 > near + 1e-3 && origin.y + dir.y * r1 < uTop) {
         far = min(far, r1);
       }
     }
   }
-  // The stage top and the light close the haze cone. Near the rim, the plane can lie a little
-  // before the entry point, and the ray then has no length.
+  // The planes at the bottom and the top close the segment: the stage top and the top of the
+  // cone, or the top of the cone and the lamp. Near the rim, the plane can lie a little before the
+  // entry point, and the ray then has no length.
   if (dir.y < -1e-4) {
-    far = min(far, max(-origin.y / dir.y, near));
+    far = min(far, max((uBase - origin.y) / dir.y, near));
   } else if (dir.y > 1e-4) {
-    far = min(far, max((uHeight - origin.y) / dir.y, near));
+    far = min(far, max((uTop - origin.y) / dir.y, near));
   }
   // The ray also ends on the scene: a player, a stand, or a riser.
   float scene = sceneDistance(hit, vViewZ);
@@ -476,7 +518,43 @@ export function hazeProfile(stageSide: number): [number, number][] {
     [0, HAZE_BASE],
     [hazeRadius(stageSide, HAZE_BASE), HAZE_BASE],
     [BEAM_LOOK.tipRadius * stageSide, height],
+    [0, height],
   ];
+}
+
+/**
+ * Gives the outline of the throat of the haze (design 4.5): from the tip of the haze cone up to
+ * the lamp, with a flat bottom and a flat top. The housing of the lamp hides the top.
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @returns The radius and the height of each point of the outline, from the axis at the bottom up.
+ */
+export function throatProfile(stageSide: number): [number, number][] {
+  const base = BEAM_LOOK.tip * stageSide;
+  const top = beamSourcePlace(stageSide)[1];
+  return [
+    [0, base],
+    [BEAM_LOOK.tipRadius * stageSide, base],
+    [BEAM_LOOK.lens, top],
+    [0, top],
+  ];
+}
+
+/**
+ * Tells if a point is inside the throat of the haze (see {@link throatProfile}).
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @param point The point, in the stage axes.
+ * @param foot The center of the foot of the beam on the stage top ({@link beamAxes}).
+ * @param lightX The x of the rim light of the beam, in meters.
+ * @returns True inside the throat.
+ */
+function insideThroat(stageSide: number, point: Vec3, foot: StagePair, lightX: number): boolean {
+  const [x, y, z] = beamAxes(stageSide, point, foot, lightX);
+  if (y < BEAM_LOOK.tip * stageSide || y >= beamSourcePlace(stageSide, lightX)[1]) {
+    return false;
+  }
+  return Math.hypot(x, z) < throatRadius(stageSide, y);
 }
 
 /** The height of the bottom of the beam mesh, in meters: a little below the stage top. */
@@ -510,6 +588,8 @@ function coneUniforms(stageSide: number) {
   return {
     uColor: { value: new Color(BEAM_LOOK.color) },
     uHeight: { value: BEAM_LOOK.tip * stageSide },
+    uBase: { value: 0 },
+    uTop: { value: BEAM_LOOK.tip * stageSide },
     uTopRadius: { value: BEAM_LOOK.tipRadius * stageSide },
     uCore: { value: BEAM_LOOK.core },
     uColumn: { value: BEAM_LOOK.column * stageSide },
@@ -525,7 +605,9 @@ function coneUniforms(stageSide: number) {
     uNear: { value: 0.1 },
     uFar: { value: 100 },
     uFoot: { value: new Vector2(0, 0) },
-    uApex: { value: new Vector2(hazeTip(stageSide, [0, 0])[0], hazeTip(stageSide, [0, 0])[2]) },
+    uApex: {
+      value: new Vector2(hazeTip(stageSide, [0, 0])[0], hazeTip(stageSide, [0, 0])[2]),
+    },
   };
 }
 
@@ -589,47 +671,128 @@ function createMotes(stageSide: number, count: number): Points {
   return motes;
 }
 
+/** The name of the group of the haze of one beam ({@link createHaze}). */
+const HAZE = 'haze';
+/** The name of the throat of the haze, from the tip of the haze cone up to the lamp. */
+const THROAT = 'beam-throat';
+
 /**
  * Creates the visible beams (design 4.5): one haze of {@link createHaze} for each rim light
- * (`rimLightXs()` of `models/beam.ts`), in the order of the lights.
+ * (`rimLightXs()` of `models/beam.ts`), in the order of the lights, and the batten of their lamps.
  *
  * @param stageSide The stage side `S`, in meters.
  * @param tier The quality tier. It sets the noise samples and the number of motes
  *   ({@link setBeamTier}).
- * @returns A group with a group of the cone and the motes for each rim light. With no rim light,
- *   the group is empty, and the depth pass of the frame still gives the room haze its depth.
+ * @returns A group with a group of the cone, the throat, the motes, and the lamp for each rim
+ *   light. With no rim light, the group is empty, and the depth pass of the frame still gives the
+ *   room haze its depth.
  */
 export function createBeam(stageSide: number, tier: QualityTier): Group {
   const group = new Group();
-  for (const _ of rimLightXs(stageSide)) {
-    group.add(createHaze(stageSide, tier));
+  const xs = rimLightXs(stageSide);
+  for (const x of xs) {
+    group.add(createHaze(stageSide, tier, x));
+  }
+  if (xs.length > 0) {
+    group.add(createLampBatten(stageSide));
   }
   return group;
 }
 
 /**
- * Creates the haze of one beam: the cone of `models/beam.ts` with the haze shader, and the dust
- * motes of the tier.
+ * Gives the haze groups of a beam group ({@link createBeam}), in the order of the rim lights.
+ *
+ * @param beam The group of {@link createBeam}.
+ * @returns The groups of {@link createHaze}.
+ */
+function hazes(beam: Group): Object3D[] {
+  return beam.children.filter((child) => child.name === HAZE);
+}
+
+/**
+ * Creates the haze of one beam: the cone of `models/beam.ts` with the haze shader, the throat up
+ * to the lamp with the same shader, the dust motes of the tier, and the lamp.
  *
  * @param stageSide The stage side `S`, in meters.
  * @param tier The quality tier.
- * @returns A group with the cone and the motes.
+ * @param x The x of the rim light of the beam, in meters.
+ * @returns A group with the cone, the throat, the motes, and the lamp.
  */
-function createHaze(stageSide: number, tier: QualityTier): Group {
-  const geometry = new LatheGeometry(
-    hazeProfile(stageSide).map(([radius, y]) => new Vector2(radius, y)),
-    48,
+function createHaze(stageSide: number, tier: QualityTier, x: number): Group {
+  const texture = noiseTexture();
+  const cone = hazeMesh(hazeProfile(stageSide), hazeUniforms(stageSide, texture), tier);
+  cone.name = 'beam';
+  const tipRadius = BEAM_LOOK.tipRadius * stageSide;
+  const throatUniforms = {
+    ...hazeUniforms(stageSide, texture),
+    uBase: { value: BEAM_LOOK.tip * stageSide },
+    uTop: { value: beamSourcePlace(stageSide, x)[1] },
+    uColumn: { value: tipRadius },
+    uTopRadius: { value: BEAM_LOOK.lens },
+    // The throat starts with the concentration of the top of the haze cone.
+    uConcentration: {
+      value: new Vector3(
+        Math.min((BEAM_LOOK.column / BEAM_LOOK.tipRadius) ** 0.8, BEAM_LOOK.maxConcentration),
+        tipRadius,
+        BEAM_LOOK.lampConcentration,
+      ),
+    },
+  };
+  const throat = hazeMesh(throatProfile(stageSide), throatUniforms, tier);
+  throat.name = THROAT;
+  // The motes of the highest tier. A lower tier draws only a part of them.
+  const most = Math.max(...Object.values(TIER_SETTINGS).map((settings) => settings.motes));
+  const group = new Group().add(
+    cone,
+    throat,
+    createMotes(stageSide, most),
+    createLamp(stageSide, x),
   );
-  const uniforms = {
+  group.name = HAZE;
+  setHazeTier(group, tier);
+  return group;
+}
+
+/**
+ * Gives the uniforms of the haze cone of one beam.
+ *
+ * @param stageSide The stage side `S`, in meters.
+ * @param texture The noise texture of the beam.
+ * @returns The uniforms.
+ */
+function hazeUniforms(stageSide: number, texture: Data3DTexture) {
+  return {
     ...coneUniforms(stageSide),
     uStrength: { value: BEAM_LOOK.strength / stageSide },
     uInside: { value: 0 },
     uBottom: { value: BEAM_LOOK.bottom },
+    uConcentration: {
+      value: new Vector3(1, BEAM_LOOK.column * stageSide, BEAM_LOOK.maxConcentration),
+    },
     uNoise: { value: BEAM_LOOK.noise },
     uNoiseScale: { value: BEAM_LOOK.noiseScale },
     uDrift: { value: new Vector3() },
-    uNoiseTexture: { value: noiseTexture() },
+    uNoiseTexture: { value: texture },
   };
+}
+
+/**
+ * Creates a mesh of the haze: a lathe of an outline with the haze shader on both sides.
+ *
+ * @param profile The outline, as the radius and the height of each point.
+ * @param uniforms The uniforms, which the two sides share.
+ * @param tier The quality tier.
+ * @returns The mesh.
+ */
+function hazeMesh(
+  profile: [number, number][],
+  uniforms: ReturnType<typeof hazeUniforms>,
+  tier: QualityTier,
+): Mesh {
+  const geometry = new LatheGeometry(
+    profile.map(([radius, y]) => new Vector2(radius, y)),
+    48,
+  );
   // The cone shows both sides. three.js draws a transparent material with both sides in two
   // draws, the back faces first, and changes the side of the material for each draw, so it looked
   // up the program of the material two times in each frame. One material for each side, with one
@@ -652,14 +815,9 @@ function createHaze(stageSide: number, tier: QualityTier): Group {
   for (const i of sides.keys()) {
     geometry.addGroup(0, count, i);
   }
-  const cone = new Mesh(geometry, sides);
-  cone.name = 'beam';
-  cone.renderOrder = 1;
-  // The motes of the highest tier. A lower tier draws only a part of them.
-  const most = Math.max(...Object.values(TIER_SETTINGS).map((settings) => settings.motes));
-  const group = new Group().add(cone, createMotes(stageSide, most));
-  setHazeTier(group, tier);
-  return group;
+  const mesh = new Mesh(geometry, sides);
+  mesh.renderOrder = 1;
+  return mesh;
 }
 
 /**
@@ -670,7 +828,7 @@ function createHaze(stageSide: number, tier: QualityTier): Group {
  * @param tier The quality tier.
  */
 export function setBeamTier(beam: Group, tier: QualityTier): void {
-  for (const haze of beam.children) {
+  for (const haze of hazes(beam)) {
     setHazeTier(haze, tier);
   }
 }
@@ -839,7 +997,7 @@ interface BeamFrame {
  */
 export function setBeamFrame(beam: Group, frame: BeamFrame): void {
   const xs = rimLightXs(frame.stageSide);
-  for (const [i, haze] of beam.children.entries()) {
+  for (const [i, haze] of hazes(beam).entries()) {
     const lightX = xs[i] ?? 0;
     setHazeFrame(haze, frame, [frame.foot[0] + lightX, frame.foot[1]], lightX);
   }
@@ -856,8 +1014,14 @@ export function setBeamFrame(beam: Group, frame: BeamFrame): void {
 function setHazeFrame(haze: Object3D, frame: BeamFrame, foot: StagePair, lightX: number): void {
   const { stageSide, factor, camera, timeSec, depth } = frame;
   const [width, height] = depth.size;
-  const inside = insideHaze(stageSide, camera.position.toArray(), foot, lightX);
+  const eye = camera.position.toArray();
+  const inside = insideHaze(stageSide, eye, foot, lightX);
+  const inThroat = insideThroat(stageSide, eye, foot, lightX);
   for (const child of haze.children) {
+    if (child.name === 'lamp') {
+      aimLamp(child, [foot[0], 0, foot[1]], height);
+      continue;
+    }
     const materials = shaderMaterials(child);
     const first = materials[0];
     if (!first) {
@@ -887,11 +1051,12 @@ function setHazeFrame(haze: Object3D, frame: BeamFrame, foot: StagePair, lightX:
     if (child instanceof Mesh) {
       leanCone(child, stageSide, foot, lightX);
       setUniform(u, 'uStrength', (BEAM_LOOK.strength / stageSide) * factor);
-      setUniform(u, 'uInside', inside ? 1 : 0);
-      // A camera in the haze cone sees the back faces. The depth of the scene ends each view ray,
-      // so a player in front of a back face does not hide the haze before the player.
+      const within = child.name === THROAT ? inThroat : inside;
+      setUniform(u, 'uInside', within ? 1 : 0);
+      // A camera in the haze sees the back faces. The depth of the scene ends each view ray, so a
+      // player in front of a back face does not hide the haze before the player.
       for (const material of materials) {
-        material.depthTest = !inside;
+        material.depthTest = !within;
       }
       const drift = u['uDrift']?.value;
       if (drift instanceof Vector3) {
