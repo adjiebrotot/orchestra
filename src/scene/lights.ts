@@ -1,4 +1,15 @@
-import { Group, HemisphereLight, MathUtils, Object3D, SpotLight, Vector3 } from 'three';
+import {
+  Color,
+  Group,
+  HemisphereLight,
+  MathUtils,
+  Mesh,
+  Object3D,
+  Points,
+  ShaderMaterial,
+  SpotLight,
+  Vector3,
+} from 'three';
 import type { Frustum, Light } from 'three';
 
 import type { ConductorPlace } from '../models/layout.ts';
@@ -8,6 +19,7 @@ import { createBeam, setBeamTier } from './beam.ts';
 import { TIER_SETTINGS } from './quality.ts';
 import type { QualityTier } from './quality.ts';
 import { smoothstep } from '../math.ts';
+import type { LightStyle } from './stage-style.ts';
 
 /**
  * The key light (design 4.5): the stage spotlight, and the only light that casts shadows on the
@@ -299,8 +311,12 @@ function createConductorLight(conductor: ConductorPlace): SpotLight {
   light.penumbra = c.penumbra;
   light.decay = 2;
   light.castShadow = false;
+  light.name = CONDUCTOR_NAME;
   return light;
 }
+
+/** The name of the light on the face of the conductor in the group of {@link createLights}. */
+const CONDUCTOR_NAME = 'conductor';
 
 /** The name of the key light in the group of {@link createLights}. */
 const KEY_NAME = 'key';
@@ -698,6 +714,66 @@ interface LightOptions {
    * so they have no back-row lights.
    */
   readonly backRows?: boolean;
+}
+
+/**
+ * Sets the colors of the stage lights of a stage style (design 4.5, stage style): each spotlight
+ * takes the color of its kind, and its intensity at the build times the gain of the style. The
+ * fill light and the visible beams take their colors too. The rim uniforms of the materials read
+ * the rim lights, so the caller writes them again (`setRimLights()`).
+ *
+ * @param lights The group of {@link createLights}.
+ * @param style The colors of the style.
+ */
+export function styleLights(lights: Group, style: LightStyle): void {
+  const colors = new Map([
+    [KEY_NAME, style.key],
+    [CONDUCTOR_NAME, style.key],
+    [SIDE_NAME, style.side],
+    [BACK_ROW_NAME, style.backRow],
+    [RIM_NAME, style.rim],
+  ]);
+  lights.traverse((object) => {
+    if (object instanceof SpotLight) {
+      const color = colors.get(object.name);
+      if (color !== undefined) {
+        const base = baseIntensity(object);
+        object.color.set(color);
+        object.intensity = base * style.gain;
+      }
+    } else if (object instanceof HemisphereLight) {
+      object.color.set(style.fill.sky);
+      object.groundColor.set(style.fill.ground);
+    } else if (
+      (object instanceof Mesh || object instanceof Points) &&
+      object.material instanceof ShaderMaterial
+    ) {
+      const uniform = object.material.uniforms['uColor'];
+      // The haze of each beam, its throat, and its motes share the beam color. The lamp has its
+      // own color uniform, with no `uHeight`.
+      if (uniform?.value instanceof Color && object.material.uniforms['uHeight']) {
+        uniform.value.set(style.beam).multiplyScalar(style.gain);
+      }
+    }
+  });
+}
+
+/** The intensity of each spotlight at its build, before a stage style changes it. */
+const BASE_INTENSITY = new WeakMap<SpotLight, number>();
+
+/**
+ * Gives the intensity of a spotlight at its build.
+ *
+ * @param light The spotlight.
+ * @returns The intensity before a stage style changed it.
+ */
+function baseIntensity(light: SpotLight): number {
+  let base = BASE_INTENSITY.get(light);
+  if (base === undefined) {
+    base = light.intensity;
+    BASE_INTENSITY.set(light, base);
+  }
+  return base;
 }
 
 /**

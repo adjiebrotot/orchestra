@@ -2992,3 +2992,85 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
     padding-top: 0;
   }
 }
+
+.stage-slider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stage-slider input {
+  flex: 1;
+  min-width: 0;
+}
+
+.stage-slider-value {
+  min-width: 44px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* The panel "Orchestra": a line for each section, with its count and its moves. */
+.orchestra-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.orchestra-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 4px 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  background: var(--panel);
+}
+
+.orchestra-item.is-removed .orchestra-name {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+.orchestra-label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  min-width: 0;
+}
+
+.orchestra-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.orchestra-now {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.orchestra-moves {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.orchestra-moves .stage-chip-button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+@media (max-width: 480px) {
+  .orchestra-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .orchestra-moves {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
+}

@@ -14,7 +14,7 @@ import type { ChannelMix } from '../score/stage-mix.ts';
 import { cameraAt, createCameraPose } from '../shots/camera-at.ts';
 import type { CameraPose, ShotPlan } from '../shots/types.ts';
 import { CINEMA_ASPECT } from '../shots/view.ts';
-import type { Score, SectionSize } from '../score/types.ts';
+import type { Score, SectionId, SectionSize } from '../score/types.ts';
 import { focusKindOf, keepKeysAfterClick } from '../ui/dom.ts';
 import { Ui } from '../ui/ui.ts';
 import { Director } from '../ui/director.ts';
@@ -24,6 +24,10 @@ import { directedPlan } from '../shots/directed.ts';
 import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
 import { BackdropControl } from './backdrop-control.ts';
+import { STAGE_STYLES } from '../scene/stage-style.ts';
+import { loadOrchestra, saveOrchestra } from './orchestra-store.ts';
+import type { OrchestraSettings } from './orchestra-store.ts';
+import { OrchestraPanel } from '../ui/orchestra-panel.ts';
 import { effectTime } from '../scene/stage-scene.ts';
 import type { RenderFormat, RenderOptions } from './render-formats.ts';
 import { drawTitleCard, pageFonts } from './render-titles.ts';
@@ -268,6 +272,9 @@ function writeNoPig(on: boolean): void {
   }
 }
 
+/** The wait after the last change of the panel "Orchestra" before the build, in milliseconds. */
+const ORCHESTRA_BUILD_DELAY_MS = 600;
+
 /**
  * Gives the section size of a file. `perf-60.mid` always uses "One per part" (design 9.5).
  *
@@ -450,6 +457,12 @@ export class App {
   readonly #renderPanel: RenderPanel;
   /** The stage dressing behind the stage and its panel (design 4.5, backdrop). */
   readonly #backdrop: BackdropControl;
+  /** The rows and the player counts of the panel "Orchestra" (design 2.8, 3.8, 4.5). */
+  #orchestra: OrchestraSettings = loadOrchestra();
+  /** The panel "Orchestra". */
+  readonly #orchestraPanel: OrchestraPanel;
+  /** The timer of the build after a change of the panel "Orchestra". */
+  #orchestraTimer: ReturnType<typeof setTimeout> | undefined;
   /** The buttons at the top of the stage that open the director and the render. */
   readonly #studio: HTMLElement;
   /** The render that runs, or `null`. */
@@ -616,10 +629,29 @@ export class App {
         this.#backdrop.setScreenCues(cues);
       },
     });
-    this.#backdrop = new BackdropControl((images) => {
-      this.#director.setScreenImages(images);
-    }, scene.stageText);
+    this.#backdrop = new BackdropControl(
+      (images) => {
+        this.#director.setScreenImages(images);
+      },
+      scene.stageText,
+      (style) => {
+        scene.setLightStyle(STAGE_STYLES[style].light);
+      },
+    );
     scene.setBackdrop(this.#backdrop.group);
+    this.#orchestraPanel = new OrchestraPanel({
+      onChange: (settings) => {
+        this.#setOrchestra(settings);
+      },
+      players: () => {
+        const counts = new Map<SectionId, number>();
+        for (const seat of this.#piece?.score.seats ?? []) {
+          counts.set(seat.section, (counts.get(seat.section) ?? 0) + seat.playerCount);
+        }
+        return counts;
+      },
+    });
+    this.#orchestraPanel.setSettings(this.#orchestra);
     this.#renderPanel = new RenderPanel({
       onStart: (format, options) => {
         this.#startRender(format, options).catch((error: Error) => {
@@ -651,16 +683,33 @@ export class App {
     const stageButton = document.createElement('button');
     stageButton.className = 'studio-button';
     stageButton.textContent = 'Stage design';
+    const orchestraButton = document.createElement('button');
+    orchestraButton.className = 'studio-button';
+    orchestraButton.textContent = 'Orchestra';
+    // The two panels share one place, so one closes when the other opens.
+    const showPanels = (): void => {
+      stageButton.setAttribute('aria-pressed', String(this.#backdrop.panel.open));
+      orchestraButton.setAttribute('aria-pressed', String(this.#orchestraPanel.open));
+    };
     stageButton.addEventListener('click', () => {
       const panel = this.#backdrop.panel;
       panel.setOpen(!panel.open);
-      stageButton.setAttribute('aria-pressed', String(panel.open));
+      this.#orchestraPanel.setOpen(false);
+      showPanels();
     });
-    this.#backdrop.panel.element.addEventListener('click', (event) => {
-      if (event.target instanceof HTMLElement && event.target.closest('.director-close')) {
-        stageButton.setAttribute('aria-pressed', 'false');
-      }
+    orchestraButton.addEventListener('click', () => {
+      const panel = this.#orchestraPanel;
+      panel.setOpen(!panel.open);
+      this.#backdrop.panel.setOpen(false);
+      showPanels();
     });
+    for (const panel of [this.#backdrop.panel.element, this.#orchestraPanel.element]) {
+      panel.addEventListener('click', (event) => {
+        if (event.target instanceof HTMLElement && event.target.closest('.director-close')) {
+          showPanels();
+        }
+      });
+    }
     const renderButton = document.createElement('button');
     renderButton.className = 'studio-button is-accent';
     renderButton.textContent = 'Render MP4';
@@ -674,12 +723,13 @@ export class App {
         );
       }
     });
-    this.#studio.append(directorButton, stageButton, renderButton);
+    this.#studio.append(directorButton, stageButton, orchestraButton, renderButton);
     this.#studio.hidden = true;
     document.body.append(
       this.#studio,
       this.#director.element,
       this.#backdrop.panel.element,
+      this.#orchestraPanel.element,
       this.#renderPanel.element,
     );
     // The renderer made its listener first, so it makes its own state again before the steps.
@@ -789,6 +839,23 @@ export class App {
   }
 
   /**
+   * Changes the settings of the panel "Orchestra" (design 2.8), keeps them in the local storage,
+   * and builds the scene of the current piece again. The player counts, the layout, and the poses
+   * change. The sound does not change.
+   *
+   * @param settings The new settings.
+   */
+  #setOrchestra(settings: OrchestraSettings): void {
+    this.#orchestra = settings;
+    saveOrchestra(settings);
+    // A few quick clicks in the panel give one build.
+    clearTimeout(this.#orchestraTimer);
+    this.#orchestraTimer = setTimeout(() => {
+      this.#rebuildCurrent(this.#sectionSize);
+    }, ORCHESTRA_BUILD_DELAY_MS);
+  }
+
+  /**
    * Builds the scene of the current piece again after a change of a setting, behind the cover of
    * the stage.
    *
@@ -820,7 +887,7 @@ export class App {
    * @param live Tells if the build is still needed: a later selection or change replaces it.
    */
   async #rebuildScene(piece: Piece, size: SectionSize, live: () => boolean): Promise<void> {
-    const steps = planFileSteps(piece.bytes, size, piece.title.title, this.#noPig);
+    const steps = planFileSteps(piece.bytes, size, piece.title.title, this.#noPig, this.#orchestra);
     const built = await this.#build(steps, () => {
       return live() && piece === this.#piece;
     });
@@ -844,6 +911,7 @@ export class App {
     this.#backdrop.setStage(this.#scene.stageSide);
     // The player counts of the seat rows change with the section size (design 2.8).
     this.#showSeats(piece);
+    this.#orchestraPanel.refresh();
     this.#ui.seatList.update(piece.flags, piece.audible);
     // The build stops the frames, so the automatic tier starts a new window (design 2.6).
     this.#tierWatch = watchTier(this.#tierWatch.tier);
@@ -1065,7 +1133,8 @@ export class App {
     const sectionSize = sectionSizeOf(file, this.#sectionSize);
     // The new piece replaces a build of the section size of the current piece.
     this.#rebuilds++;
-    const built = await this.#build(planFileSteps(bytes, sectionSize, file, this.#noPig), () => {
+    const steps = planFileSteps(bytes, sectionSize, file, this.#noPig, this.#orchestra);
+    const built = await this.#build(steps, () => {
       return ticket === this.#request;
     });
     if (!built) {
@@ -1250,7 +1319,8 @@ export class App {
   async openFile(file: File): Promise<void> {
     const before = this.#request;
     const sectionSize = this.#sectionSize;
-    const result = await readScoreFile(file, sectionSize);
+    const orchestra = this.#orchestra;
+    const result = await readScoreFile(file, sectionSize, orchestra.counts);
     if (before !== this.#request) {
       return;
     }
@@ -1277,9 +1347,9 @@ export class App {
     // The new piece replaces a build of the section size of the current piece.
     this.#rebuilds++;
     const built = await this.#build(
-      sectionSize === size
-        ? planScoreSteps(result.score, this.#noPig)
-        : planFileSteps(bytes, size, file.name, this.#noPig),
+      sectionSize === size && orchestra === this.#orchestra
+        ? planScoreSteps(result.score, this.#noPig, orchestra.rows)
+        : planFileSteps(bytes, size, file.name, this.#noPig, this.#orchestra),
       () => ticket === this.#request,
     );
     if (!built) {
@@ -1347,6 +1417,7 @@ export class App {
     this.#ui.demoList.show(piece.file === null ? 'file' : demo);
     this.#ui.credits.show(demo);
     this.#showSeats(piece);
+    this.#orchestraPanel.refresh();
     this.#director.setPiece(this.#directorPiece(piece));
     this.#updateDirected(piece);
     this.#backdrop.setStage(this.#scene.stageSide);
@@ -1996,6 +2067,7 @@ export class App {
         this.#studio.matches(':hover') ||
         this.#director.open ||
         this.#backdrop.panel.open ||
+        this.#orchestraPanel.open ||
         this.#renderPanel.open ||
         this.#render
       );

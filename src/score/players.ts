@@ -6,7 +6,7 @@ import { findSoloist } from './soloist.ts';
 import type { Steps } from './steps.ts';
 import { findVocalSoloists } from './vocal-soloists.ts';
 import type { Note, Timeline } from './timeline.ts';
-import type { PlayerNote, Seat, SectionId, SectionSize } from './types.ts';
+import type { PlayerNote, Seat, SectionCounts, SectionId, SectionSize } from './types.ts';
 
 /** The seats with their player counts, and the notes of each player (design 3.8). */
 export interface PlayerAssignment {
@@ -72,6 +72,9 @@ const TIMPANI_PROGRAM = 47;
 /** The programs that make a file orchestral: the ensembles and the contrabass (design 3.8). */
 const ORCHESTRAL_PROGRAMS: ReadonlySet<number> = new Set([43, 44, 45, 48, 49, 50, 51]);
 
+/** The most players for one seat that the panel "Orchestra" can set (design 3.8). */
+export const MAX_SEAT_COUNT = 12;
+
 /** The most players in the scene. The conductor is not a player (design 3.8). */
 const MAX_PLAYERS = 60;
 
@@ -101,12 +104,14 @@ type Allocation =
  * @param timeline The notes of the file.
  * @param seating The seats and the seat of each note, from `assignSeats()`.
  * @param sectionSize The value of the setting "Section size" (2.8, 3.8).
+ * @param counts The player counts of the panel "Orchestra" (3.8).
  * @returns The steps, which return the seats with their player counts and the player notes.
  */
 export function* assignPlayersSteps(
   timeline: Timeline,
   seating: Seating,
   sectionSize: SectionSize,
+  counts: SectionCounts = {},
 ): Steps<PlayerAssignment> {
   const notes = timeline.notes;
   const orchestral = isOrchestral(notes, seating.seats);
@@ -116,7 +121,7 @@ export function* assignPlayersSteps(
   const plans: SeatCount[] = [];
   for (const [s, seat] of seating.seats.entries()) {
     yield;
-    plans.push(planSeat(seat, notes, seatNotes[s] ?? [], divisi));
+    plans.push(setCount(planSeat(seat, notes, seatNotes[s] ?? [], divisi), counts));
   }
   yield;
   // The soloist rule runs before the soloist gets its one player, so that it finds a solo line
@@ -128,24 +133,29 @@ export function* assignPlayersSteps(
     perVoice: plans[s]?.allocation === 'parts',
   }));
   const soloNotes = notes.map((note, i) => ({ ...note, seatIndex: seating.noteSeats[i] ?? 0 }));
-  const soloist = findSoloist(soloSeats, soloNotes, timeline.durationSec);
+  // A section with a count of the panel keeps that count, so it has no soloist.
+  const free = (seat: number | null): number | null => {
+    const section = seat === null ? undefined : seating.seats[seat]?.section;
+    return section !== undefined && counts[section] !== undefined ? null : seat;
+  };
+  const soloist = free(findSoloist(soloSeats, soloNotes, timeline.durationSec));
   yield;
   const solo = soloist === null ? undefined : plans[soloist];
   if (soloist !== null && solo && solo.count > 1) {
     plans[soloist] = { ...solo, allocation: 'parts', count: 1, onePerPart: 1 };
   }
   // The vocal soloists sing with one singer for each voice, as the choir of "One per part".
-  const vocalSoloists = findVocalSoloists(soloSeats, soloNotes, timeline.durationSec);
+  const vocalSoloists = free(findVocalSoloists(soloSeats, soloNotes, timeline.durationSec));
   const vocal = vocalSoloists === null ? undefined : plans[vocalSoloists];
   if (vocalSoloists !== null && vocal) {
     plans[vocalSoloists] = { ...vocal, allocation: 'parts', count: vocal.onePerPart };
   }
   yield;
-  const counts = removePlayers(plans);
+  const final = removePlayers(plans);
   const players = notes.map((): readonly number[] => []);
   for (const [s, plan] of plans.entries()) {
     yield;
-    for (const [i, list] of playersOf(plan, notes, seatNotes[s] ?? [], counts[s] ?? 0)) {
+    for (const [i, list] of playersOf(plan, notes, seatNotes[s] ?? [], final[s] ?? 0)) {
       players[i] = list;
     }
   }
@@ -170,7 +180,7 @@ export function* assignPlayersSteps(
     orchestral,
     soloist,
     vocalSoloists,
-    seats: seating.seats.map((seat, s) => ({ ...seat, playerCount: counts[s] ?? 0 })),
+    seats: seating.seats.map((seat, s) => ({ ...seat, playerCount: final[s] ?? 0 })),
     notes: playerNotes,
   };
 }
@@ -238,6 +248,36 @@ function planSeat(
     return { ...base, allocation: 'divisi', count: size, onePerPart };
   }
   return { ...base, allocation: 'parts', count: onePerPart, onePerPart };
+}
+
+/**
+ * Applies the player count of the panel "Orchestra" to the plan of a seat (design 3.8). The count
+ * 0 gives the seat no players. A seat of one player or of drum parts keeps its plan for any
+ * other count, because its notes go to fixed players. Another seat takes the count: divisi
+ * when the count is larger than the count of "One per part", so each player plays.
+ *
+ * @param plan The plan of the seat after the rules of 3.8.
+ * @param counts The player counts of the panel.
+ * @returns The plan with the count of the panel.
+ */
+function setCount(plan: SeatCount, counts: SectionCounts): SeatCount {
+  const wanted = counts[plan.section];
+  if (wanted === undefined || plan.allocation === 'none') {
+    return plan;
+  }
+  const count = Math.min(MAX_SEAT_COUNT, Math.max(0, Math.round(wanted)));
+  if (count === 0) {
+    return { ...plan, allocation: 'none', count: 0, onePerPart: 0 };
+  }
+  if (plan.allocation === 'single' || plan.allocation === 'drums') {
+    return plan;
+  }
+  return {
+    ...plan,
+    allocation: count > plan.onePerPart ? 'divisi' : 'parts',
+    count,
+    onePerPart: Math.min(plan.onePerPart, count),
+  };
 }
 
 /** Finds the percussion player of a note of a rhythm channel (design 3.6). */

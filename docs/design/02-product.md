@@ -185,6 +185,13 @@ page starts in Free mode (`app/camera-mode.ts`).
   above the lowest fifth, which the apps of a phone cover. The fields "Title" and "Subtitle" of
   the panel change the card of the page and of the video. A new piece writes its own lines into
   the fields. The page stores the two choices.
+- **Orchestra.** The studio button "Orchestra" opens the panel of the rows and the players
+  (`ui/orchestra-panel.ts`). It shares its place with "Stage design", so one closes when the other
+  opens. Each section has a line with its players in the current piece, a menu of its count
+  ("Auto", "Removed", or 1 to `MAX_SEAT_COUNT` players, 3.8), and four moves: left, right, a row
+  to the front, and a row to the back (4.5, seat geometry). A move to the back of the last row
+  makes a new row. Each change builds the scene again behind the cover of the stage, and the music
+  goes on. The choir has only its count. The page stores the settings.
 - On a touch screen in portrait, the frame fills about a fifth of the screen height, so one line
   below it says "Turn the phone for a larger film." (`TURN_HINT_TEXT`). A portrait shot plan
   would break the rule of the same film on each screen, so the frame stays.

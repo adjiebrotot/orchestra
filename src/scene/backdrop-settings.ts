@@ -1,3 +1,6 @@
+import { STAGE_STYLE_OPTIONS } from './stage-style.ts';
+import type { StageStyleId } from './stage-style.ts';
+
 /**
  * The settings of the stage dressing behind the stage (design 4.5, backdrop): the standing
  * banners, the hanging banners, the flags, and the screen. An image of a setting is an id: a
@@ -69,13 +72,35 @@ export interface BannerSettings {
   readonly images: readonly string[];
 }
 
-/** The flagpole groups. Each group carries all the flags. */
+/**
+ * The stand of a group of flags: a row of upright metal poles on round bases, a row of upright
+ * wooden poles on plinths, poles that fan out from one base on the floor, or a tall pole with
+ * staffs in pairs.
+ */
+export type FlagStand = 'round' | 'floor' | 'fan' | 'group';
+
+/** The stands, in the order of the menu, with their labels. */
+export const FLAG_STANDS: readonly (readonly [FlagStand, string])[] = [
+  ['round', 'Floor stands, round metal base'],
+  ['floor', 'Floor stands, wooden plinth'],
+  ['fan', 'Fan stand, one base'],
+  ['group', 'Tall pole with staffs'],
+];
+
+/** The groups of flags. Each group carries all the flags. */
 export interface FlagSettings {
   readonly on: boolean;
-  /** The number of flagpole groups. */
+  readonly stand: FlagStand;
+  /** The number of groups. */
   readonly groups: number;
   /** The order of the flags on the groups. */
   readonly arrangement: Arrangement;
+  /**
+   * How limp each flag hangs, from 0 to 1: 0 holds the cloth out from its staff, and 1 hangs it
+   * as an indoor flag, straight down from the finial in deep pleats (`flagHang()` of
+   * `backdrop.ts`).
+   */
+  readonly limpness: number;
   /** The flags of each group, from the left of the left groups. */
   readonly images: readonly string[];
 }
@@ -147,6 +172,8 @@ export interface StageTextSettings {
 
 /** All the stage dressing. */
 export interface BackdropSettings {
+  /** The stage style: the look of the dressing and the colors of the stage lights. */
+  readonly style: StageStyleId;
   readonly standing: BannerSettings;
   readonly hanging: BannerSettings;
   readonly flags: FlagSettings;
@@ -169,6 +196,7 @@ export const BACKDROP_LIMITS = {
 
 /** The settings of a new user: each object is on, with country flags. */
 export const DEFAULT_BACKDROP: BackdropSettings = {
+  style: 'classic',
   standing: {
     on: true,
     count: 4,
@@ -187,8 +215,10 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
   },
   flags: {
     on: true,
+    stand: 'round',
     groups: 2,
     arrangement: 'mirror',
+    limpness: 1,
     images: ['flag:id', 'flag:jp'],
   },
   screen: {
@@ -273,6 +303,17 @@ function readCount(value: Json | undefined, min: number, max: number, fallback: 
 }
 
 /**
+ * Reads a share from 0 to 1, or gives the fallback.
+ *
+ * @param value A value of JSON.
+ * @param fallback The value for a missing or a bad value.
+ * @returns The share.
+ */
+function readShare(value: Json | undefined, fallback: number): number {
+  return isNumber(value) ? Math.min(1, Math.max(0, value)) : fallback;
+}
+
+/**
  * Reads a list of image ids, or gives the fallback.
  *
  * @param value A value of JSON.
@@ -340,12 +381,15 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const text = isRecord(data['text']) ? data['text'] : {};
   const base = DEFAULT_BACKDROP;
   return {
+    style: readOption(data['style'], STAGE_STYLE_OPTIONS, base.style),
     standing: readBanners(data['standing'], base.standing, BACKDROP_LIMITS.standing),
     hanging: readBanners(data['hanging'], base.hanging, BACKDROP_LIMITS.hanging),
     flags: {
       on: isBoolean(flags['on']) ? flags['on'] : base.flags.on,
+      stand: readOption(flags['stand'], FLAG_STANDS, base.flags.stand),
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
       arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
+      limpness: readShare(flags['limpness'], base.flags.limpness),
       images: readImages(flags['images'], base.flags.images).slice(0, BACKDROP_LIMITS.flags),
     },
     screen: {

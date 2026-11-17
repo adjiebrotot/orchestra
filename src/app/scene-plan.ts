@@ -1,14 +1,17 @@
 import { layoutSceneSteps } from '../models/layout-scene.ts';
+import type { SeatingRows } from '../models/layout-scene.ts';
 import type { SceneLayout } from '../models/layout.ts';
 import { ModelCache } from '../models/model-cache.ts';
 import { POSE_SEED, preparePosesSteps } from '../pose/plan.ts';
 import type { PosePlan } from '../pose/plan.ts';
 import { buildScoreSteps } from '../score/score.ts';
 import type { Steps } from '../score/steps.ts';
-import type { Score, SectionSize } from '../score/types.ts';
+import type { Score, SectionCounts, SectionSize } from '../score/types.ts';
 import { SHOT_SEED, prepareShotsSteps } from '../shots/prepare.ts';
 import type { ShotPlan } from '../shots/types.ts';
 import { castBodiesSteps } from './body-loads.ts';
+import { DEFAULT_ORCHESTRA } from './orchestra-store.ts';
+import type { OrchestraSettings } from './orchestra-store.ts';
 
 /** The scene of a score: the layout, the player models, the pose plan, and the shot plan. */
 export interface ScoreScene {
@@ -26,12 +29,13 @@ export interface ScoreScene {
  *
  * @param score The score.
  * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
+ * @param seating The rows of the orchestra of the panel "Orchestra".
  * @returns The steps, which return the layout, the player models, and the plans.
  */
-function* planSceneSteps(score: Score, noPig: boolean): Steps<ScoreScene> {
+function* planSceneSteps(score: Score, noPig: boolean, seating: SeatingRows): Steps<ScoreScene> {
   yield* castBodiesSteps(score, noPig);
   const models = new ModelCache();
-  const layout = yield* layoutSceneSteps(score, models, noPig);
+  const layout = yield* layoutSceneSteps(score, models, noPig, seating);
   const plan = yield* preparePosesSteps(score, layout, POSE_SEED, models);
   const shots = yield* prepareShotsSteps(score, layout, SHOT_SEED, models, plan);
   return { layout, models, plan, shots };
@@ -44,11 +48,17 @@ function* planSceneSteps(score: Score, noPig: boolean): Steps<ScoreScene> {
  * @param bytes The bytes of the file.
  * @param sectionSize The section size.
  * @param name The name of the file, for the error.
+ * @param counts The player counts of the panel "Orchestra".
  * @returns The steps, which return the score.
  * @throws Error if `buildScore()` refuses the file.
  */
-function* scoreSteps(bytes: Uint8Array, sectionSize: SectionSize, name: string): Steps<Score> {
-  const result = yield* buildScoreSteps(bytes, sectionSize);
+function* scoreSteps(
+  bytes: Uint8Array,
+  sectionSize: SectionSize,
+  name: string,
+  counts: SectionCounts,
+): Steps<Score> {
+  const result = yield* buildScoreSteps(bytes, sectionSize, counts);
   if (!result.ok) {
     throw new Error(`The file "${name}" is not valid: ${result.error}.`);
   }
@@ -66,10 +76,15 @@ export interface PlannedScore {
  *
  * @param score The score.
  * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
+ * @param seating The rows of the orchestra of the panel "Orchestra".
  * @returns The steps, which return the score and its scene.
  */
-export function* planScoreSteps(score: Score, noPig = false): Steps<PlannedScore> {
-  return { score, scene: yield* planSceneSteps(score, noPig) };
+export function* planScoreSteps(
+  score: Score,
+  noPig = false,
+  seating: SeatingRows = DEFAULT_ORCHESTRA.rows,
+): Steps<PlannedScore> {
+  return { score, scene: yield* planSceneSteps(score, noPig, seating) };
 }
 
 /**
@@ -80,6 +95,7 @@ export function* planScoreSteps(score: Score, noPig = false): Steps<PlannedScore
  * @param sectionSize The section size.
  * @param name The name of the file, for the error.
  * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
+ * @param orchestra The settings of the panel "Orchestra": the rows and the player counts.
  * @returns The steps, which return the score and its scene.
  * @throws Error if `buildScore()` refuses the file.
  */
@@ -88,6 +104,8 @@ export function* planFileSteps(
   sectionSize: SectionSize,
   name: string,
   noPig = false,
+  orchestra: OrchestraSettings = DEFAULT_ORCHESTRA,
 ): Steps<PlannedScore> {
-  return yield* planScoreSteps(yield* scoreSteps(bytes, sectionSize, name), noPig);
+  const score = yield* scoreSteps(bytes, sectionSize, name, orchestra.counts);
+  return yield* planScoreSteps(score, noPig, orchestra.rows);
 }

@@ -1,6 +1,6 @@
 import { MAX_FILE_BYTES } from '../midi/parse.ts';
 import { buildScore } from '../score/score.ts';
-import type { FileError, Score, SectionSize } from '../score/types.ts';
+import type { FileError, Score, SectionCounts, SectionSize } from '../score/types.ts';
 
 /** The message text of each reason to refuse a file (design 2.8, 3.3). */
 export const FILE_ERROR_TEXTS = {
@@ -43,12 +43,14 @@ type FileReadResult =
  *
  * @param file The file.
  * @param sectionSize The value of the setting "Section size".
+ * @param counts The player counts of the panel "Orchestra".
  * @returns The score and the bytes, or the reason to refuse the file. A file that the page
  *   cannot read is `not-midi`.
  */
 export async function readScoreFile(
   file: FileSource,
   sectionSize: SectionSize,
+  counts: SectionCounts = {},
 ): Promise<FileReadResult> {
   if (file.size > MAX_FILE_BYTES) {
     return { ok: false, error: 'too-large' };
@@ -60,7 +62,7 @@ export async function readScoreFile(
     // A folder, or a file that the system removed after the drop, cannot be read.
     return { ok: false, error: 'not-midi' };
   }
-  const result = buildScore(bytes, sectionSize);
+  const result = buildScore(bytes, sectionSize, counts);
   return result.ok ? { ok: true, score: result.score, bytes } : result;
 }
 

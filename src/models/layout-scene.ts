@@ -169,52 +169,129 @@ type DeskSection = 'violin-1' | 'violin-2' | 'viola' | 'cello';
 type RowGroup = PlayingSection | DeskSection | `${DeskSection}-b` | 'soloist' | 'vocal-soloists';
 
 /**
- * The rows of the orchestra, from the front, with their sections from left to right (design
- * 4.5, seat geometry). It is the American seating with the contrabasses in a line at the back.
- * A keyboard of the orchestra (the celesta, the harpsichord, or a piano that is not the soloist)
- * sits at the left of the harp, behind the violins, as in a professional orchestra.
+ * A section that sits in a row of the orchestra: each playing section except the choir, which
+ * stands on the risers.
  */
-const ROWS: readonly (readonly RowGroup[])[] = [
-  ['violin-1', 'violin-2', 'viola', 'cello'],
-  ['violin-1-b', 'violin-2-b', 'viola-b', 'cello-b'],
+export type RowSection = Exclude<PlayingSection, 'choir'>;
+
+/**
+ * The rows of the orchestra, from the front, with their sections from left to right (design 4.5,
+ * seat geometry). The panel "Orchestra" changes them. A violin, viola, or cello section sits with
+ * its first desk in its row and its other desks in a row of their own just behind it.
+ */
+export type SeatingRows = readonly (readonly RowSection[])[];
+
+/**
+ * The default rows: the American seating with the contrabasses in a line at the back. A keyboard
+ * of the orchestra (the celesta, the harpsichord, or a piano that is not the soloist) sits at the
+ * left of the harp, behind the violins, as in a professional orchestra.
+ */
+export const DEFAULT_SEATING_ROWS: SeatingRows = [
+  ['violin', 'viola', 'cello'],
   ['piano', 'harp', 'flute', 'oboe'],
   ['horn', 'clarinet', 'bassoon', 'trumpet'],
   ['percussion', 'contrabass', 'timpani', 'trombone', 'tuba'],
 ];
 
-/**
- * The order of the players in the arc of a chamber group, from left to right (design 4.5, seat
- * geometry). A keyboard sits at the left end and faces along the arc, as a keyboard of the
- * orchestra does. The other players follow the order of the rows, and the desks of a string seat
- * stay together. Thus a string quartet sits from the first violin on the left to the cello on the
- * right, as the classic quartet half circle.
- */
-const CHAMBER_ORDER: readonly RowGroup[] = [
-  'piano',
-  'violin-1',
-  'violin-1-b',
-  'violin-2',
-  'violin-2-b',
-  'viola',
-  'viola-b',
-  'cello',
-  'cello-b',
-  'harp',
-  'flute',
-  'oboe',
-  'horn',
-  'clarinet',
-  'bassoon',
-  'trumpet',
-  'percussion',
-  'contrabass',
-  'timpani',
-  'trombone',
-  'tuba',
-  'choir',
-];
+/** Each section of the rows, in the order of the default rows. */
+export const ROW_SECTIONS: readonly RowSection[] = DEFAULT_SEATING_ROWS.flat();
 
-/** Rows 0 and 1 put the violins to the left of 0° and the other strings to the right. */
+/** The most rows of the orchestra, before the choir. */
+export const MAX_SEATING_ROWS = 6;
+
+/**
+ * Gives the row groups of a section: the first violin seat and the other violin seats, or the
+ * section.
+ *
+ * @param section The section.
+ * @returns The groups of the first desks.
+ */
+function frontGroups(section: RowSection): RowGroup[] {
+  return section === 'violin' ? ['violin-1', 'violin-2'] : [section];
+}
+
+/**
+ * Gives the row groups of the desks after the first desk of a section.
+ *
+ * @param section The section.
+ * @returns The groups, or none for a section with no desks.
+ */
+function backGroups(section: RowSection): RowGroup[] {
+  if (section === 'violin') {
+    return ['violin-1-b', 'violin-2-b'];
+  }
+  return section === 'viola' || section === 'cello' ? [`${section}-b`] : [];
+}
+
+/**
+ * Gives the rows of the seating with each section once. A missing section joins the last row, so
+ * each player has a row.
+ *
+ * @param rows The rows of the panel.
+ * @returns The rows, with no empty row.
+ */
+function completeRows(rows: SeatingRows): RowSection[][] {
+  const seen = new Set<RowSection>();
+  const out = rows.slice(0, MAX_SEATING_ROWS).map((row) =>
+    row.filter((section) => {
+      const fresh = ROW_SECTIONS.includes(section) && !seen.has(section);
+      seen.add(section);
+      return fresh;
+    }),
+  );
+  const missing = ROW_SECTIONS.filter((section) => !seen.has(section));
+  const kept = out.filter((row) => row.length > 0);
+  if (missing.length > 0) {
+    const last = kept.at(-1);
+    if (last) {
+      last.push(...missing);
+    } else {
+      kept.push(missing);
+    }
+  }
+  return kept;
+}
+
+/**
+ * Gives the rows of row groups from the rows of the seating. Each row of sections gives a row of
+ * the first desks and a row of the other desks of its strings, which can be empty. Thus row 1 is
+ * always the row of the back desks of the front row ({@link BACK_DESK_ROW}).
+ *
+ * @param rows The rows of the seating.
+ * @returns The rows of row groups, from the front.
+ */
+function rowGroupsOf(rows: SeatingRows): RowGroup[][] {
+  return completeRows(rows).flatMap((row) => [row.flatMap(frontGroups), row.flatMap(backGroups)]);
+}
+
+/**
+ * Gives the order of the players in the arc of a chamber group, from left to right (design 4.5,
+ * seat geometry). A keyboard sits at the left end and faces along the arc, as a keyboard of the
+ * orchestra does. The other players follow the order of the rows, and the desks of a string seat
+ * stay together. Thus with the default rows, a string quartet sits from the first violin on the
+ * left to the cello on the right, as the classic quartet half circle.
+ *
+ * @param rows The rows of the seating.
+ * @returns The row groups, from left to right.
+ */
+function chamberOrderOf(rows: SeatingRows): RowGroup[] {
+  const groups = completeRows(rows)
+    .flat()
+    .filter((section) => section !== 'piano')
+    .flatMap((section): RowGroup[] => {
+      const back = backGroups(section);
+      return frontGroups(section).flatMap((group, i) => {
+        const desks = back[i];
+        return desks ? [group, desks] : [group];
+      });
+    });
+  return ['piano', ...groups, 'choir'];
+}
+
+/**
+ * Rows 0 and 1 put the violins to the left of 0° and the other strings to the right, when the
+ * front row of the seating holds the violins.
+ */
 const SPLIT_ROWS = 2;
 
 /** The players of a desk: two players share one stand (design 4.5, seat geometry). */
@@ -636,9 +713,12 @@ function placeRow(
 interface FittedRow {
   /** The players from left to right. */
   readonly members: readonly Member[];
-  /** The index of the row in {@link ROWS}. */
+  /** The index of the row in the rows of {@link rowGroupsOf}. */
   readonly row: number;
-  /** True for rows 0 and 1, which have the violins left of 0° and the other strings right of it. */
+  /**
+   * True for rows 0 and 1 when the front row holds the violins: the violins sit left of 0° and the
+   * other strings right of it.
+   */
   readonly split: boolean;
   readonly radius: number;
   readonly angles: readonly number[];
@@ -717,7 +797,7 @@ function rowClear(row: RowPlacement, clearance: RowClearance): boolean {
  * front (design 4.5, seat geometry).
  *
  * @param members The players of the row from left to right.
- * @param row The index of the row in {@link ROWS}.
+ * @param row The index of the row in the rows of {@link rowGroupsOf}.
  * @param smallest The radius of the previous row plus 1.2 m.
  * @param clearance The items on the stage, all in front of the row.
  * @returns The row with its radius, its angles, and its places.
@@ -727,8 +807,9 @@ function* fitRowSteps(
   row: number,
   smallest: number,
   clearance: RowClearance,
+  violinsFront: boolean,
 ): Steps<FittedRow> {
-  const split = row < SPLIT_ROWS;
+  const split = violinsFront && row < SPLIT_ROWS;
   let radius = smallest;
   for (;;) {
     yield;
@@ -1402,16 +1483,14 @@ function layoutChamber(
   members: readonly Member[],
   cast: readonly PlayerCast[],
   groups: readonly RowGroup[],
+  order: readonly RowGroup[],
 ): SceneLayout {
   // The group stands where the first row of an orchestra sits: 2.4 m behind the podium center.
   const middle = [0, -CHAMBER.radius] as const;
   let placed: PlacedPlayer[] = [];
   let stands: readonly PlacedStand[] = [];
   if (form === 'arc') {
-    const order = CHAMBER_ORDER.flatMap((group) =>
-      members.filter((m) => groups[m.index] === group),
-    );
-    const arc = fitArc(order);
+    const arc = fitArc(order.flatMap((group) => members.filter((m) => groups[m.index] === group)));
     placed = [...arc.players];
     stands = arc.stands;
   } else {
@@ -3123,6 +3202,7 @@ function takesSoloPlace(
  * @param score The score.
  * @param models The player models of the score.
  * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
+ * @param seating The rows of the orchestra of the panel "Orchestra".
  * @returns The steps, which return the layout.
  * @throws {Error} If a player has no place.
  */
@@ -3130,6 +3210,7 @@ export function* layoutSceneSteps(
   score: Score,
   models: ModelCache,
   noPig = false,
+  seating: SeatingRows = DEFAULT_SEATING_ROWS,
 ): Steps<SceneLayout> {
   const cast = castScore(score, noPig);
   const form = chamberFormOf(score.seats);
@@ -3159,7 +3240,7 @@ export function* layoutSceneSteps(
   yield* models.getSteps(CONDUCTOR.species, CONDUCTOR.instrument);
   yield;
   if (form) {
-    return layoutChamber(form, members, cast, groups);
+    return layoutChamber(form, members, cast, groups, chamberOrderOf(seating));
   }
   const inGroup = (group: RowGroup): Member[] => members.filter((m) => groups[m.index] === group);
   const players: (PlayerPlace | undefined)[] = members.map(() => undefined);
@@ -3181,7 +3262,8 @@ export function* layoutSceneSteps(
 
   const rows: FittedRow[] = [];
   let radius = FIRST_ROW_RADIUS - ROW_STEP;
-  for (const [n, rowGroups] of ROWS.entries()) {
+  const violinsFront = completeRows(seating)[0]?.includes('violin') ?? false;
+  for (const [n, rowGroups] of rowGroupsOf(seating).entries()) {
     const row = rowGroups.flatMap(inGroup);
     if (row.length === 0) {
       continue;
@@ -3191,6 +3273,7 @@ export function* layoutSceneSteps(
       n,
       radius + ROW_STEP,
       clearanceOf(fixed, soloPianos, rows, []),
+      violinsFront,
     );
     radius = fit.radius;
     rows.push(fit);
