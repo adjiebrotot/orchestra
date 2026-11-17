@@ -3,7 +3,6 @@ import type { SeatFlag } from '../app/seat-flags.ts';
 import type { FrameRateSetting, QualitySetting } from '../app/settings.ts';
 import type { SectionSize } from '../score/types.ts';
 import { CLOSE_CREDITS_LABEL, CREDITS_TEXT, licensesUrl } from '../app/credits.ts';
-import { REPOSITORY_LABEL } from '../app/page-title.ts';
 import { DRAG_HINT_TEXT, TURN_HINT_TEXT } from '../app/camera-mode.ts';
 import { PHONE_LAYOUT_QUERY } from '../app/phone-layout.ts';
 import { COPY_LINK_TEXT, shareLink, shareStatusText } from '../app/share-link.ts';
@@ -131,7 +130,6 @@ export class Ui {
     // The static title of index.html stays in its place (design 2.8, 7.2).
     this.title = new Title(parent.querySelector<HTMLElement>(':scope > header.title'));
     this.tooltips = new Tooltips(target);
-    this.tooltips.attach(this.title.repositoryLink, () => REPOSITORY_LABEL);
     // The close button gives the focus to the drawer button, as the Escape key does (design 2.4).
     this.drawer = new Drawer(() => {
       this.drawer.setOpen(false);
@@ -334,14 +332,14 @@ export class Ui {
     }
   }
 
-  /** True while the pointer is over a control of the title or over the open drawer. */
+  /** True while the pointer is over the open drawer. */
   get panelHovered(): boolean {
-    return this.title.hovered || this.drawer.hovered;
+    return this.drawer.hovered;
   }
 
-  /** True while a control of the title or the drawer shows the focus of the keyboard. */
+  /** True while a control of the drawer shows the focus of the keyboard. */
   get panelFocused(): boolean {
-    return this.title.focusShown || this.drawer.focusShown;
+    return this.drawer.focusShown;
   }
 
   /**

@@ -245,29 +245,3 @@ describe('the title shade over each backdrop (design 2.8)', () => {
     }
   });
 });
-
-describe('the GitHub mark in the logo line (design 2.8)', () => {
-  const shade = color(UI_CSS, declaration(UI_CSS, LINE_SHADE, 'background'));
-  const marks = {
-    rest: color(UI_CSS, declaration(UI_CSS, '.title .github', 'color')),
-    hover: color(UI_CSS, declaration(UI_CSS, '.title .github:hover', 'color')),
-  };
-
-  it.each(Object.entries(marks))(
-    'is white or a neutral gray at %s, as the logo rules of GitHub ask',
-    (_, mark) => {
-      expect(mark.r).toBe(mark.g);
-      expect(mark.g).toBe(mark.b);
-    },
-  );
-
-  it.each(Object.entries(marks))(
-    'keeps 4.5:1 at %s over each backdrop with the title shade',
-    (_, mark) => {
-      for (const backdrop of BACKDROPS) {
-        const behind = over(shade, 1, backdrop);
-        expect(contrast(mark, behind), JSON.stringify(backdrop)).toBeGreaterThanOrEqual(AA_TEXT);
-      }
-    },
-  );
-});

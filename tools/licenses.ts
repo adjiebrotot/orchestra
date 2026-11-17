@@ -132,28 +132,6 @@ export function hallEntry(title: string, credit: AssetCredit): LicenseEntry {
 }
 
 /**
- * Makes the license entry of the GitHub mark of the link to the repository (design 2.8, 7.3).
- * The path comes from Primer Octicons, under the MIT license, so the text is the license of
- * `assets/github-mark/LICENSE.txt`.
- *
- * @param root The folder of the root package.json.
- * @returns The entry.
- */
-export async function githubMarkEntry(root: string): Promise<LicenseEntry> {
-  const license = await readFile(join(root, 'assets', 'github-mark', 'LICENSE.txt'), 'utf8');
-  return {
-    title: 'GitHub mark, icons/mark-github-24.svg of Primer Octicons',
-    license: 'MIT',
-    source: 'https://github.com/primer/octicons',
-    text: [
-      'The link to the repository shows this mark. The mark is a trademark of GitHub, Inc.',
-      '',
-      license,
-    ].join('\n'),
-  };
-}
-
-/**
  * Makes the license entry of the font of the wordmark in the logo (design 2.8, 7.3). The logo
  * holds the outlines of the word in Fraunces as an SVG path, so the text is the license of
  * `assets/fraunces/LICENSE.txt`.
@@ -209,7 +187,7 @@ export async function soundFontEntries(root: string): Promise<LicenseEntry[]> {
 
 /**
  * Reads all entries of the third-party license file (design 7.3): the bundled packages, the
- * sources of the SoundFont, the hall impulse response, and the GitHub mark.
+ * sources of the SoundFont, the hall impulse responses, and the font of the wordmark.
  *
  * @param root The folder of the root package.json.
  * @returns The entries, in the order of the file.
@@ -235,7 +213,6 @@ export async function licenseEntries(root: string): Promise<LicenseEntry[]> {
       KONZERTHAUS_CREDIT,
     ),
   );
-  entries.push(await githubMarkEntry(root));
   entries.push(await frauncesEntry(root));
   return entries;
 }

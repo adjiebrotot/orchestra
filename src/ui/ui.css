@@ -37,10 +37,6 @@
   --track: rgba(141, 187, 255, 0.22);
   /* The shade behind the title, so that the title reads over white fur (design 2.8). */
   --title-shade: rgba(11, 9, 8, 0.8);
-  /* The gray of the GitHub mark. The logo rules of GitHub permit the mark only in white, black,
-     or gray (design 2.8). */
-  --github-mark: #c8c8c8;
-  --pill-line: rgba(141, 187, 255, 0.35);
   /* The dark ink of an icon or a text on --accent. */
   --on-accent: #14203a;
   --radius-panel: 14px;
@@ -294,14 +290,6 @@ body:has(.camera[aria-pressed='true']) .title p {
   opacity: 0;
 }
 
-body:has(.camera[aria-pressed='true']) .title .github {
-  opacity: 0;
-  visibility: hidden;
-  transition:
-    opacity 0.6s ease,
-    visibility 0s 0.6s;
-}
-
 /* The title shade (design 2.8): one fixed gradient from the top-left corner of the frame behind
    the title, which keeps 4.5:1 for each line of the title over a white animal in a close shot.
    Its full part covers the title and the 4 px margin that e2e/title-shade.e2e.ts reads, and it
@@ -378,49 +366,6 @@ body:has(.camera[aria-pressed='true']) .title::before {
 .title .logo .wordmark {
   width: auto;
   height: 22px;
-}
-
-/* The link to the repository on GitHub stands after the name in the logo line (design 2.8): an
-   outlined pill with the GitHub mark and the text "Open source", in the gray of --github-mark,
-   and white on a hover. The pill sets the link apart from the name. It centers on the capitals of
-   the name (--logo-lift), and the negative margins keep the height of the logo line. The title
-   takes no pointer, so the link takes it back. */
-.title .github {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 20px;
-  margin: 0 0 0 6px;
-  padding: 0 9px 0 7px;
-  border: 2px solid var(--pill-line);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  color: var(--github-mark);
-  text-decoration: none;
-  translate: 0 var(--logo-lift);
-  pointer-events: auto;
-  transition:
-    background-color var(--t-fast),
-    border-color var(--t-fast),
-    color var(--t-fast),
-    box-shadow var(--t-fast),
-    opacity 0.6s ease;
-}
-
-.title .github:hover {
-  color: #ffffff;
-  border-color: #ffffff;
-  background: var(--panel);
-  box-shadow: 2px 2px 0 #6b6b6b;
-}
-
-.title .github svg {
-  width: 12px;
-  height: 12px;
 }
 
 .title h2 {
@@ -2218,9 +2163,7 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   }
 
   .title h2,
-  .title p,
-  .title .github,
-  body:has(.camera[aria-pressed='true']) .title .github {
+  .title p {
     transition: none;
   }
 
@@ -2249,8 +2192,7 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 }
 
 @media (max-width: 699px) {
-  /* The title of a phone stands 16 px from the top, as from the left. The tap area of 44 px
-     around the link to GitHub then stays inside the window (design 2.8). */
+  /* The title of a phone stands 16 px from the top, as from the left (design 2.8). */
   :root {
     --title-top: 16px;
   }
@@ -2286,18 +2228,6 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 
   .title .logo .wordmark {
     height: 18px;
-  }
-
-  .title .github {
-    height: 18px;
-    margin-left: 5px;
-    padding: 0 8px 0 6px;
-    font-size: 11px;
-  }
-
-  .title .github svg {
-    width: 11px;
-    height: 11px;
   }
 
   /* On a phone, the drawer is a sheet above the bar, so that the transport stays usable. */
@@ -2488,14 +2418,6 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
     min-width: var(--target);
     min-height: var(--target);
     margin-block: calc((1lh - var(--target)) / 2);
-  }
-
-  /* The link to GitHub keeps its small box in the logo line, and its hit area is a square of the
-     touch size around the mark. */
-  .title .github::after {
-    content: '';
-    position: absolute;
-    inset: calc((100% - var(--target)) / 2);
   }
 }
 

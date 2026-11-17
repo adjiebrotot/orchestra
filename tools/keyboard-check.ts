@@ -8,11 +8,7 @@ import { preview } from 'vite';
 import { FIRST_PLAY, SAMPLES_READY } from '../src/app/dev-hook.ts';
 import { DEFAULT_DEMO, demoInfo } from '../src/app/demos.ts';
 import { FILE_FAILURE_TEXT } from '../src/app/messages.ts';
-import { REPOSITORY_LABEL, REPOSITORY_TEXT, REPOSITORY_URL } from '../src/app/page-title.ts';
 import { chromiumArgs } from './chromium-args.ts';
-
-/** The accessible name of the link to GitHub, as `src/ui/title.ts` writes it (design 2.8). */
-const REPOSITORY_NAME = `${REPOSITORY_TEXT}: ${REPOSITORY_LABEL}`;
 
 /** The title of the default demo: the current row of the demo list at start. */
 const DEFAULT_TITLE = demoInfo(DEFAULT_DEMO ?? '').title;
@@ -307,7 +303,7 @@ async function checkSelectPiece(browser: Browser, base: string): Promise<KeyChec
     await c.press(['Enter'], 400);
     const opened = !(await drawerHidden(page));
     const focus = await c.focused();
-    // The link to GitHub in the title and the play button come first (design 2.8).
+    // The play button comes first (design 2.8).
     c.record(
       'Select music (first screen)',
       `Escape, Tab x${tabs}, Enter`,
@@ -567,35 +563,6 @@ async function checkPlayback(c: Checker, page: Page, place: string): Promise<voi
       entered && label === 'Exit full screen',
     );
   }
-}
-
-/**
- * Checks the link to GitHub after the logo (design 2.8): it is the first stop of Tab, and Enter
- * opens the repository in a new tab. The check answers the request to GitHub itself, so that it
- * needs no network.
- *
- * @param c The checker.
- * @param page The page, with the focus on no control.
- */
-async function checkRepositoryLink(c: Checker, page: Page): Promise<void> {
-  await page.context().route(REPOSITORY_URL, async (route) => {
-    await route.fulfill({ contentType: 'text/plain', body: 'Pawchestra' });
-  });
-  const tabs = await c.tabTo(named(REPOSITORY_NAME));
-  const [tab] = await Promise.all([
-    page.context().waitForEvent('page'),
-    page.keyboard.press('Enter'),
-  ]);
-  await tab.waitForLoadState();
-  const url = tab.url();
-  await tab.close();
-  const focus = await c.focused();
-  c.record(
-    'Link to GitHub',
-    `Tab x${tabs}, Enter`,
-    `opens ${url} in a new tab; focus stays on "${focus}"`,
-    tabs === 1 && url === REPOSITORY_URL && focus === REPOSITORY_NAME,
-  );
 }
 
 /**
@@ -1091,31 +1058,6 @@ async function checkHiddenBarTap(browser: Browser, base: string): Promise<KeyChe
     small.length === 0,
   );
 
-  // The link to GitHub keeps its small box in the logo line, and a tap in a square of 44 px
-  // around its mark hits it (design 2.8).
-  const githubMisses = await page.evaluate(() => {
-    const link = document.querySelector('.title .github');
-    if (!link) {
-      return ['no link'];
-    }
-
-    const box = link.getBoundingClientRect();
-    const x = box.left + box.width / 2;
-    const y = box.top + box.height / 2;
-    const points = [-21, 0, 21].flatMap((dx) => [-21, 0, 21].map((dy) => [x + dx, y + dy]));
-    return points
-      .filter(([px = 0, py = 0]) => !link.contains(document.elementFromPoint(px, py)))
-      .map(([px = 0, py = 0]) => `${px.toFixed(0)}, ${py.toFixed(0)}`);
-  });
-  c.record(
-    'Hit area of the link to GitHub',
-    '',
-    githubMisses.length === 0
-      ? 'a square of 44 px around the mark hits the link'
-      : `misses at ${githubMisses.join('; ')}`,
-    githubMisses.length === 0,
-  );
-
   // The credit links are in the credits dialog. A tap on the link "Credits" of the tab Settings
   // opens it, and its controls also have the touch size.
   await page.tap('#tab-settings');
@@ -1440,7 +1382,6 @@ async function checkSize(
   const { page, errors } = await openPage(browser, base, width, height);
   const c = new Checker(page, size);
   await checkDrawerAtStart(c, page, phone);
-  await checkRepositoryLink(c, page);
   await checkBar(c, page, phone);
   await checkDrawer(c, page, phone);
   c.record(

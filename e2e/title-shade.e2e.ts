@@ -25,15 +25,13 @@ const LINES = ['.title .logo', '.title h2', '.title p'] as const;
 
 /**
  * The style that shows the shades alone over a white page, as over a light floor. It hides each
- * part of the title in front of the shade: the text, the icons, and the outline of the pill of the
- * link to GitHub. The outline is a part of the link, and no text stands on it.
+ * part of the title in front of the shade: the text and the icons.
  */
 const WHITE_PAGE = `
   body { background: #fff !important; }
   #stage, .drawer, .first-screen, .bar { visibility: hidden !important; }
   .title, .title * { color: transparent !important; text-shadow: none !important; }
-  .title svg { visibility: hidden !important; }
-  .title .github { border-color: transparent !important; }`;
+  .title svg { visibility: hidden !important; }`;
 
 /** One pixel: red, green, and blue from 0 to 255. */
 type Pixel = readonly [number, number, number];
@@ -52,8 +50,8 @@ interface LineOnPage {
   /** The bottom edge of the box. */
   readonly bottom: number;
   /**
-   * The darkest color of its text: red, green, and blue. The logo line holds the gold name and
-   * the gray text of the link to GitHub, and the darker gray needs the darker backdrop.
+   * The darkest color of its text: red, green, and blue. The darker color needs the darker
+   * backdrop.
    */
   readonly color: Pixel;
 }

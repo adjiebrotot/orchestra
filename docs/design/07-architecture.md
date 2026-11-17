@@ -345,8 +345,8 @@ The build writes `third-party-licenses.txt`, and the credits dialog links to it 
 holds Three.js (MIT), spessasynth_core (Apache-2.0), stb-vorbis (Apache-2.0), the package
 `@vercel/analytics` of the deploy build (MIT, 2.7), and the three sources of the SoundFont (6.2):
 GeneralUser GS (GeneralUser GS License v2.0), VSCO 2 CE (CC0 1.0), and VCSL (CC0 1.0). It also
-holds the two hall impulse responses (CC BY 4.0, 6.8), the GitHub mark (MIT, Primer Octicons,
-2.8), and the font Fraunces of the wordmark (SIL Open Font License 1.1, 2.8).
+holds the two hall impulse responses (CC BY 4.0, 6.8) and the font Fraunces of the wordmark (SIL
+Open Font License 1.1, 2.8).
 
 `tools/licenses.ts` writes the file after the Vite build, and the plugin `DEV_LICENSES` of
 `vite.config.ts` serves the same text on the dev server. The script fails when a package in
@@ -362,8 +362,6 @@ rights, so they need no entry.
   entry (`hallEntry()`) gives the credit line of `HALL_CREDIT` or `KONZERTHAUS_CREDIT` with the
   note of the changes, the source, and the license link. The link meets section 3(a)(1)(C), so
   the repository holds no copy of the license text.
-- The GitHub mark is also a trademark of GitHub, Inc., so its use follows the logo rules of GitHub
-  (`assets/github-mark/README.md`).
 
 ## 7.4 Search and share
 
