@@ -2523,6 +2523,10 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   gap: 6px;
 }
 
+.render-options input[type='checkbox'] {
+  accent-color: var(--accent);
+}
+
 .render-field {
   display: grid;
   grid-template-columns: 70px minmax(0, 1fr);
