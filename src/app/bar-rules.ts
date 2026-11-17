@@ -50,9 +50,9 @@ export function barShows(activity: BarActivity): boolean {
 interface UiActivity extends BarActivity {
   /** True in Cinematic mode (design 2.5). */
   readonly cinematic: boolean;
-  /** True while a control of the title or the drawer has the keyboard focus. */
+  /** True while a control of the drawer has the keyboard focus. */
   readonly panelFocused: boolean;
-  /** True while the pointer is over a control of the title or over the drawer. */
+  /** True while the pointer is over the drawer. */
   readonly panelHovered: boolean;
   /** True while the credits dialog or a message is open. */
   readonly held: boolean;
@@ -70,9 +70,8 @@ interface UiShown {
  * Tells which parts of the UI show (design 2.3). Free mode hides only the bar, with the rule of
  * {@link barShows}. In Cinematic mode during play, the bar and the drawer hide together after
  * {@link BAR_HIDE_SEC} with no pointer motion, also an open drawer, so that the film fills the
- * screen. The title always shows. They stay while the pointer is over the bar, the drawer, or the
- * link of the title, while one of these has the keyboard focus, and while a dialog or a message is
- * open.
+ * screen. The title always shows. They stay while the pointer is over the bar or the drawer, while
+ * one of these has the keyboard focus, and while a dialog or a message is open.
  *
  * @param activity The mode, the play state, and the activity of the user.
  * @returns The parts that show.

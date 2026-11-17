@@ -60,8 +60,8 @@ The UI has the style of a video player. The theme is dark only, because the scen
 - The bar keeps its place at the bottom of the window in both camera modes. In Cinematic mode it
   covers the bottom of the frame when it shows, because a bar that moved at each change of the
   mode looked like a fault.
-- In Cinematic mode, the piece title, the composer, and the link to GitHub fade out and stay
-  hidden, because the title card shows the piece in the frame. The logo stays at the top-left
+- In Cinematic mode, the piece title and the composer fade out and stay hidden,
+  because the title card shows the piece in the frame. The logo stays at the top-left
   corner of the frame and moves with the bars (`--letterbox` and `--letterbox-side` of
   `ui/ui.css`). The title stays a live region, so that a screen reader still reads a new piece.
   The link hides after the fade, so that it takes no focus and no pointer.
@@ -283,17 +283,23 @@ gives it with no cookie and no identifier that follows a visitor to other sites.
 - Web Analytics must be on in the settings of the Vercel project. Else the script gets a 404, and
   the app works with no count.
 
-The link to the repository on GitHub (2.8) is a plain link. The page loads nothing from GitHub,
-and the link sends no referrer (`rel="noopener noreferrer"`).
-
 The page `/privacy` (7.4) gives these facts to the visitors, from `PRIVACY` of
 `tools/site-pages.ts`. A change of this section updates that page in the same commit.
 
 ## 2.8 UI spec
 
-The prototype [`prototype/ui.html`](../prototype/ui.html) and its screenshots show the tokens
-and the layout, and `reference/mockup.png` is the target of the look. The CSS of the app is in
-`ui/ui.css`.
+The prototype [`prototype/ui.html`](../prototype/ui.html) and its screenshots show the layout,
+and `reference/mockup.png` is the target of the stage. The CSS of the app is in `ui/ui.css`.
+
+The controls use the shapes of the sticker design system of adjiebrotots.com (its `DESIGN.md`),
+so that a visitor from that site sees one family of pages. The colors stay the warm colors of the
+stage, because the blue and navy of the site did not match the spotlight. A sticker has a flat
+fill, a 2 px outline in `--outline`, a hard offset shadow (`--pop-0` to `--pop-4`), and a corner
+from the scale. A hover lifts it by one step and can tilt it, and a press pushes it down to
+`--pop-0`. A control that is on, such as play, the current tab, or a pressed toggle, has the soft
+gold fill `--accent` with the dark ink `--on-accent`. The app loads no font file, so it keeps the system font, with bold labels in place of
+the DM Sans of the site. The handwriting of the site is not used, because each text of the app
+gives a fact.
 
 **Tokens**
 
@@ -301,26 +307,28 @@ and the layout, and `reference/mockup.png` is the target of the look. The CSS of
 |---|---|
 | `--bg-overlay` | `rgba(16, 13, 11, 0.72)`, with `backdrop-filter: blur(10px)` |
 | `--panel` | `#17130f` |
+| `--panel-2` | `#241e18` (a raised row, such as the current demo) |
 | `--panel-glass` | `rgba(21, 18, 16, 0.96)`, with `backdrop-filter: blur(16px)` (the floating panel of the drawer) |
 | `--line-faint` | `rgba(255, 240, 220, 0.06)` (the line between two rows of a list, and the hover of a seat row) |
-| `--line` | `rgba(255, 240, 220, 0.10)` |
-| `--pill-line` | `rgba(255, 240, 220, 0.24)` (the outline of the pill "Open source") |
+| `--line` | `rgba(255, 240, 220, 0.14)` (the outline of a quiet control) |
+| `--outline` | `#d8c3a0` (the warm cream 2 px outline of a sticker, and the focus ring) |
+| `--pop-c`, `--pop-0` to `--pop-4` | `#7a5a2c` (a deep amber), and offsets of 1, 2, 3, 4, and 6 px: 0 pressed, 1 small parts (a tab, a tooltip), 2 round buttons, 3 panels and the bar, 4 the hover of a large part |
 | `--text` | `#efe8dc` |
 | `--text-dim` | `#b5aa99` |
 | `--accent` | `#e7b45a` (the warm gold of the spotlight) |
 | `--accent-strong` | `#f0c676` (hover) |
 | `--on-accent` | `#1a140d` (an icon or a text on `--accent`) |
+| `--link` | `#e7b45a` (a link of text) |
 | `--danger` | `#e0796a` |
 | `--title-shade` | `rgba(11, 9, 8, 0.8)` (the darkest part of the title shade) |
-| `--github-mark` | `#c8c8c8` (the neutral gray of the GitHub mark, as the logo rules of GitHub ask) |
-| `--track` | `rgba(255, 240, 220, 0.2)` (the track of a slider, where it is not filled) |
+| `--track` | `rgba(255, 240, 220, 0.22)` (the track of a slider, where it is not filled) |
 | Font | `system-ui, -apple-system, "Segoe UI", Roboto, sans-serif` |
 | `--font-serif` | `"Palatino Linotype", Palatino, "Book Antiqua", "Iowan Old Style", Georgia, "Noto Serif", serif` (the piece title) |
 | Font sizes | 12 px for times (tabular numbers), 13 px for secondary text, 14 px body. The piece title is `clamp(24px, 2.5vw, 36px)` (32 px at 1280 px), and the composer `clamp(13px, 1.15vw, 16px)` |
-| Radius | 10 px for panels, 12 px for the floating panel of the drawer and for the bar, 8 px for buttons |
+| Radius | 14 px for panels and rows, 16 px for the drawer, the bar, and dialogs, 10 px for buttons and tooltips. A round icon button, a tab, and a pill are fully round |
 | Control size | at least 40 px for the controls of the bar and the first screen. 32 px for the compact controls in the drawer, in messages, and in dialogs (tabs, M, S, segmented buttons, close, the link "Credits"). At least 44 px for every control on a touch screen |
-| Focus | a 2 px ring in `--accent`, with a 2 px offset, and the button radius on a slider |
-| Button states | the hover and the color change in 120 ms (none with reduced motion), and a pressed button gets `rgba(255, 240, 220, 0.18)`. The large play button gets `--accent-strong` and the scale 0.96 while pressed |
+| Focus | a 3 px ring in `--outline`, with a 3 px offset, and the button radius on a slider |
+| Button states | the change takes `--t-fast` with the small overshoot `--ease-pop` (none with reduced motion, which also stops the lift and the tilt). An icon button of the bar is only its icon at rest. A hover makes it a round gold sticker with `--pop-2` that lifts 1 px and tilts 8°. A press moves it 2 px down and right with `--pop-0`. The play buttons are always gold stickers |
 
 **Components**
 
@@ -330,9 +338,8 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
 - **Title**: the logo (a gold paw and the wordmark "Pawchestra" in Fraunces, one SVG path
   `WORDMARK_PATH`, so no font file loads), the piece title, and the composer. The wordmark is the
   `h1` of the page, with the name as its accessible name, because the page is the app. The piece
-  title is an `h2`. A gray pill with the
-  GitHub mark and "Open source" (`REPOSITORY_TEXT`) links to `REPOSITORY_URL`. It is gray, because
-  the logo rules of GitHub permit only white, black, or gray. `index.html` holds the title lines
+  title is an `h2`. The title has no link: the site pages link to the repository (7.4), so the
+  top left of the stage stays clear. `index.html` holds the title lines
   of the default demo, and the app keeps that header, so the piece title paints with the first
   paint (7.2). A hash that names a demo clears the lines before the first paint, and the app
   writes the title of its demo. The full-page message of 2.6 removes the header. In Cinematic
@@ -363,7 +370,8 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
   stopped there (`endCardView()`), as `titleCardLevel()` is of the song time, so a seek back or a
   play hides it. A file of the user has no next demo, so its card shows only "Play again". The
   card shows in both modes, with no fade with reduced motion.
-- **Bar**: "Cinematic camera" is pressed in Cinematic mode. At the song end, play becomes "Play
+- **Bar**: a sticker with the outline and `--pop-3`. "Cinematic camera" is pressed in Cinematic
+  mode, and then it stays a gold sticker. The slider thumb is a small gold sticker. At the song end, play becomes "Play
   again" (6.5), and the end card offers the next demo. The seek bar seeks only when the samples are
   ready (`app/seek.ts`). The volume gain is the square of the position (6.8). The drawer button says
   "Open the drawer" or "Close the drawer", and the full screen button "Full screen" or "Exit full
@@ -384,14 +392,16 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
   has no verb "choose", so the buttons say "Select".
   `index.html` holds the same load state as static HTML and the style sheets in its head (inline
   in the build, 7.2), so the first paint shows no unstyled page.
-- **Drawer**: a floating panel in `--panel-glass`, nearly opaque, so that its dim text keeps
+- **Drawer**: a floating sticker panel in `--panel-glass`, nearly opaque, so that its dim text keeps
   4.5:1 over white fur. Only the panel of the current tab scrolls. The arrow keys, Home, and End
   move between the tabs, as the tabs pattern of WAI-ARIA says. While the drawer is open in Free
   mode, the camera moves its frame with `setViewOffset()` (`stageCover()`), and the canvas fills
-  the window, so the opaque canvas shows no edge. A wide window opens the drawer at start
+  the window, so the opaque canvas shows no edge. The tabs are round chips with bold text. The
+  current tab is a gold sticker with `--pop-1` and a tilt of 2°, as a sticker of the site. A wide window opens the drawer at start
   (`isWideLayout()`), so that the stage does not move at the click on play. The change to
   Cinematic mode closes it (2.3).
-  - **Demos**: a row with the title, the composer, and the length, and no cover. A long title
+  - **Demos**: a row with the title, the composer, and the length, and no cover. The current row
+    is raised: `--panel-2`, the outline, and `--pop-2`. A long title
     wraps, because an ellipsis would hide a part of it. The current row has a level meter from the
     notes of the score (`meterLevels()`), so the UI owns no audio code. The meter has a column of
     its own, so the text does not move. After a file of the user plays, a row "Your file:
@@ -399,7 +409,8 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
     demo. The row holds the file in memory only, so a reload removes it (2.7).
   - **File button**: "Open a MIDI file", with the second line "From this device, or drop it on the
     page" ("From this device" on a touch screen). It stands below the demo list, because it also
-    selects a piece. It does not say "Upload", because the file stays on the device.
+    selects a piece. It is a dashed drop region of the site, and its icon stands on a small gold
+    tile with the outline. It does not say "Upload", because the file stays on the device.
   - **Seats**: a row with a dot in the fur color, the seat name, the animal line, and the toggle
     buttons "Mute" and "Solo" ("Mute {name}", "Solo {name}"). Only a screen reader reads the source
     line. The dot is small and faint while its seat is silent, and full with a soft glow while it
@@ -418,25 +429,27 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
 - **Phone**, narrower than 700 px: the drawer is a sheet above the bar with a drag handle, and a
   selection closes it. The speed, the volume, "Reset view", and full screen move into the group
   "Playback" of the settings, so that the page has one control of each kind. The bar shows no
-  duration, so that the seek bar is longer. The top inset of the title (`--title-top`) keeps the
-  touch area of the link to GitHub inside the window.
-- **Messages**: at the bottom center above the bar, with a bar in `--danger`. A message closes
+  duration, so that the seek bar is longer.
+- **Messages**: a sticker at the bottom center above the bar, with a bar in `--danger`. A message closes
   after a few seconds, with "Close the message", or with Escape. It stays while it has the pointer
   or the focus (`followMessage()`). A new message or a new piece replaces it. The failure texts
   end with "Check the connection.", because the button "Try again" stands next to them.
 - **Build cover**: the canvas fades out before a build and in after the first render.
 - **Page title**: "{title}, {composer} · Pawchestra" for a demo, and "{title} · Pawchestra" for a
   file (`pageTitle()`). The default demo keeps the title of the start page (7.4).
-- **Tooltips** name the action and its key: "Play (Space)", "Pause (Space)", "Play again (Space)",
+- **Tooltips** are the note bubble of the site: a gold sticker with the outline, `--pop-1`, and a
+  tail that points at the control, also when the edge of the window moves the bubble
+  (`ui/tooltip.ts`). They name the action and its key: "Play (Space)", "Pause (Space)", "Play again (Space)",
   "Seek (← →, Home)", "Mute (M)", "Volume (↑ ↓)", "Cinematic camera (C)", "Full screen (F)", "Exit
   full screen (F)", and "Speed", "Reset view", and "Open the drawer" with no key. The tooltip of the
   seek bar adds the time under the pointer before its text, "1:23 · Seek (← →, Home)", and follows
-  the pointer. The link to GitHub shows "Pawchestra on GitHub". The tooltips keep their keys,
+  the pointer. The tooltips keep their keys,
   although the mockup shows only the names, because they are the only visible hint of the keys. A
   tooltip follows WCAG 1.4.13, and never shows for a touch. A bar that hides hides only the tooltips
-  of its own controls, so the tooltip of the link to GitHub stays while the link has the focus. A
+  of its own controls. A
   screen reader skips it, because `aria-label` and `aria-keyshortcuts` give the name and the key.
-- **Icons**: inline SVG, 20 × 20, stroke width 1.75, round caps and joins, `currentColor`
+- **Icons**: inline SVG, 20 × 20, stroke width 2.2 as the icons of the site, round caps and
+  joins, `currentColor`
   (`ui/icons.ts`). "Cinematic camera" shows an open clapperboard. It reads as film at 20 px,
   with the stroke weight of the other icons. A movie camera with two reels is too busy at 20 px,
   a frame with filled letterbox bars reads as a card, a film strip reads as a media file, and a
@@ -527,6 +540,6 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
   key. A Tab into the list shows the ring.
 - In Free mode, the bar stays visible while a control of the bar has the keyboard focus
   (`:focus-visible`), while the pointer is over it, and while the drawer is open. In Cinematic
-  mode, the focus or the pointer on the bar, the drawer, or the link of the title keeps the bar
+  mode, the focus or the pointer on the bar or the drawer keeps the bar
   and the drawer, and an open drawer does not (2.3). The title does not hide. The hidden controls
   stay in the focus order.

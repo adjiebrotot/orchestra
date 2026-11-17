@@ -40,18 +40,8 @@ export const SHARE_IMAGE: ShareImage = {
 export const SITE_DESCRIPTION =
   'An orchestra of animals plays classical music on a 3D stage in your browser. Open a MIDI file, direct the camera, and render the film to MP4.';
 
-/** The repository of the app on GitHub, which the link after the logo opens (design 2.8). */
+/** The repository of the app on GitHub, which the site pages link to (design 7.4). */
 export const REPOSITORY_URL = 'https://github.com/adjiebrotot/orchestra';
-
-/** The accessible name and the tooltip of the link to the repository (design 2.8). */
-export const REPOSITORY_LABEL = 'Orchestra on GitHub (based on Pawchestra)';
-
-/**
- * The visible text of the link to the repository, in its pill after the logo (design 2.8). The
- * accessible name of the link starts with it, so that a voice command with the visible text
- * finds the link.
- */
-export const REPOSITORY_TEXT = 'Open source';
 
 /**
  * Gives the title of the page for the current piece (design 2.8): the browser tab and the history

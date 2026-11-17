@@ -1,8 +1,8 @@
 import { TOOLTIP_DELAY_MS } from '../app/tooltips.ts';
 import { createElement, setText } from './dom.ts';
 
-/** The gap between a control and its tooltip, in CSS pixels. */
-const GAP_PX = 8;
+/** The gap between a control and its tooltip, in CSS pixels. The tail of the bubble fills it. */
+const GAP_PX = 12;
 
 /** The smallest distance of a tooltip from the edges of the window, in CSS pixels. */
 const EDGE_PX = 8;
@@ -183,8 +183,13 @@ export class Tooltips {
     const middle = this.#anchorX ?? box.left + box.width / 2;
     const left = Math.min(Math.max(EDGE_PX, middle - width / 2), maxLeft);
     const above = box.top - GAP_PX - height;
-    const top = above >= EDGE_PX ? above : box.bottom + GAP_PX;
+    const isAbove = above >= EDGE_PX;
+    const top = isAbove ? above : box.bottom + GAP_PX;
     this.element.style.left = `${Math.round(left)}px`;
     this.element.style.top = `${Math.round(top)}px`;
+    // The tail of the bubble points at the control, also when the edge of the window moves the
+    // bubble to the side (design 2.8).
+    this.element.dataset['side'] = isAbove ? 'above' : 'below';
+    this.element.style.setProperty('--tail-x', `${Math.round(middle - left)}px`);
   }
 }
