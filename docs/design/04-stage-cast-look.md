@@ -1477,8 +1477,10 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
 - **Standing banners.** Chrome poles on round bases, each with a cross bar and a banner.
 - **Hanging banners.** Banners on wooden rods below a dark batten.
 - **Flags.** Flagpole groups beside the back corners. Each staff leans out. The hall has no
-  wind, so each flag hangs limp: gravity bends the cloth down toward the fly (`flags.droop`),
-  with soft folds and a slow sway. A flag on the left of its staff shows its mirrored back. With
+  wind, so each flag hangs from its staff: gravity bends the cloth down toward the fly, with
+  soft folds and a slow sway. The setting "Limpness" (`FlagSettings.limpness`, 0 to 100 %) mixes
+  the two ends of `BACKDROP.flags.hang` (`flagHang()`). A limp flag turns down near the hoist, so
+  it falls from its staff in deeper folds and sways less. A stiff flag holds out from its staff. A flag on the left of its staff shows its mirrored back. With
   the screen, the middle group of an odd count stands on top of the screen frame. Each group has
   a staff for each flag (`flagsOfGroup()`).
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
@@ -1513,6 +1515,23 @@ The rules of the layout:
   of its list.
 - The settings stay in the local storage. The images of the user stay in IndexedDB, at most
   `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). No image leaves the browser (2.7).
+
+**Stage style**
+
+The menu "Stage style" of the panel "Stage design" sets the look of the dressing and the colors of
+the stage lights (`STAGE_STYLES` of `scene/stage-style.ts`). "Classic hall" keeps the warm amber
+look of the reference images. The other styles are "Royal gala", "Midnight blue", "Festival", and
+"Modern white".
+
+- `DressingStyle` gives the colors of the poles, the batten, the frame of the screen, and the
+  rods, the sheen of the cloth and of the metal, the light of the cloth, and the light and the
+  tint of the screen.
+- `LightStyle` gives the color of the key light, the side lights, the back-row lights, the rim
+  lights, the beams, and the fill light, a gain of each spotlight and beam, and extra exposure in
+  stops. `styleLights()` of `scene/lights.ts` sets them on the lights of a layout. The build of a
+  layout sets them before the bake and the capture, so its environment matches the style.
+- A change of the style shows at once on the shown layout. Its bake and its captured environment
+  keep the light of its build until the next build.
 
 **Stage text**
 
@@ -1719,9 +1738,18 @@ negative angles are on the left. A seat at the angle `a` and the radius `r` is a
 - A seated player uses at least `SEATED_ARC`, and neighbors keep `FOOTPRINT_GAP` between their
   footprints. Two string players share one stand (`STAND_DISTANCE`). Each wind player has a
   stand.
-- Rows 0 and 1 hold the strings: the violins left of 0°, the violas and the cellos right of it,
-  so no string player sits behind the conductor. The other rows are centered on 0° and span at
-  most 160°.
+- The rows come from `SeatingRows`: a list of rows of sections, from the front. The panel
+  "Orchestra" (`ui/orchestra-panel.ts`) moves a section to the left or the right in its row, or
+  to the row in front or behind, at most `MAX_SEATING_ROWS` rows. `DEFAULT_SEATING_ROWS` is the
+  American seating with the contrabasses in a line at the back. The settings stay in the local
+  storage (`app/orchestra-store.ts`).
+- Each row of sections gives a row of the first desks and a row of the other desks of its violins,
+  violas, and cellos (`rowGroupsOf()`). Thus row 1 always holds the back desks of the front row.
+- With the violins in the front row, rows 0 and 1 hold the strings: the violins left of 0°, the
+  violas and the cellos right of it, so no string player sits behind the conductor. The other rows
+  are centered on 0° and span at most 160°.
+- A chamber group sits in one arc in the order of the rows (`chamberOrderOf()`), with a keyboard
+  at the left end.
 - Each row stands at least `ROW_STEP` behind the row in front, and then moves back until its
   footprints clear the items in front. A player behind a piano case keeps `PIANO_REACH_GAP`,
   because it reaches toward the case in play.
