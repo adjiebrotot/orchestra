@@ -1464,8 +1464,9 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
 
 - **Standing banners.** Chrome poles on round bases, each with a cross bar and a banner.
 - **Hanging banners.** Banners on wooden rods below a dark batten.
-- **Flags.** Flagpole groups beside the back corners. Each staff leans out, and each flag hangs
-  from its staff with a slow wave. A flag on the left of its staff shows its mirrored back. With
+- **Flags.** Flagpole groups beside the back corners. Each staff leans out. The hall has no
+  wind, so each flag hangs limp: gravity bends the cloth down toward the fly (`flags.droop`),
+  with soft folds and a slow sway. A flag on the left of its staff shows its mirrored back. With
   the screen, the middle group of an odd count stands on top of the screen frame.
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
   inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide

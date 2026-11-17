@@ -102,8 +102,15 @@ export const BACKDROP = {
     flagWidth: 1.25,
     /** The height step between two pairs of staffs on a pole. */
     pairStep: 1.1,
-    /** The height of the wave of a flag at its fly. */
-    wave: 0.07,
+    /**
+     * The share of the turn of a flag from its first direction to straight down at its fly. The
+     * hall has no wind, so a flag hangs limp from its staff.
+     */
+    droop: 0.8,
+    /** The gravity folds of a flag: their count from the hoist to the fly, and their depth in widths. */
+    folds: { count: 1.6, depth: 0.09 },
+    /** The sway of a flag at its fly, in meters: the slow drift of the air of the hall. */
+    wave: 0.05,
   },
   /** The screen behind the orchestra, above the heads of the back row. */
   screen: {
@@ -280,13 +287,16 @@ function addCloth(
 }
 
 /**
- * Adds a flag on a staff: a cloth whose hoist runs down the staff from its tip, and whose fly
- * goes out at a right angle to the staff. The wave weight grows from the hoist to the fly.
+ * Adds a flag on a staff that hangs limp in the still air of the hall. The hoist runs down the
+ * staff from its tip. The cloth leaves the staff at a right angle, and gravity bends it down toward
+ * the floor more and more toward the fly ({@link BACKDROP}.flags.droop). Fabric shears easily, so
+ * each row of the cloth takes the same bend. Soft folds that hang along the bend grow from the
+ * hoist to the fly. The wave weight grows from the hoist to the fly.
  *
  * @param list The triangles.
  * @param tip The tip of the staff.
  * @param along The unit direction down the staff, from the tip.
- * @param out The unit direction from the hoist to the fly.
+ * @param out The unit direction from the hoist to the fly, in the plane of the flag.
  * @param width The width, from the hoist to the fly.
  * @param height The height, along the staff.
  * @param mirror True to show the image mirrored, as the back of the flag.
@@ -300,18 +310,36 @@ function addFlag(
   height: number,
   mirror: boolean,
 ): void {
-  const cols = 12;
-  const rows = 8;
+  const cols = 18;
+  const rows = 10;
+  const { droop, folds } = BACKDROP.flags;
+  // The center line of the cloth from the hoist to the fly, in the plane x-y: each step turns a
+  // part of the way from the first direction to straight down.
+  const first = Math.atan2(out.y, out.x);
+  let turn = -Math.PI / 2 - first;
+  turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+  const line: [number, number][] = [[0, 0]];
+  let x = 0;
+  let y = 0;
+  for (let i = 1; i <= cols; i++) {
+    const f = (i - 0.5) / cols;
+    const angle = first + turn * droop * f ** 1.3;
+    x += (Math.cos(angle) * width) / cols;
+    y += (Math.sin(angle) * width) / cols;
+    line.push([x, y]);
+  }
   const point = new Vector3();
   const vertex = (i: number, j: number): void => {
     const f = i / cols;
     const s = j / rows;
-    point
-      .copy(tip)
-      .addScaledVector(along, s * height)
-      .addScaledVector(out, f * width);
-    // The cloth sags a little toward its fly.
-    point.y -= 0.06 * width * f * f;
+    const [lx, ly] = line[i] ?? [0, 0];
+    // The folds run down the hanging cloth. A small slant with the height keeps them soft.
+    const fold =
+      folds.depth * width * f ** 0.8 * Math.sin(Math.PI * 2 * folds.count * f + 0.6 + 1.1 * s);
+    point.copy(tip).addScaledVector(along, s * height);
+    point.x += lx;
+    point.y += ly;
+    point.z += fold;
     list.positions.push(point.x, point.y, point.z);
     list.uvs.push(mirror ? 1 - f : f, 1 - s);
     list.waves.push(f);
@@ -497,8 +525,10 @@ void main() {
     return;
   }
   vec3 p = position;
-  p.z += uWave * wave * sin(wave * 7.0 - uTime * 2.2 + p.y * 1.3);
-  p.y += uWave * 0.4 * wave * sin(wave * 5.0 - uTime * 1.7);
+  // A limp flag sways slowly as a whole, with a soft ripple that runs to the fly.
+  float sway = sin(uTime * 0.7 + p.x * 0.4) * wave;
+  float ripple = 0.3 * sin(wave * 5.0 - uTime * 1.1 + p.y * 0.9);
+  p.z += uWave * wave * (sway + ripple);
   vUv = uv;
   vec4 world = modelMatrix * vec4(p, 1.0);
   vWorld = world.xyz;
