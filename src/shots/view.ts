@@ -1,6 +1,7 @@
 import { MathUtils } from 'three';
 import type { Vec3 } from '../models/tuples.ts';
 import { smoothstep } from '../math.ts';
+import type { ShotKind } from './types.ts';
 
 /** The vertical field of view of the camera, in degrees (design 4.5, camera). */
 export const FIELD_OF_VIEW = 30;
@@ -265,4 +266,48 @@ export function defaultView(stageSide: number, width: number, height: number): D
  */
 export function farPlane(distance: number, stageSide: number): number {
   return distance + 3 * stageSide;
+}
+
+/**
+ * The largest growth of the vertical field of view of a shot in a frame that is narrower than
+ * 21:9, for each kind of shot (design 2.5, render): the factor of the tangent of the half angle.
+ * The open matte keeps the horizontal angle of the 21:9 shot, but in a vertical video of 9:16 it
+ * needs a factor of 4.15, and a close subject became a small figure in the middle of the floor and
+ * the hall. Thus a close shot grows less and keeps the middle of its width, where its camera looks
+ * at the subject. A wide and a high shot keep the full width, so no player leaves the frame. Each
+ * factor is at least 1.31, the factor of a 16:9 video, so a 16:9 video keeps the full width of
+ * each shot.
+ */
+export const MATTE_GROW = {
+  wide: Number.POSITIVE_INFINITY,
+  high: Number.POSITIVE_INFINITY,
+  // The conductor shot frames the bear and the podium.
+  conductor: 1.7,
+  // A side shot shows a large part of the orchestra.
+  side: 2.6,
+  section: 2.1,
+  solo: 1.6,
+  insert: 1.5,
+} as const satisfies Record<ShotKind, number>;
+
+/**
+ * The vertical frame of a render for a phone (design 2.5, render). A close shot puts its subject
+ * on a third line of the 21:9 frame, but a vertical frame keeps only the middle of the width
+ * (`MATTE_GROW`), so a subject on a third line stood at the edge or out of the frame. A frame
+ * narrower than this aspect thus puts the subject in the middle of its width. The eyes keep the
+ * upper third line.
+ */
+export const VERTICAL_FRAME = {
+  /** The widest aspect of a vertical frame: a square frame and wider keep the third lines. */
+  aspect: 1,
+} as const;
+
+/**
+ * Gives the share of the third line of a close shot in a frame (design 2.5, render).
+ *
+ * @param frameAspect The aspect of the frame.
+ * @returns 1 for the third line, or 0 for the middle of the width in a vertical frame.
+ */
+export function thirdShareOf(frameAspect: number): number {
+  return frameAspect < VERTICAL_FRAME.aspect ? 0 : 1;
 }

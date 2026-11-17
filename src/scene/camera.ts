@@ -467,7 +467,7 @@ export class StageCamera {
     this.camera.position.set(...view.position);
     this.#controls.target.set(...view.target);
     this.camera.lookAt(this.#controls.target);
-    this.camera.fov = openMatteFov(view.fov, this.#frameAspect);
+    this.camera.fov = openMatteFov(view.fov, this.#frameAspect, pose.matteGrow);
     this.#moved = true;
     this.#following = true;
     this.#glide = null;

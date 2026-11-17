@@ -12,7 +12,7 @@ import { writeShadowFit } from './shadow-fit.ts';
 import { SHOT_LIGHT, SHOT_SPOT } from './shot-light.ts';
 import { isCloseShot } from './types.ts';
 import type { CameraPose, CameraPoseBuffer, CameraView, Shot, ShotKey, ShotPlan } from './types.ts';
-import { FIELD_OF_VIEW, defaultView, wideView } from './view.ts';
+import { FIELD_OF_VIEW, MATTE_GROW, defaultView, thirdShareOf, wideView } from './view.ts';
 
 /**
  * Makes a camera buffer for {@link cameraAt}.
@@ -34,6 +34,7 @@ export function createCameraPose(): CameraPoseBuffer {
     heroShare: 1,
     detail: false,
     shadowFit: [0, 0, 0, 0],
+    matteGrow: Number.POSITIVE_INFINITY,
   };
 }
 
@@ -96,6 +97,8 @@ const driftTurn: [number, number] = [0, 0];
  * @param out The position to write.
  * @param look The point to write that the camera looks at.
  * @param from The key at the start of the move: the `from` key of the shot by default.
+ * @param thirdShare The share of the third line of the subject (`thirdShareOf()`): 0 puts it in
+ *   the middle of the width of a vertical frame.
  * @returns The vertical field of view, in degrees.
  */
 function writeShotCamera(
@@ -106,6 +109,7 @@ function writeShotCamera(
   out: [number, number, number],
   look: [number, number, number],
   from: ShotKey = shot.from,
+  thirdShare = 1,
 ): number {
   const a: ShotKey = from;
   const b: ShotKey = shot.to;
@@ -125,7 +129,7 @@ function writeShotCamera(
   }
   const distance = keyDistance(plan.stageSide, shot.halfHeight, key, aspect);
   writeKeyPosition(shot.target, key.azimuth, key.elevation, distance, out);
-  writeLookPoint(out, shot.target, shot.composition, key.fov, aspect, look);
+  writeLookPoint(out, shot.target, shot.composition, key.fov, aspect, look, thirdShare);
   return key.fov;
 }
 
@@ -196,7 +200,8 @@ function writeInsert(
   const span = insert.moveEndSec - insert.startSec;
   const sinceCut = time - insert.startSec;
   const u = still || span <= 0 ? 0 : smoothstep(sinceCut / span);
-  out.fov = writeShotCamera(plan, insert, u, aspect, out.position, out.target);
+  const third = thirdShareOf(view.frameAspect ?? aspect);
+  out.fov = writeShotCamera(plan, insert, u, aspect, out.position, out.target, insert.from, third);
   out.beam = SHOT_BEAM_OPACITY.insert;
   out.light = SHOT_LIGHT.insert;
   out.spot = SHOT_SPOT.insert;
@@ -206,12 +211,27 @@ function writeInsert(
   out.heroFrom = insert.hero;
   out.heroShare = 1;
   out.detail = true;
+  out.matteGrow = MATTE_GROW.insert;
   writeShadowFit(insert, null, out.shadowFit);
   if (!still) {
     writeDrift(time, CAMERA_DRIFT.shares.insert, driftTurn);
     turnTarget(out.position, out.target, driftTurn);
   }
   return out;
+}
+
+/**
+ * Blends two growths of the open matte (`MATTE_GROW`) by their tangent shares. A full width is
+ * infinite, so the blend works on the inverse: the share of the width that the frame can lose.
+ *
+ * @param from The growth at the weight 0.
+ * @param to The growth at the weight 1.
+ * @param w The weight, from 0 to 1.
+ * @returns The growth between them.
+ */
+function blendGrow(from: number, to: number, w: number): number {
+  const inverse = 1 / from + (1 / to - 1 / from) * w;
+  return inverse <= 0 ? Number.POSITIVE_INFINITY : 1 / inverse;
 }
 
 /**
@@ -232,6 +252,7 @@ function writeInsert(
  *    shot. A blend blends it with the camera. The default view has the full beam.
  * 6. A close shot sets `close`, so that its full frame stands in the free area of the page. Its
  *    camera looks at the point of its composition, so that the subject stands on a third line.
+ *    A vertical frame (`view.frameAspect`) puts the subject in the middle of its width.
  *    The camera turns around the target of the shot.
  * 7. The weights of the light of a close shot and of the follow-spot come from the kind of the
  *    shot, as the factor of the beam. The default view has the light of the stage.
@@ -243,7 +264,9 @@ function writeInsert(
  *    on the eye.
  * 10. A shot from the front of players fits the shadow map of the key light to a sphere around
  *    its target (`writeShadowFit()`). A blend holds the spheres of both shots.
- * 11. In the time of a detail insert, the insert takes the frame, with a hard cut in and out
+ * 11. The growth of the open matte comes from the kind of the shot (`MATTE_GROW`), blended as
+ *    the beam.
+ * 12. In the time of a detail insert, the insert takes the frame, with a hard cut in and out
  *    (`writeInsert()`). The main shot of the time moves on under it.
  *
  * @param plan The plan from `prepareShots()`.
@@ -279,6 +302,7 @@ export function cameraAt(
     out.heroShare = 1;
     out.detail = false;
     out.shadowFit[3] = 0;
+    out.matteGrow = Number.POSITIVE_INFINITY;
     return out;
   }
   const insert = plan.inserts[lastAtOrBefore(plan.insertStarts, time)];
@@ -292,7 +316,8 @@ export function cameraAt(
   // The opening shot is the first shot, from `-Infinity` (design 5.6).
   const from =
     i === 0 && !still && current.kind === 'wide' ? establishFrom(current.from) : current.from;
-  out.fov = writeShotCamera(plan, current, u, aspect, out.position, out.target, from);
+  const third = thirdShareOf(view.frameAspect ?? aspect);
+  out.fov = writeShotCamera(plan, current, u, aspect, out.position, out.target, from, third);
   out.beam = SHOT_BEAM_OPACITY[current.kind];
   out.light = SHOT_LIGHT[current.kind];
   out.spot = SHOT_SPOT[current.kind];
@@ -303,6 +328,7 @@ export function cameraAt(
   out.heroFrom = current.hero;
   out.heroShare = 1;
   out.detail = false;
+  out.matteGrow = MATTE_GROW[current.kind];
   const previous = plan.shots[i - 1];
   const sinceCut = time - current.startSec;
   const share = CAMERA_DRIFT.shares[current.kind];
@@ -321,7 +347,16 @@ export function cameraAt(
   const w = smoothstep(sinceCut / current.blendSec);
   out.heroFrom = previous.hero;
   out.heroShare = w;
-  const fov = writeShotCamera(plan, previous, 1, aspect, blendStart, blendLook);
+  const fov = writeShotCamera(
+    plan,
+    previous,
+    1,
+    aspect,
+    blendStart,
+    blendLook,
+    previous.from,
+    third,
+  );
   for (let k = 0; k < 3; k++) {
     const p = blendStart[k] ?? 0;
     const t = blendLook[k] ?? 0;
@@ -335,6 +370,7 @@ export function cameraAt(
   out.light = light + (out.light - light) * w;
   const spot = SHOT_SPOT[previous.kind];
   out.spot = spot + (out.spot - spot) * w;
+  out.matteGrow = blendGrow(MATTE_GROW[previous.kind], out.matteGrow, w);
   const before = CAMERA_DRIFT.shares[previous.kind];
   writeDrift(time, before + (share - before) * w, driftTurn);
   turnTarget(out.position, out.target, driftTurn);

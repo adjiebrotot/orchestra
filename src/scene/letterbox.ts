@@ -44,19 +44,23 @@ export function letterbox(width: number, height: number, aspect = CINEMA_ASPECT)
 /**
  * Gives the vertical field of view of a shot in a frame that is narrower than 21:9 (design 2.5,
  * render). The frame keeps the horizontal angle of the shot and shows more above and below it, as
- * the open matte of a film. A frame of 21:9 or wider keeps the field of view.
+ * the open matte of a film. The growth of the tangent of the half angle stops at `grow`
+ * (`MATTE_GROW` of `shots/view.ts`), so a close shot in a vertical video keeps the middle of its
+ * width, where its subject stands. A frame of 21:9 or wider keeps the field of view.
  *
  * @param fov The vertical field of view of the shot at the aspect {@link CINEMA_ASPECT}, in
  *   degrees.
  * @param aspect The aspect of the frame.
+ * @param grow The largest factor of the tangent of the half angle. Infinity keeps the full width.
  * @returns The vertical field of view, in degrees.
  */
-export function openMatteFov(fov: number, aspect: number): number {
+export function openMatteFov(fov: number, aspect: number, grow = Number.POSITIVE_INFINITY): number {
   if (aspect >= CINEMA_ASPECT) {
     return fov;
   }
   const half = (fov / 2) * (Math.PI / 180);
-  return 2 * Math.atan((Math.tan(half) * CINEMA_ASPECT) / aspect) * (180 / Math.PI);
+  const factor = Math.min(CINEMA_ASPECT / aspect, Math.max(1, grow));
+  return 2 * Math.atan(Math.tan(half) * factor) * (180 / Math.PI);
 }
 
 /**
