@@ -51,6 +51,7 @@ import { barLengthAt, beatLengthAt, entriesIn, musicIn, prepareMusic, restingIn 
 import type { ScoreMusic, WindowMusic } from './music.ts';
 import { leadHero, subjectHero } from './hero.ts';
 import { planInserts } from './inserts.ts';
+import { SCENIC_MOVES, scenicFraming } from './scenic.ts';
 import {
   SUBJECT_SIZES,
   activeMiddle,
@@ -183,6 +184,13 @@ const CHOICE_WEIGHTS = {
   highTutti: 1.6,
   /** For a high shot with 6 or more active seats. */
   highBusy: 0.4,
+  /**
+   * A scenic shot (design 5.6, scenic shots): a far shot that shows the stage dressing behind the
+   * orchestra. It is a high shot for the rules of the choice, so it keeps the spacing of the wide
+   * and high shots.
+   */
+  scenic: 1.1,
+  scenicTutti: 1.6,
   conductor: 1.1,
   /** For a conductor shot with 5 or more active seats. */
   conductorBusy: 0.5,
@@ -1801,6 +1809,40 @@ function highFraming(planner: Planner): Framing | null {
   return null;
 }
 
+/** The id of the candidate of a scenic shot (design 5.6, scenic shots). */
+const SCENIC_ID = 'scenic';
+
+/**
+ * Makes the framing of a scenic shot (design 5.6, scenic shots). The scenic shots of a plan take
+ * the moves in turn, from a seeded first move, so that the film shows each one. The orbit goes
+ * in the direction of the arc of the previous shot. When the move makes a jump cut, the orbit
+ * turns the other way, and then the next move tries.
+ *
+ * @param planner The planner.
+ * @returns The framing, or `null` when each move makes a jump cut.
+ */
+function scenicPlanned(planner: Planner): Framing | null {
+  const random = decisionRandom(planner.seed, planner.cut, SCENIC_ID);
+  const first = Math.floor(decisionRandom(planner.seed, 0, SCENIC_ID)() * SCENIC_MOVES.length);
+  const count = planner.planned.filter((planned) => planned.id === SCENIC_ID).length;
+  const side: -1 | 1 = arcSign(planner, signOf(random)) < 0 ? -1 : 1;
+  const previous = planner.planned.at(-1);
+  for (let i = 0; i < SCENIC_MOVES.length; i++) {
+    const move = SCENIC_MOVES[(first + count + i) % SCENIC_MOVES.length]?.[0];
+    if (!move) {
+      continue;
+    }
+    for (const direction of [side, side === 1 ? -1 : 1] as const) {
+      const framing = scenicFraming(move, planner.stageSide, direction);
+      const size = frameSize(planner.stageSide, false, 0, framing.from);
+      if (!jumpCut(previous, framing.from, size)) {
+        return farFraming(framing.target, framing.from, framing.to);
+      }
+    }
+  }
+  return null;
+}
+
 /**
  * Makes the framing of a conductor shot (design 5.6). The shots take turns: the first one, and
  * each odd one, looks over the shoulder of the bear at the orchestra (view 02 of `scene.png`).
@@ -1899,7 +1941,7 @@ function framingOf(planner: Planner, candidate: Candidate, window: WindowMusic):
       return jumpCut(planner.planned.at(-1), framing.from, size) ? null : framing;
     }
     case 'high':
-      return highFraming(planner);
+      return candidate.id === SCENIC_ID ? scenicPlanned(planner) : highFraming(planner);
     case 'conductor':
       return conductorFraming(planner, window);
     case 'side': {
@@ -2068,6 +2110,7 @@ function candidatesAt(planner: Planner, cut: number, window: WindowMusic): Candi
       w.high + (tutti ? w.highTutti : 0) + (window.activeCount >= 6 ? w.highBusy : 0) + due,
     );
   }
+  add('high', SCENIC_ID, null, [], w.scenic + (tutti ? w.scenicTutti : 0) + due);
   // A chamber group has no conductor (design 4.2), and a small group shows no conductor.
   if (subjects.conductor && !small) {
     add(
