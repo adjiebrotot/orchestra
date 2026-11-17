@@ -26,7 +26,8 @@ export const STAGE_TEXT = {
    * The floor in front of the podium is about 0.26 m deep on each stage, so on the large stage of
    * a large orchestra, the camera stands far away and the letters of `fit` read small. A larger
    * line keeps its front edge at the lip and grows to the back, past the sides of the podium. The
-   * podium covers the middle of a tall line. The front of the stage is as tall as the skirt, so
+   * podium covers the middle of a tall line. A long line is as wide as its box at `fit`, so a
+   * larger size also lets it use the full straight part of the front edge. The front of the stage is as tall as the skirt, so
    * its letters keep the size `fit`.
    */
   sizes: { fit: 1, large: 1.6, larger: 2.4, largest: 3.2 },
