@@ -168,6 +168,22 @@ page starts in Free mode (`app/camera-mode.ts`).
   aspect of the video, so a 16:9 video has no bars (`StageScene.setFrameAspect()`). The shot keeps
   its horizontal angle and shows more above and below it, as the open matte of a film
   (`openMatteFov()`). Thus each player of the 21:9 shot stays in the frame.
+- **Vertical render.** The formats 9:16 and 4:5 are for Reels, Shorts, and the feed of Instagram.
+  The open matte of a 9:16 frame needs a factor of 4.15 on the tangent of the half angle, and a
+  close subject became a small figure. Thus the growth stops at a factor for each kind of shot
+  (`MATTE_GROW`). A wide and a high shot keep the full width, so no player leaves the frame. A
+  close shot keeps the middle of its width, and a frame narrower than `VERTICAL_FRAME.aspect`
+  puts its subject in the middle of the width in place of on a third line (`thirdShareOf()`).
+  The eyes keep the upper third line. Each factor is at least the factor of 16:9, so a 16:9
+  video keeps the full width.
+- **Render choices.** "Include the ending" keeps the bow of the conductor (5.4): the video ends
+  `RENDER_BOW_HOLD_SEC` after `END_BOW_SEC`. With no ending, it ends `RENDER_TAIL_SEC` after the
+  last chord. "Include the titles" draws the title card (2.8) into the frames of the video at the
+  song times of the page (`drawTitleCard()`, `RENDER_TITLES`), because the video records only
+  the canvas. Its letters follow the short side of the frame. In a vertical frame, the card stands
+  above the lowest fifth, which the apps of a phone cover. The fields "Title" and "Subtitle" of
+  the panel change the card of the page and of the video. A new piece writes its own lines into
+  the fields. The page stores the two choices.
 - On a touch screen in portrait, the frame fills about a fifth of the screen height, so one line
   below it says "Turn the phone for a larger film." (`TURN_HINT_TEXT`). A portrait shot plan
   would break the rule of the same film on each screen, so the frame stays.
@@ -333,7 +349,8 @@ instant with reduced motion. Each text keeps the contrast 4.5:1 of WCAG AA over 
   the letterbox, just above the frame. Its opacity is a function of the song time
   (`TITLE_CARD`, `titleCardLevel()` of `app/title-card.ts`), so a pause holds it and a seek is
   correct. It fades in after the count-in and fades out a few seconds later. With reduced motion
-  it shows and hides with no fade. A soft shade keeps 4.5:1 over the stage. A screen reader skips
+  it shows and hides with no fade. A soft shade keeps 4.5:1 over the stage. The fields of the
+  render panel (2.5, render) can change both lines. A screen reader skips
   it (`aria-hidden`), because the live region of the title reads the piece. Free mode has no card,
   because the title shows there.
 - **End card**: at the song end, after the bow of the conductor, the card shows the composer,

@@ -394,6 +394,8 @@ export class VideoRender {
   #sampleRate = 48000;
   /** The song time of the end of the audio, in seconds. */
   #audioEndSec = 0;
+  /** The context of the canvas of the frames with an overlay, or `null` before the first one. */
+  #overlay: CanvasRenderingContext2D | null = null;
   /** A short summary of the codecs, for the status line. */
   codecs = '';
 
@@ -603,8 +605,10 @@ export class VideoRender {
    * Keeps the frame of the canvas when its song time reaches the next frame of the format.
    *
    * @param songSec The song time of the frame that the canvas shows.
+   * @param overlay Draws over the canvas in the frame, such as the title card, or `undefined`
+   *   for the canvas alone. The frame then comes from a copy of the canvas with the overlay.
    */
-  frame(songSec: number): void {
+  frame(songSec: number, overlay?: (context: CanvasRenderingContext2D) => void): void {
     const encoder = this.#video;
     if (!encoder || this.#error || songSec < this.#nextFrameSec - 0.25 / this.#format.fps) {
       return;
@@ -621,7 +625,7 @@ export class VideoRender {
     }
     // The first frame starts the file at the song time 0.
     const time = this.#frames === 0 ? 0 : Math.max(songSec, this.#lastFrameSec + 0.001);
-    const frame = new VideoFrame(this.#canvas, {
+    const frame = new VideoFrame(overlay ? this.#compose(overlay) : this.#canvas, {
       timestamp: Math.round(time * 1e6),
       duration: Math.round(1e6 / this.#format.fps),
     });
@@ -636,6 +640,31 @@ export class VideoRender {
     }
     const step = 1 / this.#format.fps;
     this.#nextFrameSec = (Math.floor(time / step + 1e-6) + 1) * step;
+  }
+
+  /**
+   * Copies the canvas of the stage into the canvas of the overlay, and draws the overlay over it.
+   * The copy comes in the task of the render of the stage, so the canvas still holds its image.
+   *
+   * @param overlay Draws the overlay.
+   * @returns The canvas of the frame.
+   */
+  #compose(overlay: (context: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+    const { width, height } = this.#format;
+    if (!this.#overlay) {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) {
+        throw new Error('The browser gave no 2D canvas for the titles.');
+      }
+      this.#overlay = context;
+    }
+    const context = this.#overlay;
+    context.drawImage(this.#canvas, 0, 0, width, height);
+    overlay(context);
+    return context.canvas;
   }
 
   /**
