@@ -1448,6 +1448,8 @@ export class App {
     this.#countdown = 'stopped';
     this.#canvas.style.objectFit = 'contain';
     this.#canvas.style.background = '#000';
+    // A full-frame render fills its video: the frame takes the aspect of the video, with no bars.
+    this.#scene.setFrameAspect(format.bars ? CINEMA_ASPECT : format.width / format.height);
     this.#scene.resize(format.width, format.height, 1);
     const staleSec = this.#songTime;
     this.#seek(0);
@@ -1624,6 +1626,7 @@ export class App {
     this.#cameraMode = render.before.mode;
     this.#canvas.style.objectFit = '';
     this.#canvas.style.background = '';
+    this.#scene.setFrameAspect(CINEMA_ASPECT);
     this.#scene.resize(
       this.#canvas.clientWidth,
       this.#canvas.clientHeight,

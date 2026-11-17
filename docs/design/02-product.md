@@ -163,6 +163,11 @@ page starts in Free mode (`app/camera-mode.ts`).
   shots of 5.6 take this aspect in each view, so a piece gives the same film on each screen. The
   drawer and the bar do not move the frame. The title stands at its top-left corner (2.3). Free
   mode has no bars.
+- **Render.** The panel "Render MP4" (`RENDER_FORMATS`) records the film of Cinematic mode. A
+  format with bars keeps the 21:9 frame inside the video. A full-frame format gives the frame the
+  aspect of the video, so a 16:9 video has no bars (`StageScene.setFrameAspect()`). The shot keeps
+  its horizontal angle and shows more above and below it, as the open matte of a film
+  (`openMatteFov()`). Thus each player of the 21:9 shot stays in the frame.
 - On a touch screen in portrait, the frame fills about a fifth of the screen height, so one line
   below it says "Turn the phone for a larger film." (`TURN_HINT_TEXT`). A portrait shot plan
   would break the rule of the same film on each screen, so the frame stays.
