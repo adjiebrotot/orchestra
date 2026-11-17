@@ -218,6 +218,40 @@ interface BuiltScore extends PlannedScore {
   readonly prepared: PreparedLayout;
 }
 
+/** The key of the setting "No pig" in the local storage (design 2.8). */
+const NO_PIG_KEY = 'orchestra-no-pig';
+
+/**
+ * Reads the setting "No pig" from the local storage. A browser with no storage gives false.
+ *
+ * @returns The value of the setting.
+ */
+function readNoPig(): boolean {
+  try {
+    return window.localStorage.getItem(NO_PIG_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Writes the setting "No pig" into the local storage. A browser with no storage keeps it only for
+ * the session.
+ *
+ * @param on The value of the setting.
+ */
+function writeNoPig(on: boolean): void {
+  try {
+    if (on) {
+      window.localStorage.setItem(NO_PIG_KEY, '1');
+    } else {
+      window.localStorage.removeItem(NO_PIG_KEY);
+    }
+  } catch {
+    // The setting stays for the session.
+  }
+}
+
 /**
  * Gives the section size of a file. `perf-60.mid` always uses "One per part" (design 9.5).
  *
@@ -354,6 +388,8 @@ export class App {
   #quality: QualitySetting = 'auto';
   /** The value of the setting "Frame rate" (design 2.6). */
   #frameRate: FrameRateSetting = 'auto';
+  /** The value of the setting "No pig" (design 2.8), which the local storage keeps. */
+  #noPig = readNoPig();
   /** The time of the last drawn frame, in milliseconds, or `null` before the first. */
   #lastDrawMs: number | null = null;
   /** The times of the drawn frames of the last {@link FPS_WINDOW_MS}, in milliseconds. */
@@ -485,6 +521,9 @@ export class App {
         onFrameRate: (frameRate) => {
           this.#frameRate = frameRate;
           this.#applySettings();
+        },
+        onNoPig: (on) => {
+          this.#setNoPig(on);
         },
         onRetry: () => {
           this.#message = null;
@@ -693,7 +732,7 @@ export class App {
   /** Shows the settings, and gives the renderer the tier of the quality setting (design 2.6). */
   #applySettings(): void {
     const auto = autoLabels(this.#piece?.score.orchestral ?? null, this.#tierWatch.tier);
-    this.#ui.settings.show(this.#sectionSize, this.#quality, this.#frameRate, auto);
+    this.#ui.settings.show(this.#sectionSize, this.#quality, this.#frameRate, this.#noPig, auto);
     this.#scene.setTier(renderTier(this.#quality, this.#tierWatch));
   }
 
@@ -711,6 +750,32 @@ export class App {
     }
     this.#sectionSize = size;
     this.#applySettings();
+    this.#rebuildCurrent(size);
+  }
+
+  /**
+   * Changes the setting "No pig" (design 2.8), keeps it in the local storage, and builds the scene
+   * of the current piece again. The horn players change species. The sound does not change.
+   *
+   * @param on The new value.
+   */
+  #setNoPig(on: boolean): void {
+    if (on === this.#noPig) {
+      return;
+    }
+    this.#noPig = on;
+    writeNoPig(on);
+    this.#applySettings();
+    this.#rebuildCurrent(this.#sectionSize);
+  }
+
+  /**
+   * Builds the scene of the current piece again after a change of a setting, behind the cover of
+   * the stage.
+   *
+   * @param size The section size.
+   */
+  #rebuildCurrent(size: SectionSize): void {
     const piece = this.#piece;
     if (!piece || piece.file === PERF_60) {
       return;
@@ -736,7 +801,8 @@ export class App {
    * @param live Tells if the build is still needed: a later selection or change replaces it.
    */
   async #rebuildScene(piece: Piece, size: SectionSize, live: () => boolean): Promise<void> {
-    const built = await this.#build(planFileSteps(piece.bytes, size, piece.title.title), () => {
+    const steps = planFileSteps(piece.bytes, size, piece.title.title, this.#noPig);
+    const built = await this.#build(steps, () => {
       return live() && piece === this.#piece;
     });
     if (!built) {
@@ -849,7 +915,7 @@ export class App {
     this.#toggleSeat(seatIndex, 'soloed');
     const { seats, soloist } = piece.score;
     const counts = playerCounts(piece.plan.players, seats.length);
-    const row = seatRows(seats, counts, soloist)[seatIndex];
+    const row = seatRows(seats, counts, soloist, this.#noPig)[seatIndex];
     if (row) {
       this.#ui.showPickLabel(`${row.name}, ${row.animals}`, point);
     }
@@ -980,7 +1046,7 @@ export class App {
     const sectionSize = sectionSizeOf(file, this.#sectionSize);
     // The new piece replaces a build of the section size of the current piece.
     this.#rebuilds++;
-    const built = await this.#build(planFileSteps(bytes, sectionSize, file), () => {
+    const built = await this.#build(planFileSteps(bytes, sectionSize, file, this.#noPig), () => {
       return ticket === this.#request;
     });
     if (!built) {
@@ -1192,7 +1258,9 @@ export class App {
     // The new piece replaces a build of the section size of the current piece.
     this.#rebuilds++;
     const built = await this.#build(
-      sectionSize === size ? planScoreSteps(result.score) : planFileSteps(bytes, size, file.name),
+      sectionSize === size
+        ? planScoreSteps(result.score, this.#noPig)
+        : planFileSteps(bytes, size, file.name, this.#noPig),
       () => ticket === this.#request,
     );
     if (!built) {
@@ -1299,12 +1367,14 @@ export class App {
   } {
     const { seats, soloist, notes, durationSec } = piece.score;
     const counts = playerCounts(piece.plan.players, seats.length);
-    const rows = seatRows(seats, counts, soloist).map((row, seatIndex): DirectorRow => ({
-      seatIndex,
-      name: row.name,
-      color: row.ring ?? row.color ?? '#b5aa99',
-      onStage: (counts[seatIndex] ?? 0) > 0 && seats[seatIndex]?.section !== 'sound-only',
-    }));
+    const rows = seatRows(seats, counts, soloist, this.#noPig).map(
+      (row, seatIndex): DirectorRow => ({
+        seatIndex,
+        name: row.name,
+        color: row.ring ?? row.color ?? '#b5aa99',
+        onStage: (counts[seatIndex] ?? 0) > 0 && seats[seatIndex]?.section !== 'sound-only',
+      }),
+    );
     return { key: `${piece.title.title}:${Math.round(durationSec)}`, durationSec, rows, notes };
   }
 
@@ -1618,7 +1688,7 @@ export class App {
   #showSeats(piece: Piece): void {
     const { seats, soloist } = piece.score;
     const counts = playerCounts(piece.plan.players, seats.length);
-    this.#ui.seatList.show(seatRows(seats, counts, soloist));
+    this.#ui.seatList.show(seatRows(seats, counts, soloist, this.#noPig));
   }
 
   /**

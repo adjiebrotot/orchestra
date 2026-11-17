@@ -3122,11 +3122,16 @@ function takesSoloPlace(
  *
  * @param score The score.
  * @param models The player models of the score.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no player is a pig.
  * @returns The steps, which return the layout.
  * @throws {Error} If a player has no place.
  */
-export function* layoutSceneSteps(score: Score, models: ModelCache): Steps<SceneLayout> {
-  const cast = castScore(score);
+export function* layoutSceneSteps(
+  score: Score,
+  models: ModelCache,
+  noPig = false,
+): Steps<SceneLayout> {
+  const cast = castScore(score, noPig);
   const form = chamberFormOf(score.seats);
   const groups: RowGroup[] = [];
   const members: Member[] = [];

@@ -60,6 +60,7 @@ export const SETTING_HELP = {
     'A lower quality makes the motion smoother on a slow device. Auto lowers the quality when the frames are slow.',
   frameRate:
     'Auto draws a frame at each refresh of the display. A cap of 60 or 30 fps uses less power.',
+  noPig: 'A bear plays the horns in place of the pig.',
 } as const;
 
 /**

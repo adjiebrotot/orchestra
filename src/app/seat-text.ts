@@ -355,17 +355,19 @@ function ringColor(fur: string): string {
  * @param counts The number of players of each seat, from {@link playerCounts}.
  * @param soloist The seat of the soloist, `Score.soloist`, or `null` for none. A chamber group
  *   (design 4.2) names no soloist, because the soloist rule does not apply to it.
+ * @param noPig True when the setting "No pig" is on (design 2.8): no row names a pig.
  * @returns One row for each seat, in the order of the seats.
  */
 export function seatRows(
   seats: readonly Seat[],
   counts: readonly number[],
   soloist: number | null,
+  noPig = false,
 ): SeatRowText[] {
   const names = seatNames(seats, counts, chamberFormOf(seats) ? null : soloist);
   return seats.map((seat, i) => {
     const species =
-      seat.section === 'sound-only' ? null : speciesOf(seat.section, seat.indexInSection);
+      seat.section === 'sound-only' ? null : speciesOf(seat.section, seat.indexInSection, noPig);
     return {
       name: names[i] ?? '',
       animals: animalText(species, counts[i] ?? 0),

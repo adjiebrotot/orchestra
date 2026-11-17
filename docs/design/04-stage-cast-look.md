@@ -142,6 +142,9 @@ body of its own (4.4). The table gives the species of each section.
   or monkey stands on its hind legs (4.4, seat).
 - Further seats of a section alternate their species variants: a third violin seat uses rabbits
   again.
+- With the setting "No pig" (2.8), `NO_PIG_SPECIES` (the bear) takes each seat of the pig. It
+  plays the horn with the shared hold of the horn (5.3), because the own hold of the pig fits only
+  the pig body. The sound does not change.
 
 ```typescript
 /** The parameters of one species (`SPECIES` of `models/species.ts`). */

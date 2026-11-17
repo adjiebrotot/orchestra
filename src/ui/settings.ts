@@ -110,8 +110,25 @@ function createGroup(
 }
 
 /**
- * The settings of the drawer (design 2.3, 2.8): "Section size", "Quality", and "Frame rate", each
- * with a dim line that explains its values. "Frame rate" shows the rate of the drawn frames at the
+ * Creates the group of a setting with a checkbox: the checkbox and its label on the head line, and
+ * the dim line that explains it (design 2.8).
+ *
+ * @param box The checkbox.
+ * @param label The label of the setting.
+ * @param help The dim line.
+ * @returns The group.
+ */
+function createCheckGroup(box: HTMLInputElement, label: string, help: string): HTMLElement {
+  const head = createElement('label', 'setting-check');
+  head.append(box, createElement('span', 'setting-label', label));
+  const group = createElement('div', 'setting');
+  group.append(head, createElement('p', 'setting-help', help));
+  return group;
+}
+
+/**
+ * The settings of the drawer (design 2.3, 2.8): "Section size", "No pig", "Quality", and "Frame
+ * rate", each with a dim line that explains its values. "Frame rate" shows the rate of the drawn frames at the
  * right of its label. On a phone, the "Playback" group at the top holds the speed menu, the volume
  * slider, "Reset view", and full screen of the bar, each with a visible label.
  */
@@ -122,20 +139,24 @@ export class Settings {
   readonly #sectionSize: Segmented<SectionSize>;
   readonly #quality: Segmented<QualitySetting>;
   readonly #frameRate: Segmented<FrameRateSetting>;
+  /** The checkbox of the setting "No pig" (design 2.8). */
+  readonly #noPig = createElement('input');
   /** The counter of the drawn frames, at the right of the label "Frame rate". */
   readonly #fps = createElement('span', 'setting-value');
 
   /**
-   * Creates the three segmented controls.
+   * Creates the three segmented controls and the checkbox "No pig".
    *
    * @param onSectionSize The action of a new section size.
    * @param onQuality The action of a new quality setting.
    * @param onFrameRate The action of a new frame rate setting.
+   * @param onNoPig The action of a change of the checkbox "No pig".
    */
   constructor(
     onSectionSize: (size: SectionSize) => void,
     onQuality: (quality: QualitySetting) => void,
     onFrameRate: (frameRate: FrameRateSetting) => void,
+    onNoPig: (on: boolean) => void,
   ) {
     this.element = createElement('div', 'settings');
     this.playback = {
@@ -152,9 +173,14 @@ export class Settings {
     this.#sectionSize = new Segmented('Section size', SECTION_SIZE_OPTIONS, onSectionSize);
     this.#quality = new Segmented('Quality', QUALITY_OPTIONS, onQuality);
     this.#frameRate = new Segmented('Frame rate', FRAME_RATE_OPTIONS, onFrameRate);
+    this.#noPig.type = 'checkbox';
+    this.#noPig.addEventListener('change', () => {
+      onNoPig(this.#noPig.checked);
+    });
     this.element.append(
       playback,
       createGroup('Section size', this.#sectionSize.element, SETTING_HELP.sectionSize),
+      createCheckGroup(this.#noPig, 'No pig', SETTING_HELP.noPig),
       createGroup('Quality', this.#quality.element, SETTING_HELP.quality),
       createGroup('Frame rate', this.#frameRate.element, SETTING_HELP.frameRate, this.#fps),
     );
@@ -166,15 +192,18 @@ export class Settings {
    * @param sectionSize The setting "Section size".
    * @param quality The setting "Quality".
    * @param frameRate The setting "Frame rate".
+   * @param noPig The setting "No pig".
    * @param auto The labels of the buttons "Auto", from `autoLabels()`.
    */
   show(
     sectionSize: SectionSize,
     quality: QualitySetting,
     frameRate: FrameRateSetting,
+    noPig: boolean,
     auto: AutoLabels,
   ): void {
     this.#sectionSize.show(sectionSize, auto.sectionSize);
+    this.#noPig.checked = noPig;
     this.#quality.show(quality, auto.quality);
     this.#frameRate.show(frameRate, 'Auto');
   }
