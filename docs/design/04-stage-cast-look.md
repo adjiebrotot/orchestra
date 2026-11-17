@@ -1476,13 +1476,22 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
 
 - **Standing banners.** Chrome poles on round bases, each with a cross bar and a banner.
 - **Hanging banners.** Banners on wooden rods below a dark batten.
-- **Flags.** Flagpole groups beside the back corners. Each staff leans out. The hall has no
-  wind, so each flag hangs from its staff: gravity bends the cloth down toward the fly, with
-  soft folds and a slow sway. The setting "Limpness" (`FlagSettings.limpness`, 0 to 100 %) mixes
-  the two ends of `BACKDROP.flags.hang` (`flagHang()`). A limp flag turns down near the hoist, so
-  it falls from its staff in deeper folds and sways less. A stiff flag holds out from its staff. A flag on the left of its staff shows its mirrored back. With
-  the screen, the middle group of an odd count stands on top of the screen frame. Each group has
-  a staff for each flag (`flagsOfGroup()`).
+- **Flags.** Groups of flags beside the back corners. The setting "Stand" (`FlagSettings.stand`,
+  `FLAG_STANDS`) sets the form of each group. "Round metal base" and "Wooden plinth" give a row
+  of upright poles on the floor, one for each flag, with a finial, as the indoor flags of the
+  reference images. "Fan stand" gives poles that fan out from one base, with the middle pole
+  upright and the outer poles a little farther back. "Tall pole with staffs" gives a pole with
+  staffs in pairs that lean out to each side. With the screen, the middle group of an odd count
+  stands on top of the screen frame for the tall pole, and a floor stand has no middle group,
+  because it would hide the screen. Each group has a staff for each flag (`flagsOfGroup()`).
+- **Hang of a flag.** The hall has no wind, so a flag hangs from its hoist (`addFlag()`). The top
+  edge falls steeply from the finial, so the fly hangs low and the hem slants down to the fly.
+  The cross-section of the cloth at each height leaves the staff to the side away from the fly,
+  curls in front of the staff, and opens out to the fly, so the staff stands inside the cloth,
+  as in the reference images. Soft vertical pleats with dark creases run down the cloth. The
+  setting "Limpness" (0 to 100 %) mixes the two ends of `BACKDROP.flags.hang` (`flagHang()`): 0
+  holds the cloth straight out from its staff with no curl. A flag with its fly to the left shows
+  its mirrored back.
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
   inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide
   shot shows no moire.

@@ -3,6 +3,7 @@ import {
   BACKDROP_LIMITS,
   BANNER_ASPECTS,
   BANNER_CUTS,
+  FLAG_STANDS,
   DEFAULT_BACKDROP,
   SCREEN_MATERIALS,
   STAGE_TEXT_FONTS,
@@ -152,14 +153,20 @@ export class StagePanel {
       ),
       this.#section(
         'Flags',
-        'Flagpole groups beside the back corners. Each group carries all the flags. A higher limpness lets each flag fall from its staff in deeper folds.',
+        'Flag groups beside the back corners. Each group carries all the flags. A stand on the floor holds each flag on an upright wooden pole, as indoor flags. A higher limpness lets each flag hang in deeper folds.',
         s.flags.on,
         (on) => {
           this.#change({ ...this.#settings, flags: { ...s.flags, on } });
         },
         [
           this.#row(
-            'Flagpole groups',
+            'Stand',
+            this.#select(FLAG_STANDS, s.flags.stand, (stand) => {
+              this.#change({ ...this.#settings, flags: { ...s.flags, stand } });
+            }),
+          ),
+          this.#row(
+            'Groups',
             this.#number(s.flags.groups, 1, BACKDROP_LIMITS.groups, (groups) => {
               this.#change({ ...this.#settings, flags: { ...s.flags, groups } });
             }),

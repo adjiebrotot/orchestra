@@ -26,6 +26,7 @@ import type {
   BackdropSettings,
   BannerCut,
   BannerSettings,
+  FlagSettings,
   ScreenCue,
   ScreenMaterial,
 } from './backdrop-settings.ts';
@@ -106,16 +107,61 @@ export const BACKDROP = {
     /** The height step between two pairs of staffs on a pole. */
     pairStep: 1.1,
     /**
-     * The hang of a flag at the limpness 0 and at the limpness 1 (`FlagSettings.limpness`). The
-     * hall has no wind, so a flag hangs from its staff. `droop` is the share of the turn from the
-     * first direction of the cloth to straight down at its fly. `bend` is the power of the turn
-     * along the cloth: a small power turns the cloth down near the hoist, so the flag falls from
-     * its staff. `folds` gives the count of the gravity folds from the hoist to the fly and their
-     * depth in widths. `wave` is the sway at the fly, in meters: the slow drift of the air.
+     * The hang of a flag at the limpness 0 and at the limpness 1 (`FlagSettings.limpness`), as the
+     * flags of an indoor hall (the reference images of the indoor flags, design 4.5). The hall
+     * has no wind, so a limp flag hangs from its hoist: its top edge falls steeply from the
+     * finial, the fly hangs low, and deep vertical pleats gather its width. `start` and `end` are
+     * the angles of the top edge below the horizontal at the hoist and at the fly, in radians.
+     * `gather` is the share of the horizontal run of the top edge that the pleats leave open.
+     * `wrap` is the share of the full curl of the cloth around the staff (the indoor flags of the
+     * reference images wrap the cloth in front of the pole). `folds` is the count of the pleats across the flag, and `depth` their depth in widths.
+     * `crease` is the shade in the hollow of a pleat, a part of the light. `wave` is the sway at
+     * the fly, in meters: the slow drift of the air.
      */
     hang: {
-      stiff: { droop: 0.5, bend: 2.1, folds: 1.3, depth: 0.06, wave: 0.07 },
-      limp: { droop: 1, bend: 0.45, folds: 2.2, depth: 0.15, wave: 0.03 },
+      stiff: {
+        start: 0,
+        end: 0.3,
+        gather: 1,
+        wrap: 0,
+        folds: 1.3,
+        depth: 0.04,
+        crease: 0.15,
+        wave: 0.07,
+      },
+      limp: {
+        start: 1.1,
+        end: 1.42,
+        gather: 0.85,
+        wrap: 1,
+        folds: 2.5,
+        depth: 0.08,
+        crease: 0.6,
+        wave: 0.02,
+      },
+    },
+    /**
+     * The lean of each lower pair of staffs toward the audience, in radians. The flags of two
+     * pairs hang one above the other, so the lean keeps the lower pair in front of the upper one.
+     */
+    pairLean: (14 * Math.PI) / 180,
+    /**
+     * The floor stands: the distance between two poles, the pole height, its radius, and the
+     * radius of a round metal base.
+     */
+    floor: { spacing: 0.62, height: 2.8, poleRadius: 0.024, baseRadius: 0.22 },
+    /**
+     * The fan stand: the length of a pole, the angle between two poles, the largest angle from
+     * upright, the lean back of each pole out from the middle, the radius of a pole, and the
+     * radius of the base, in meters and radians.
+     */
+    fan: {
+      length: 2.9,
+      step: (20 * Math.PI) / 180,
+      maxAngle: (40 * Math.PI) / 180,
+      backLean: 0.12,
+      poleRadius: 0.024,
+      baseRadius: 0.26,
     },
   },
   /** The screen behind the orchestra, above the heads of the back row. */
@@ -162,6 +208,18 @@ class Triangles {
   readonly positions: number[] = [];
   readonly uvs: number[] = [];
   readonly waves: number[] = [];
+  /** The shade of the crease of a pleat at each vertex that has one, by the vertex index. */
+  readonly #creases = new Map<number, number>();
+
+  /**
+   * Sets the shade of the crease at the last vertex: the part of the light that the folds around
+   * it block.
+   *
+   * @param shade The shade, from 0 for no shade to 1.
+   */
+  crease(shade: number): void {
+    this.#creases.set(this.waves.length - 1, shade);
+  }
 
   /**
    * Adds the triangles of a geometry, moved by a matrix.
@@ -197,6 +255,11 @@ class Triangles {
     geometry.setAttribute('position', new BufferAttribute(new Float32Array(this.positions), 3));
     geometry.setAttribute('uv', new BufferAttribute(new Float32Array(this.uvs), 2));
     geometry.setAttribute('wave', new BufferAttribute(new Float32Array(this.waves), 1));
+    const creases = new Float32Array(this.waves.length);
+    for (const [i, shade] of this.#creases) {
+      creases[i] = shade;
+    }
+    geometry.setAttribute('crease', new BufferAttribute(creases, 1));
     geometry.computeBoundingSphere();
     return geometry;
   }
@@ -281,16 +344,27 @@ function addCloth(
   }
 }
 
+/** The distance of the hoist of a flag from the axis of its staff, in meters: the sleeve. */
+const FLAG_CORE = 0.035;
+
 /** The hang of a flag at one limpness: a mix of the two ends of {@link BACKDROP}.flags.hang. */
 export interface FlagHang {
-  /** The share of the turn from the first direction to straight down at the fly. */
-  readonly droop: number;
-  /** The power of the turn along the cloth. A small power turns the cloth near the hoist. */
-  readonly bend: number;
-  /** The count of the gravity folds from the hoist to the fly. */
+  /** The share of the stiff angle of the staff in the angle of the top edge, from 0 to 1. */
+  readonly stiffness: number;
+  /** The angle of the top edge below the horizontal at the hoist, for a limp flag, in radians. */
+  readonly start: number;
+  /** The angle of the top edge below the horizontal at the fly, for a limp flag, in radians. */
+  readonly end: number;
+  /** The share of the horizontal run of the top edge that the pleats leave open. */
+  readonly gather: number;
+  /** The share of the full curl of the cloth around the staff. */
+  readonly wrap: number;
+  /** The count of the pleats from the hoist to the fly. */
   readonly folds: number;
-  /** The depth of the folds, in widths. */
+  /** The depth of the pleats, in widths. */
   readonly depth: number;
+  /** The shade in the hollow of a pleat, a part of the light. */
+  readonly crease: number;
   /** The sway at the fly, in meters. */
   readonly wave: number;
 }
@@ -306,25 +380,33 @@ export function flagHang(limpness: number): FlagHang {
   const t = Math.min(1, Math.max(0, limpness));
   const mix = (a: number, b: number): number => a + (b - a) * t;
   return {
-    droop: mix(stiff.droop, limp.droop),
-    bend: mix(stiff.bend, limp.bend),
+    stiffness: 1 - t,
+    start: mix(stiff.start, limp.start),
+    end: mix(stiff.end, limp.end),
+    gather: mix(stiff.gather, limp.gather),
+    wrap: mix(stiff.wrap, limp.wrap),
     folds: mix(stiff.folds, limp.folds),
     depth: mix(stiff.depth, limp.depth),
+    crease: mix(stiff.crease, limp.crease),
     wave: mix(stiff.wave, limp.wave),
   };
 }
 
 /**
- * Adds a flag on a staff that hangs in the still air of the hall. The hoist runs down the staff
- * from its tip. The cloth leaves the staff at a right angle, and gravity bends it down toward the
- * floor more and more toward the fly ({@link FlagHang}). Fabric shears easily, so each row of the
- * cloth takes the same bend. Soft folds that hang along the bend grow from the hoist to the fly.
- * The wave weight grows from the hoist to the fly.
+ * Adds a flag on a staff in the still air of the hall, as the indoor flags of the reference
+ * images. The hoist runs down the staff from its tip. The top edge leaves the hoist and falls
+ * toward the floor, more steeply toward the fly ({@link FlagHang}), so the fly hangs lower than
+ * the hoist. A stiff flag starts the top edge along its first direction
+ * ({@link FlagHang}.stiffness). Each row of the cloth follows the top edge, so the hem runs
+ * parallel to the staff, as a flag on a tilted pole. The vertical pleats take a part of the
+ * horizontal run of the top edge ({@link FlagHang}.gather), and the top edge keeps its length.
+ * The pleats start at the hoist, run down the cloth, and open a little toward the hem. The wave
+ * weight grows from the hoist to the fly.
  *
  * @param list The triangles.
  * @param tip The tip of the staff.
  * @param along The unit direction down the staff, from the tip.
- * @param out The unit direction from the hoist to the fly, in the plane of the flag.
+ * @param out The unit direction from the hoist to the fly of a stiff flag, in the plane x-y.
  * @param width The width, from the hoist to the fly.
  * @param height The height, along the staff.
  * @param mirror True to show the image mirrored, as the back of the flag.
@@ -340,39 +422,56 @@ function addFlag(
   mirror: boolean,
   hang: FlagHang,
 ): void {
-  const cols = 18;
-  const rows = 10;
-  const { droop, bend } = hang;
-  // The center line of the cloth from the hoist to the fly, in the plane x-y: each step turns a
-  // part of the way from the first direction to straight down.
-  const first = Math.atan2(out.y, out.x);
-  let turn = -Math.PI / 2 - first;
-  turn = Math.atan2(Math.sin(turn), Math.cos(turn));
-  const line: [number, number][] = [[0, 0]];
-  let x = 0;
-  let y = 0;
+  const cols = 40;
+  const rows = 28;
+  // The top edge, in the vertical plane of the flag: `side` is the horizontal direction to the
+  // fly, and each angle is below the horizontal.
+  const side = Math.sign(out.x) || 1;
+  const outAngle = Math.atan2(-out.y, Math.abs(out.x));
+  const first = outAngle * hang.stiffness + hang.start * (1 - hang.stiffness);
+  const last = Math.max(first, (outAngle + 0.3) * hang.stiffness + hang.end * (1 - hang.stiffness));
+  const step = width / cols;
+  // The top edge: the horizontal run of each point from the finial, and its drop.
+  const top: [number, number][] = [[0, 0]];
+  let run = 0;
+  let drop = 0;
   for (let i = 1; i <= cols; i++) {
     const f = (i - 0.5) / cols;
-    const angle = first + turn * droop * f ** bend;
-    x += (Math.cos(angle) * width) / cols;
-    y += (Math.sin(angle) * width) / cols;
-    line.push([x, y]);
+    const angle = first + (last - first) * f ** 0.8;
+    run += Math.cos(angle) * step;
+    drop -= Math.sin(angle) * step;
+    top.push([run, drop]);
   }
+  // A limp flag wraps around its staff: the cross-section of the cloth at each height leaves the
+  // staff to the side away from the fly, curls in front of the staff, and opens out to the fly.
+  // Thus the staff stands inside the cloth, as the indoor flags of the reference images. The
+  // curl grows a little toward the hem. A stiff flag runs straight out to the fly.
+  const limp = 1 - hang.stiffness;
+  const power = 1 + 0.2 * limp;
+  const span = hang.gather * run;
   const point = new Vector3();
   const vertex = (i: number, j: number): void => {
     const f = i / cols;
     const s = j / rows;
-    const [lx, ly] = line[i] ?? [0, 0];
-    // The folds run down the hanging cloth. A small slant with the height keeps them soft.
-    const fold =
-      hang.depth * width * f ** 0.8 * Math.sin(Math.PI * 2 * hang.folds * f + 0.6 + 1.1 * s);
+    const [tx, ty] = top[i] ?? [0, 0];
+    const across = run > 0 ? tx / run : f;
+    // The pleats start at the hoist, and they open a little toward the hem.
+    const open = Math.min(1, across * 4) * (0.75 + 0.25 * s);
+    const wave = Math.sin(Math.PI * 2 * hang.folds * across + 0.3 * s);
+    const curl = limp * hang.wrap * (0.8 + 0.4 * s);
+    const bow = Math.sin(Math.PI * across);
+    const outward = span * (across ** power - 0.6 * curl * bow);
+    const front = span * 0.35 * curl * bow + hang.depth * width * open * wave;
     point.copy(tip).addScaledVector(along, s * height);
-    point.x += lx;
-    point.y += ly;
-    point.z += fold;
+    point.x += side * (outward + FLAG_CORE * (1 - curl));
+    point.y += ty;
+    point.z += front + FLAG_CORE * curl;
     list.positions.push(point.x, point.y, point.z);
     list.uvs.push(mirror ? 1 - f : f, 1 - s);
     list.waves.push(f);
+    // The hollow of a pleat, seen from the hall, gets less light, as the dark creases of a
+    // hanging flag.
+    list.crease(hang.crease * open * (1 - wave) * 0.5);
   };
   for (let i = 0; i < cols; i++) {
     for (let j = 0; j < rows; j++) {
@@ -527,6 +626,40 @@ export function rowSlots(count: number, inner: number | null, outer: number): nu
 }
 
 /**
+ * Adds the plinth of a floor stand: a low square block with a smaller block on top.
+ *
+ * @param list The triangles.
+ * @param foot The middle of the bottom of the plinth.
+ */
+function addPlinth(list: Triangles, foot: Vector3): void {
+  addBox(list, foot.clone().setY(foot.y + 0.04), new Vector3(0.36, 0.08, 0.36));
+  addBox(list, foot.clone().setY(foot.y + 0.11), new Vector3(0.18, 0.06, 0.18));
+}
+
+/**
+ * Adds the round base of a metal floor stand: a low disc with a dome and a collar.
+ *
+ * @param list The triangles.
+ * @param foot The middle of the bottom of the base.
+ */
+function addRoundBase(list: Triangles, foot: Vector3): void {
+  addBase(list, foot, BACKDROP.flags.floor.baseRadius);
+  addKnob(list, foot.clone().setY(foot.y + 0.06), 0.08);
+  addRod(list, foot.clone().setY(foot.y + 0.1), foot.clone().setY(foot.y + 0.22), 0.035);
+}
+
+/**
+ * Adds the finial of a flag pole: a ball with a point above it.
+ *
+ * @param list The triangles.
+ * @param top The top of the pole.
+ */
+function addFinial(list: Triangles, top: Vector3): void {
+  addKnob(list, top.clone().setY(top.y + 0.04), 0.04);
+  addRod(list, top.clone().setY(top.y + 0.07), top.clone().setY(top.y + 0.17), 0.012);
+}
+
+/**
  * Gives the image of a slot in a list of slots (design 4.5, backdrop).
  *
  * - `mirror`: when the pairs of the row can show each image, the outer pair shows the first
@@ -588,12 +721,15 @@ export function flagsOfGroup(
 
 const CLOTH_VERTEX = /* glsl */ `
 attribute float wave;
+attribute float crease;
 uniform float uTime;
 uniform float uWave;
 uniform float uPlaneZ;
 varying vec2 vUv;
 varying vec3 vWorld;
+varying float vCrease;
 void main() {
+  vCrease = crease;
   // A camera behind the dressing sees no part of it, as the cutaway of the hall.
   if (cameraPosition.z < uPlaneZ) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -632,6 +768,7 @@ uniform float uWallHeight;
 uniform float uFloorY;
 varying vec2 vUv;
 varying vec3 vWorld;
+varying float vCrease;
 void main() {
   vec3 n = normalize(cross(dFdx(vWorld), dFdy(vWorld)));
   vec3 view = normalize(cameraPosition - vWorld);
@@ -643,7 +780,7 @@ void main() {
   float facing = max(0.0, dot(n, to / distance));
   float glow = uGlow / (1.0 + pow(distance / uReach, 2.0));
   float height = clamp((vWorld.y - uFloorY) / uWallHeight, 0.0, 1.0);
-  float light = (uAmbient + glow * (0.3 + 0.7 * facing)) * mix(1.0, uTop, height);
+  float light = (uAmbient + glow * (0.3 + 0.7 * facing)) * mix(1.0, uTop, height) * (1.0 - vCrease);
   vec4 image = texture2D(uMap, uUvBox.xy + vUv * uUvBox.zw);
   vec3 albedo = mix(uBase, image.rgb, image.a) * uTint;
   vec3 h = normalize(normalize(uSheenLight - vWorld) + view);
@@ -827,15 +964,7 @@ export class Backdrop {
       this.#buildHanging(stageSide, settings.hanging, settings.screen.on, used);
     }
     if (settings.flags.on) {
-      this.#buildFlags(
-        stageSide,
-        settings.flags.groups,
-        settings.flags.images,
-        settings.flags.arrangement,
-        flagHang(settings.flags.limpness),
-        settings.screen.on,
-        used,
-      );
+      this.#buildFlags(stageSide, settings.flags, settings.screen.on, used);
     }
     for (const [key, texture] of this.#textures) {
       if (!used.has(key)) {
@@ -1203,110 +1332,89 @@ export class Backdrop {
   }
 
   /**
-   * Builds the flagpole groups: a pole with staffs in pairs that lean out to each side, each with
-   * a flag, as the third reference image of the dressing. The groups stand beside the back
-   * corners of the stage. In a symmetrical order, the right side mirrors the left side (design
-   * 4.5, backdrop).
+   * Builds the flags in their groups (design 4.5, backdrop). The groups stand beside the back
+   * corners of the stage. In a symmetrical order, the right side mirrors the left side. The stand
+   * of the settings sets the form of each group:
+   *
+   * - `group`: a tall pole with staffs in pairs that lean out to each side, as the third reference
+   *   image of the dressing.
+   * - `floor`: a row of upright wooden poles, each on its own plinth on the floor, as the indoor
+   *   flags of the reference images.
+   * - `fan`: wooden poles that fan out from one base on the floor, as the indoor flag stand of the
+   *   reference images.
    *
    * @param side The stage side.
-   * @param groups The number of groups.
-   * @param images The flags of each group.
-   * @param arrangement The order of the flags on the groups.
-   * @param hang The hang of the flags.
+   * @param set The settings of the flags.
    * @param screen True if the screen shows.
    * @param used The keys of the textures.
    */
-  #buildFlags(
-    side: number,
-    groups: number,
-    images: readonly string[],
-    arrangement: Arrangement,
-    hang: FlagHang,
-    screen: boolean,
-    used: Set<string>,
-  ): void {
+  #buildFlags(side: number, set: FlagSettings, screen: boolean, used: Set<string>): void {
     const place = BACKDROP.flags;
+    const hang = flagHang(set.limpness);
     const floor = -STAGE_THICKNESS;
     // Each group: x, z, the height of the foot of its pole, and the pole height.
     const places: [number, number, number, number][] = [];
-    const perSide = Math.floor(groups / 2);
+    const perSide = Math.floor(set.groups / 2);
     for (let j = 0; j < perSide; j++) {
       const x = side / 2 + place.side + j * place.spacing;
       const z = -side / 2 + place.forward - j * place.stepBack;
       places.push([-x, z, floor, place.poleHeight], [x, z, floor, place.poleHeight]);
     }
-    if (groups % 2 === 1) {
-      if (screen) {
+    if (set.groups % 2 === 1) {
+      if (screen && set.stand === 'group') {
         const top = BACKDROP.screen.bottom + (screenWidth(side) * 9) / 16 + BACKDROP.screen.bezel;
         places.push([0, -side / 2 - BACKDROP.screen.behind - 0.08, top, place.middlePole]);
-      } else {
+      } else if (!screen) {
+        // A floor stand in the middle would hide the screen, so it stands only with no screen.
         places.push([0, -side / 2 - place.middleBehind, floor, place.poleHeight]);
       }
     }
+    if (places.length === 0) {
+      return;
+    }
     const planeZ = Math.min(...places.map(([, z]) => z)) - 0.3;
     const metal = new Triangles();
+    const wood = new Triangles();
     const cloths: { texture: ClothTexture; add: (list: Triangles) => void }[] = [];
+    const hangFlag = (id: string, tip: Vector3, along: Vector3, out: Vector3): void => {
+      const aspect = this.#aspectOf(id, 0, FLAG_ASPECT);
+      const width = place.flagWidth;
+      const height = width * aspect;
+      const texture = this.#texture(id, aspect, false, used);
+      if (!texture) {
+        return;
+      }
+      const start = tip.clone().addScaledVector(along, 0.06);
+      start.z += 0.02;
+      // A flag with its fly to the left shows its back, mirrored, as in the reference image.
+      const mirror = out.x < 0;
+      cloths.push({
+        texture,
+        add: (list) => {
+          addFlag(list, start, along, out, width, height, mirror, hang);
+        },
+      });
+    };
     const order = places.map(([gx]) => gx).toSorted((a, b) => a - b);
     for (const [gx, gz, foot, poleHeight] of places) {
-      const base = new Vector3(gx, foot, gz);
-      const poleTop = foot + poleHeight;
-      if (foot === floor) {
-        addBase(metal, base, 0.3);
-      }
-      addRod(metal, base, new Vector3(gx, poleTop, gz), place.poleRadius);
-      addKnob(metal, new Vector3(gx, poleTop + 0.06, gz), 0.07);
       // In a symmetrical order, the right group mirrors the left group, so the flag order runs
       // from the outside in.
-      const mirrorGroup = arrangement === 'mirror' && gx > 0;
-      const groupFlags = flagsOfGroup(images, arrangement, order.indexOf(gx), places.length);
-      const count = groupFlags.length;
-      const pairs = Math.floor(count / 2);
-      for (let k = 0; k < count; k++) {
-        const odd = count % 2 === 1;
-        const top = odd && k === count - 1;
-        const pair = Math.floor(k / 2);
-        let leftSide = k % 2 === 0;
-        if (mirrorGroup) {
-          leftSide = !leftSide;
-        }
-        const id = groupFlags[k];
-        if (!id) {
-          continue;
-        }
-        const aspect = this.#aspectOf(id, 0, FLAG_ASPECT);
-        const width = place.flagWidth;
-        const height = width * aspect;
-        const length = height + 0.45;
-        const tilt = top ? 0 : place.staffTilt;
-        const sign = top ? 1 : leftSide ? -1 : 1;
-        const rootY = top
-          ? poleTop
-          : Math.max(foot + 0.3, poleTop - 0.35 - (pairs - 1 - pair) * place.pairStep);
-        const root = new Vector3(gx, rootY, gz + 0.06);
-        const up = new Vector3(sign * Math.sin(tilt), Math.cos(tilt), 0);
-        const tip = root.clone().addScaledVector(up, length);
-        addRod(metal, root, tip, 0.02);
-        addKnob(metal, tip.clone().addScaledVector(up, 0.04), 0.035);
-        const along = up.clone().negate();
-        const out = new Vector3(sign * Math.cos(tilt), -Math.sin(tilt), 0);
-        if (top) {
-          out.set(1, 0, 0);
-        }
-        const texture = this.#texture(id, aspect, false, used);
-        if (texture) {
-          const start = tip
-            .clone()
-            .addScaledVector(along, 0.06)
-            .setZ(gz + 0.08);
-          // A flag on the left of its staff shows its back, mirrored, as in the reference image.
-          const mirror = sign < 0;
-          cloths.push({
-            texture,
-            add: (list) => {
-              addFlag(list, start, along, out, width, height, mirror, hang);
-            },
-          });
-        }
+      const mirrorGroup = set.arrangement === 'mirror' && gx > 0;
+      const groupFlags = flagsOfGroup(
+        set.images,
+        set.arrangement,
+        order.indexOf(gx),
+        places.length,
+      );
+      // A floor stand or a fan hangs its flags toward the middle of the stage.
+      const inward = gx > 0 ? -1 : 1;
+      if (set.stand === 'floor' || set.stand === 'round') {
+        const parts = set.stand === 'round' ? metal : wood;
+        this.#floorStands(parts, metal, groupFlags, mirrorGroup, [gx, gz], inward, hangFlag);
+      } else if (set.stand === 'fan') {
+        this.#fanStand(wood, metal, groupFlags, mirrorGroup, [gx, gz], inward, hangFlag);
+      } else {
+        this.#poleGroup(metal, groupFlags, mirrorGroup, [gx, gz, foot, poleHeight], hangFlag);
       }
     }
     this.#add(
@@ -1314,12 +1422,175 @@ export class Backdrop {
       this.#material(planeZ, null, FULL_BOX, this.#style.metal, this.#style.sheen.metal),
       'flag-poles',
     );
+    this.#add(wood, this.#material(planeZ, null, FULL_BOX, this.#style.rod, 0.25), 'flag-stands');
     for (const material of this.#addCloths(planeZ, cloths, 'flags')) {
       const wave = material.uniforms['uWave'];
       if (wave) {
         wave.value = hang.wave;
       }
       this.#waving.push(material);
+    }
+  }
+
+  /**
+   * Adds a flagpole group: a pole with staffs in pairs that lean out to each side. An odd flag
+   * flies from the top of the pole.
+   *
+   * @param metal The triangles of the metal parts.
+   * @param flags The flags of the group.
+   * @param mirrorGroup True to swap the sides, for the right group of a symmetrical order.
+   * @param at The x, the z, the height of the foot, and the height of the pole.
+   * @param hangFlag Adds a flag: its image, the tip of its staff, the direction down the staff,
+   *   and the direction of a stiff flag.
+   */
+  #poleGroup(
+    metal: Triangles,
+    flags: readonly (string | null)[],
+    mirrorGroup: boolean,
+    at: readonly [x: number, z: number, foot: number, height: number],
+    hangFlag: (id: string, tip: Vector3, along: Vector3, out: Vector3) => void,
+  ): void {
+    const place = BACKDROP.flags;
+    const [gx, gz, foot, poleHeight] = at;
+    const base = new Vector3(gx, foot, gz);
+    const poleTop = foot + poleHeight;
+    if (foot === -STAGE_THICKNESS) {
+      addBase(metal, base, 0.3);
+    }
+    addRod(metal, base, new Vector3(gx, poleTop, gz), place.poleRadius);
+    addKnob(metal, new Vector3(gx, poleTop + 0.06, gz), 0.07);
+    const count = flags.length;
+    const pairs = Math.floor(count / 2);
+    for (const [k, id] of flags.entries()) {
+      if (!id) {
+        continue;
+      }
+      const top = count % 2 === 1 && k === count - 1;
+      const pair = Math.floor(k / 2);
+      const leftSide = k % 2 === 0 ? !mirrorGroup : mirrorGroup;
+      const height = place.flagWidth * this.#aspectOf(id, 0, FLAG_ASPECT);
+      const length = height + 0.45;
+      const tilt = top ? 0 : place.staffTilt;
+      const sign = top ? 1 : leftSide ? -1 : 1;
+      const rootY = top
+        ? poleTop
+        : Math.max(foot + 0.3, poleTop - 0.35 - (pairs - 1 - pair) * place.pairStep);
+      const root = new Vector3(gx, rootY, gz + 0.06);
+      // A lower pair leans toward the audience, and the flag on top of the pole leans back, so
+      // the flags that hang one above the other do not cross.
+      const lean = place.pairLean * (top ? -1 : pairs - 1 - pair);
+      const up = new Vector3(
+        sign * Math.sin(tilt) * Math.cos(lean),
+        Math.cos(tilt) * Math.cos(lean),
+        Math.sin(lean),
+      );
+      const tip = root.clone().addScaledVector(up, length);
+      addRod(metal, root, tip, 0.02);
+      addKnob(metal, tip.clone().addScaledVector(up, 0.04), 0.035);
+      const out = top
+        ? new Vector3(1, 0, 0)
+        : new Vector3(sign * Math.cos(tilt), -Math.sin(tilt), 0);
+      hangFlag(id, tip, up.clone().negate(), out);
+    }
+  }
+
+  /**
+   * Adds a row of floor stands: an upright pole on a foot for each flag, with a finial, side by
+   * side, as the indoor flags of the reference images. A wooden pole stands on a square plinth,
+   * and a metal pole on a round base.
+   *
+   * @param wood The triangles of the poles and the feet: wooden or metal parts.
+   * @param metal The triangles of the finials.
+   * @param flags The flags of the row.
+   * @param mirrorGroup True to run the flags from the right, for the right group of a
+   *   symmetrical order.
+   * @param at The x and the z of the middle of the row.
+   * @param inward The side of the fly of each flag: 1 for +x, -1 for -x.
+   * @param hangFlag Adds a flag: its image, the tip of its staff, the direction down the staff,
+   *   and the direction of a stiff flag.
+   */
+  #floorStands(
+    wood: Triangles,
+    metal: Triangles,
+    flags: readonly (string | null)[],
+    mirrorGroup: boolean,
+    at: readonly [x: number, z: number],
+    inward: number,
+    hangFlag: (id: string, tip: Vector3, along: Vector3, out: Vector3) => void,
+  ): void {
+    const stand = BACKDROP.flags.floor;
+    const floor = -STAGE_THICKNESS;
+    const [gx, gz] = at;
+    const count = flags.length;
+    for (const [k, id] of flags.entries()) {
+      if (!id) {
+        continue;
+      }
+      const slot = mirrorGroup ? count - 1 - k : k;
+      const x = gx + (slot - (count - 1) / 2) * stand.spacing;
+      if (wood === metal) {
+        addRoundBase(metal, new Vector3(x, floor, gz));
+      } else {
+        addPlinth(wood, new Vector3(x, floor, gz));
+      }
+      const top = new Vector3(x, floor + stand.height, gz);
+      addRod(wood, new Vector3(x, floor + 0.12, gz), top, stand.poleRadius);
+      addFinial(metal, top);
+      hangFlag(
+        id,
+        top.clone().setY(top.y - 0.04),
+        new Vector3(0, -1, 0),
+        new Vector3(inward, 0, 0),
+      );
+    }
+  }
+
+  /**
+   * Adds a fan stand: wooden poles that fan out from one base on the floor, the middle pole
+   * upright, as the indoor flag stand of the reference images. The outer poles stand a little
+   * farther back, so the flags do not cross.
+   *
+   * @param wood The triangles of the wooden parts.
+   * @param metal The triangles of the base and the finials.
+   * @param flags The flags of the fan.
+   * @param mirrorGroup True to run the flags from the right, for the right group of a
+   *   symmetrical order.
+   * @param at The x and the z of the base.
+   * @param inward The side of the fly of the flag on an upright pole: 1 for +x, -1 for -x.
+   * @param hangFlag Adds a flag: its image, the tip of its staff, the direction down the staff,
+   *   and the direction of a stiff flag.
+   */
+  #fanStand(
+    wood: Triangles,
+    metal: Triangles,
+    flags: readonly (string | null)[],
+    mirrorGroup: boolean,
+    at: readonly [x: number, z: number],
+    inward: number,
+    hangFlag: (id: string, tip: Vector3, along: Vector3, out: Vector3) => void,
+  ): void {
+    const fan = BACKDROP.flags.fan;
+    const floor = -STAGE_THICKNESS;
+    const [gx, gz] = at;
+    const count = flags.length;
+    addBase(metal, new Vector3(gx, floor, gz), fan.baseRadius);
+    const pivot = new Vector3(gx, floor + 0.1, gz);
+    const step = count > 1 ? Math.min(fan.step, (2 * fan.maxAngle) / (count - 1)) : 0;
+    for (const [k, id] of flags.entries()) {
+      if (!id) {
+        continue;
+      }
+      const slot = mirrorGroup ? count - 1 - k : k;
+      const rank = slot - (count - 1) / 2;
+      const angle = rank * step;
+      const up = new Vector3(Math.sin(angle), Math.cos(angle), -fan.backLean * Math.abs(rank));
+      up.normalize();
+      const tip = pivot.clone().addScaledVector(up, fan.length);
+      addRod(wood, pivot, tip, fan.poleRadius);
+      addFinial(metal, tip);
+      const sign = Math.abs(angle) < 1e-6 ? inward : Math.sign(angle);
+      const out = new Vector3(sign * Math.cos(angle), -sign * Math.sin(angle), 0);
+      hangFlag(id, tip.clone().addScaledVector(up, -0.04), up.clone().negate(), out);
     }
   }
 

@@ -72,16 +72,33 @@ export interface BannerSettings {
   readonly images: readonly string[];
 }
 
-/** The flagpole groups. Each group carries all the flags. */
+/**
+ * The stand of a group of flags: a row of upright metal poles on round bases, a row of upright
+ * wooden poles on plinths, poles that fan out from one base on the floor, or a tall pole with
+ * staffs in pairs.
+ */
+export type FlagStand = 'round' | 'floor' | 'fan' | 'group';
+
+/** The stands, in the order of the menu, with their labels. */
+export const FLAG_STANDS: readonly (readonly [FlagStand, string])[] = [
+  ['round', 'Floor stands, round metal base'],
+  ['floor', 'Floor stands, wooden plinth'],
+  ['fan', 'Fan stand, one base'],
+  ['group', 'Tall pole with staffs'],
+];
+
+/** The groups of flags. Each group carries all the flags. */
 export interface FlagSettings {
   readonly on: boolean;
-  /** The number of flagpole groups. */
+  readonly stand: FlagStand;
+  /** The number of groups. */
   readonly groups: number;
   /** The order of the flags on the groups. */
   readonly arrangement: Arrangement;
   /**
-   * How limp each flag hangs, from 0 to 1: 0 holds the cloth out from its staff, and 1 lets it
-   * fall from the hoist and hang down in deep folds (`flagHang()` of `backdrop.ts`).
+   * How limp each flag hangs, from 0 to 1: 0 holds the cloth out from its staff, and 1 hangs it
+   * as an indoor flag, straight down from the finial in deep pleats (`flagHang()` of
+   * `backdrop.ts`).
    */
   readonly limpness: number;
   /** The flags of each group, from the left of the left groups. */
@@ -198,9 +215,10 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
   },
   flags: {
     on: true,
+    stand: 'round',
     groups: 2,
     arrangement: 'mirror',
-    limpness: 0.8,
+    limpness: 1,
     images: ['flag:id', 'flag:jp'],
   },
   screen: {
@@ -368,6 +386,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
     hanging: readBanners(data['hanging'], base.hanging, BACKDROP_LIMITS.hanging),
     flags: {
       on: isBoolean(flags['on']) ? flags['on'] : base.flags.on,
+      stand: readOption(flags['stand'], FLAG_STANDS, base.flags.stand),
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
       arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
       limpness: readShare(flags['limpness'], base.flags.limpness),
