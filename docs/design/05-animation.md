@@ -1727,6 +1727,14 @@ distance is a factor of the default distance, so it grows with the stage. The ca
 offers the three moves in its group "Background". There, an orbit to the left or the right sets
 the direction, and each other move goes around the middle of the orbit.
 
+**Camera director.** Each cue of the director holds one focus and one move until the next cue.
+Before the first cue, and with no cue, the automatic plan shows. The button "Automatic built-in"
+fills the cue list from the automatic plan (`automaticCues()` of `shots/directed.ts`): one cue at
+the start of each main shot, so the cuts stay on the phrases of the music. The cue takes the
+focus of the shot, the directed move nearest to the move of the shot, and its cut. A high shot
+that is a scenic move gets that move. The detail inserts get no cue. The user then changes the
+focus of each cue. The focus menu has no item "Automatic", because the button replaces it.
+
 **Film grammar.** The shots obey the rules of a concert film of
 `docs/reference/camera-technique.md`, with the limits of `FILM_GRAMMAR` (`shots/grammar.ts`).
 `pnpm shot-trace --rules` counts the breaks of each rule over all demos.

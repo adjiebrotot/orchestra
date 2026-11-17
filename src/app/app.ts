@@ -20,7 +20,7 @@ import { Ui } from '../ui/ui.ts';
 import { Director } from '../ui/director.ts';
 import type { DirectorRow } from '../ui/director.ts';
 import { RenderPanel } from '../ui/render-panel.ts';
-import { directedPlan } from '../shots/directed.ts';
+import { automaticCues, directedPlan } from '../shots/directed.ts';
 import type { DirectorCue } from '../shots/directed.ts';
 import { canRenderVideo } from './render-formats.ts';
 import { BackdropControl } from './backdrop-control.ts';
@@ -628,6 +628,7 @@ export class App {
       onScreenChange: (cues) => {
         this.#backdrop.setScreenCues(cues);
       },
+      automaticCues: () => (this.#piece ? automaticCues(this.#piece.shots) : []),
     });
     this.#backdrop = new BackdropControl(
       (images) => {

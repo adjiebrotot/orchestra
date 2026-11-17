@@ -19,11 +19,11 @@ import { CINEMA_ASPECT, DEFAULT_ELEVATION, DEFAULT_TARGET, FIELD_OF_VIEW } from 
 const DEG = Math.PI / 180;
 
 /**
- * Where a cue points the camera: the automatic plan (`auto`), the whole stage (`wide`), the stage
- * from high in the hall (`high`), a scenic move that shows the background (`ScenicMove`, design
- * 5.6), the conductor, or one seat of the score (`seat:<index>`).
+ * Where a cue points the camera: the whole stage (`wide`), the stage from high in the hall
+ * (`high`), a scenic move that shows the background (`ScenicMove`, design 5.6), the conductor, or
+ * one seat of the score (`seat:<index>`).
  */
-export type DirectorFocus = 'auto' | 'wide' | 'high' | ScenicMove | 'conductor' | `seat:${number}`;
+export type DirectorFocus = 'wide' | 'high' | ScenicMove | 'conductor' | `seat:${number}`;
 
 /**
  * Tells if a focus is a scenic move.
@@ -305,7 +305,7 @@ function closeFraming(
  * Makes the framing of a cue.
  *
  * @param subjects The subjects of the layout.
- * @param cue The cue. Its focus is not `auto`.
+ * @param cue The cue.
  * @returns The framing. A focus with no players on the stage gives the wide shot.
  */
 function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: DirectorCue): Framing {
@@ -351,17 +351,16 @@ function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: Dire
  * @param shot The shot.
  * @param start The start of the span.
  * @param end The end of the span.
- * @param blendSec The blend into the shot when the span cuts its start.
  * @returns The shot in the span.
  */
-function clipShot(shot: Shot, start: number, end: number, blendSec: number): Shot {
+function clipShot(shot: Shot, start: number, end: number): Shot {
   const clipped = shot.startSec < start;
   return {
     ...shot,
     startSec: clipped ? start : shot.startSec,
     endSec: Math.min(shot.endSec, end),
     moveEndSec: Math.max(Math.min(shot.moveEndSec, end), clipped ? start : shot.startSec),
-    blendSec: clipped ? blendSec : shot.blendSec,
+    blendSec: clipped ? 0 : shot.blendSec,
   };
 }
 
@@ -377,9 +376,9 @@ function blendOf(cut: boolean, span: number): number {
 }
 
 /**
- * Makes the shot plan of the directed camera path. Before the first cue, and from each cue with
- * the focus `auto`, the shots of the automatic plan show. From each other cue to the next cue,
- * one shot shows its focus with its move. Pure: the same inputs give the same plan.
+ * Makes the shot plan of the directed camera path. Before the first cue, the shots of the
+ * automatic plan show. From each cue to the next cue, one shot shows its focus with its move.
+ * Pure: the same inputs give the same plan.
  *
  * @param auto The automatic plan of the score, from `prepareShots()`.
  * @param score The score.
@@ -406,10 +405,10 @@ export function directedPlan(
   const shots: Shot[] = [];
   const inserts: Shot[] = [];
   /** Adds the shots and the inserts of the automatic plan in a span. */
-  const addAuto = (start: number, end: number, blendSec: number): void => {
+  const addAuto = (start: number, end: number): void => {
     for (const shot of auto.shots) {
       if (shot.startSec < end && shot.endSec > start) {
-        shots.push(clipShot(shot, start, end, blendSec));
+        shots.push(clipShot(shot, start, end));
       }
     }
     for (const insert of auto.inserts) {
@@ -420,7 +419,7 @@ export function directedPlan(
   };
   const firstTime = Math.max(0, sorted[0]?.timeSec ?? 0);
   if (firstTime > 0) {
-    addAuto(-Infinity, firstTime, 0);
+    addAuto(-Infinity, firstTime);
   }
   for (const [i, cue] of sorted.entries()) {
     const start = i === 0 && firstTime <= 0 ? -Infinity : Math.max(0, cue.timeSec);
@@ -431,10 +430,6 @@ export function directedPlan(
     }
     const span = (Number.isFinite(end) ? end : score.durationSec) - Math.max(start, 0);
     const blendSec = shots.length === 0 ? 0 : blendOf(cue.cut, span);
-    if (cue.focus === 'auto') {
-      addAuto(start, end, blendSec);
-      continue;
-    }
     const framing = framingOf(subjects, clearance, cue);
     shots.push({
       kind: framing.kind,
