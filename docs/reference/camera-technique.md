@@ -147,7 +147,9 @@ The app follows these facts:
 - **The conductor (section 5).** The conductor shots come between the other shots, with some
   shots between them (`SHOT_TIMES.conductorSpacing`). The camera director also shows the front
   of the bear: a close shot of the face, a low-angle shot that looks up from near the podium
-  [24], and a high view over the back rows at the bear (`CONDUCTOR_VIEWS`, design 5.6).
+  [24], and a high view over the back rows at the bear (`CONDUCTOR_VIEWS`, design 5.6). A render
+  with the ending films the bow with a low-angle orbit on the audience side (`BOW_SHOT`,
+  derived).
 - **The moves (section 4).** Each move starts and ends at rest (a smoothstep), and the close
   shots push in slowly.
 - **The change of the camera mode (section 4).** The toggle between Free mode and Cinematic mode

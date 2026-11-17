@@ -1742,6 +1742,13 @@ uses a wide lens near the podium and looks up at the bear. It stands to one side
 the conductor. "Over the orchestra" stands high over the back rows, inside the back edge of the
 stage, and looks at the bear over the players (`ORCHESTRA_VIEW`).
 
+**Bow shot.** A render with "Include the ending" (design 2.5, render) films the bow of the conductor (5.4).
+`withBowShot()` of `shots/bow-shot.ts` ends the plan, automatic or directed, with a low camera on
+the audience side that orbits around the podium (`BOW_SHOT`). It starts after the release of the
+last chord, and the orbit ends when the bear faces the orchestra again. After the stop at the song
+end, the camera time is the song end plus the wall seconds since the stop, as the end motion of
+the conductor. The live playback keeps the last shot of the plan.
+
 **Film grammar.** The shots obey the rules of a concert film of
 `docs/reference/camera-technique.md`, with the limits of `FILM_GRAMMAR` (`shots/grammar.ts`).
 `pnpm shot-trace --rules` counts the breaks of each rule over all demos.
