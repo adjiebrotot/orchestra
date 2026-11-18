@@ -448,7 +448,12 @@ function placeStand(
   const deskHeight = standDeskHeight(readers.map((reader) => reader.eye));
   return {
     owner,
-    place: { position, facing: spot.facing, deskHeight },
+    place: {
+      position,
+      facing: spot.facing,
+      deskHeight,
+      readers: readers.map((reader) => reader.index),
+    },
     obstacle: obstacleOf(
       `stand at ${((angle * 180) / Math.PI).toFixed(1)}°`,
       placeFootprint(standFootprint(deskHeight), position, spot.facing),
@@ -3155,6 +3160,7 @@ function onStage(
       position: move(stand.place.position),
       facing: stand.place.facing,
       deskHeight: stand.place.deskHeight,
+      readers: stand.place.readers,
     })),
   };
 }

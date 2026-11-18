@@ -20,6 +20,11 @@ export interface StandPlace {
    * who read from it (`standDeskHeight()` of `models/props.ts`).
    */
   readonly deskHeight: number;
+  /**
+   * The indices in `SceneLayout.players` of the players who read from it. Its sheet prints their
+   * part (design 4.5, sheet music).
+   */
+  readonly readers: readonly number[];
 }
 
 /**
