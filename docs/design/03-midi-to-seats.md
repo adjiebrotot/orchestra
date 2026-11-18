@@ -110,6 +110,8 @@ interface Score {
   /** Sorted by startSec. */
   notes: PlayerNote[];
   beats: Beat[];
+  /** The time signatures in song seconds. The first is at 0 s. The sheets print them (4.5). */
+  meters: { timeSec: number; numerator: number; denominator: number }[];
   /** Sorted by timeSec. */
   synthEvents: SynthEvent[];
   /** The presets that load before play, in the order of first use. Drum kits use bank 128. */

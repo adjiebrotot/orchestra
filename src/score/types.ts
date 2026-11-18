@@ -92,6 +92,14 @@ export interface Beat {
   readonly pulse: boolean;
 }
 
+/** A time signature of the file, at a song time. */
+export interface Meter {
+  readonly timeSec: number;
+  readonly numerator: number;
+  /** A power of 2, for example 8 for 6/8. */
+  readonly denominator: number;
+}
+
 /**
  * The value of the setting "Section size" (design 3.8). `auto` uses the rule for an orchestral
  * file. `one-per-part` gives one player for each simultaneous note. `full` gives the base sizes.
@@ -134,6 +142,11 @@ export interface Score {
   /** Sorted by startSec. */
   readonly notes: readonly PlayerNote[];
   readonly beats: readonly Beat[];
+  /**
+   * The time signatures of the file in song seconds, sorted by time. The first is at 0 s. The
+   * printed music of the sheets reads them (design 4.5, sheet music).
+   */
+  readonly meters: readonly Meter[];
   /** Sorted by timeSec. */
   readonly synthEvents: readonly SynthEvent[];
   /**

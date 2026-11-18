@@ -65,6 +65,11 @@ export function* buildScoreSteps(
       seats: cast.seats,
       notes: cast.notes,
       beats,
+      meters: timeline.timeSignatures.map(({ tick, numerator, denominator }) => ({
+        timeSec: timeline.tempoMap.toSeconds(tick),
+        numerator,
+        denominator,
+      })),
       synthEvents: buildSynthEvents(timeline, seating.noteSeats),
       presets: listPresets(timeline.notes),
     },
