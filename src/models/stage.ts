@@ -780,6 +780,33 @@ function stagePlace(position: Vec3, facing: number): Transform {
 }
 
 /**
+ * The music of one sheet (design 4.5, sheet music): the part of the players who read it, or a
+ * page of the full score on the conductor stand.
+ */
+export type SheetMusic =
+  | {
+      readonly kind: 'part';
+      /** The indices in `SceneLayout.players` of the readers. */
+      readonly readers: readonly number[];
+    }
+  | {
+      readonly kind: 'score';
+      /** 0 for the left page, 1 for the right page. */
+      readonly page: number;
+    };
+
+/** The sheets of a layout. */
+export interface SheetSet {
+  /**
+   * 12 numbers for each sheet: x, y, z of its corners at the lower left, the lower right, the
+   * upper right, and the upper left, as its reader sees it (`deskSheetCorners()`).
+   */
+  readonly corners: Float32Array;
+  /** The music of each sheet, in the order of the corners. */
+  readonly music: readonly SheetMusic[];
+}
+
+/**
  * Gives the sheets of music of a layout (design 4.5): the sheet of each music stand, the sheet on
  * the desk of each piano, and the two pages of the score on the conductor stand. The scene draws
  * staff lines and notes on them. The piano does not move in a pose, so its sheet stays at its
@@ -787,18 +814,19 @@ function stagePlace(position: Vec3, facing: number): Transform {
  *
  * @param layout The layout of a score.
  * @param models The player models of the score, which give the place of each piano.
- * @returns 12 numbers for each sheet: x, y, z of its corners at the lower left, the lower right,
- *   the upper right, and the upper left, as its reader sees it ({@link deskSheetCorners}).
+ * @returns The corners and the music of each sheet.
  */
-export function buildSheets(layout: SceneLayout, models: ModelCache): Float32Array {
+export function buildSheets(layout: SceneLayout, models: ModelCache): SheetSet {
   const corners: number[] = [];
+  const music: SheetMusic[] = [];
   for (const at of layout.stands) {
     const place = stagePlace(at.position, at.facing);
     for (const corner of standSheetCorners(at.deskHeight)) {
       corners.push(...applyTransform(place, corner));
     }
+    music.push({ kind: 'part', readers: at.readers });
   }
-  for (const { cast, position, facing } of layout.players) {
+  for (const [index, { cast, position, facing }] of layout.players.entries()) {
     if (cast.instrument !== 'piano') {
       continue;
     }
@@ -811,6 +839,7 @@ export function buildSheets(layout: SceneLayout, models: ModelCache): Float32Arr
     for (const corner of pianoSheetCorners()) {
       corners.push(...applyTransform(place, applyTransform(piano.at, corner)));
     }
+    music.push({ kind: 'part', readers: [index] });
   }
   if (layout.conductor) {
     const desk = CONDUCTOR_STAND;
@@ -823,9 +852,10 @@ export function buildSheets(layout: SceneLayout, models: ModelCache): Float32Arr
         halfHeight: SCORE_PAGE.halfHeight,
       });
       corners.push(...page.flat());
+      music.push({ kind: 'score', page: sign < 0 ? 0 : 1 });
     }
   }
-  return new Float32Array(corners);
+  return { corners: new Float32Array(corners), music };
 }
 
 /**

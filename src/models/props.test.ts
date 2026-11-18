@@ -221,7 +221,7 @@ describe('buildSceneProps', () => {
       player([0, 0.25, -2], 0, 'riser'),
       player([-1, 0, 0], 0, 'stool'),
     ],
-    stands: [{ position: [-1, 0, -1], facing: 0, deskHeight: 1.05 }],
+    stands: [{ position: [-1, 0, -1], facing: 0, deskHeight: 1.05, readers: [] }],
     risers: [{ level: 0, radius: 5, height: 0.25, halfAngle: 0.3 }],
   };
 

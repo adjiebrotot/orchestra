@@ -162,7 +162,7 @@ function decalTexture(canvas: HTMLCanvasElement): CanvasTexture {
 }
 
 /**
- * Makes a copy of the shared material with a texture, as the sheets do (`createSheetMesh()`), so
+ * Makes a copy of the shared material with a texture, as the sheets do (`createSheetPrint()`), so
  * the light, the pool, and the finish stay. The parts of the texture with no color are holes.
  *
  * @param shared The shared material.

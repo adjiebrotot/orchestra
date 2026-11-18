@@ -88,7 +88,9 @@ import type { HeadPoints, PlayerSpot } from './player.ts';
 import { createPoseCull, markNeeded } from './pose-cull.ts';
 import type { PoseCull } from './pose-cull.ts';
 import { setBandViewHeight } from './harp-strings.ts';
-import { createSheetMesh } from './sheets.ts';
+import type { Score } from '../score/types.ts';
+import { createSheetPrint } from './sheets.ts';
+import type { SheetPrint, SheetTitles } from './sheets.ts';
 import { NO_PROP_DRESSING, PropDecor } from './prop-dressing.ts';
 import type { DressingParts, PropDressing } from './prop-dressing.ts';
 import { PostPipeline, targetFormatOf } from './post.ts';
@@ -578,6 +580,10 @@ export class StageScene {
    * them, so a new text shows at once on the shown stage.
    */
   readonly stageText: StageTextUniforms = noStageTextUniforms();
+  /** The title and the subtitle on the first page of the sheets (design 4.5, sheet music). */
+  #sheetTitles: SheetTitles = { title: '', subtitle: '' };
+  /** The printed music of the shown layout and of a build, until their dispose. */
+  readonly #sheetPrints = new Set<SheetPrint>();
   /** The look of the stage in the stage style (design 4.5, stage style). */
   #stageLook: StageLook = CLASSIC_LOOK;
   /**
@@ -635,9 +641,10 @@ export class StageScene {
    *
    * @param layout The positions of the stage, the players, and the stands.
    * @param models The player models of the score, which the layout and the pose plan share.
+   * @param score The score, whose parts the sheets print (design 4.5, sheet music).
    * @returns The steps, which return the scene of the layout.
    */
-  *prepareSteps(layout: SceneLayout, models: ModelCache): Steps<PreparedLayout> {
+  *prepareSteps(layout: SceneLayout, models: ModelCache, score: Score): Steps<PreparedLayout> {
     this.#discardPending();
     yield* this.#postSteps();
     this.#environment ??= yield* createEnvironmentSteps(
@@ -680,9 +687,19 @@ export class StageScene {
     setRimLights(this.#rim, lights);
     yield;
     const props = createStaticMesh(buildSceneProps(layout), materials);
-    const sheets = createSheetMesh(buildSheets(layout, models), materials[0]);
+    const sheets = createSheetPrint(
+      buildSheets(layout, models),
+      layout,
+      score,
+      materials[0],
+      this.#sheetTitles,
+    );
     if (sheets) {
-      props.add(sheets);
+      props.add(sheets.mesh);
+      this.#sheetPrints.add(sheets);
+      sheets.mesh.material.addEventListener('dispose', () => {
+        this.#sheetPrints.delete(sheets);
+      });
     }
     scene.add(props);
     const spots = playerSpots(layout);
@@ -794,6 +811,19 @@ export class StageScene {
     }
     if (view.dressing.from !== this.#propDressing) {
       this.#attachDressing(view);
+    }
+  }
+
+  /**
+   * Sets the title and the subtitle on the first page of the sheets (design 4.5, sheet music),
+   * from the fields of the render panel. The shown layout and a build draw their pages again.
+   *
+   * @param titles The title and the subtitle.
+   */
+  setSheetTitles(titles: SheetTitles): void {
+    this.#sheetTitles = titles;
+    for (const print of this.#sheetPrints) {
+      print.draw(titles);
     }
   }
 
