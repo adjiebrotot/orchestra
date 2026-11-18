@@ -192,6 +192,11 @@ page starts in Free mode (`app/camera-mode.ts`).
   to the front, and a row to the back (4.5, seat geometry). A move to the back of the last row
   makes a new row. Each change builds the scene again behind the cover of the stage, and the music
   goes on. The choir has only its count. The page stores the settings.
+- **Studio on a phone.** On a phone width, the studio buttons fill one row across the top, and the
+  title moves below them. On a very narrow phone, the buttons are in two rows of two, so no label
+  is cut (`ui.css`). Each studio panel starts below the buttons and ends above the bar, and it scrolls
+  when it is too tall. While a panel is open, the title and the intro do not show, because they
+  were visible through the glass of the panel.
 - On a touch screen in portrait, the frame fills about a fifth of the screen height, so one line
   below it says "Turn the phone for a larger film." (`TURN_HINT_TEXT`). A portrait shot plan
   would break the rule of the same film on each screen, so the frame stays.
