@@ -2943,9 +2943,65 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   gap: 6px;
 }
 
-.stage-image-tools select {
+.stage-image-tools .combobox {
   flex: 1;
   min-width: 0;
+}
+
+.combobox {
+  position: relative;
+}
+
+.combobox-input {
+  width: 100%;
+}
+
+.combobox-input:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.combobox-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 5;
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  font-size: 13px;
+}
+
+.combobox-group {
+  padding: 6px 8px 2px;
+  color: var(--text-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.combobox-option {
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox-option:hover,
+.combobox-option.is-active {
+  background: var(--line);
+}
+
+.combobox-empty {
+  padding: 6px 8px;
+  color: var(--text-dim);
 }
 
 .stage-section > .director-button.is-danger {
