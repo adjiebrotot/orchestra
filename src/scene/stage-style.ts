@@ -1,8 +1,14 @@
 /**
- * The stage styles (design 4.5, stage style): each style sets the look of the stage dressing (the
- * poles, the rods, the batten, the cloth, and the screen) and the colors of the stage lights. The
- * style "Classic hall" keeps the values of `BACKDROP` and of `scene/lights.ts`.
+ * The stage styles (design 4.5, stage style): each style sets the look of the stage itself (the
+ * boards, the edge, the skirt, the podium, and the finish), the stage dressing (the poles, the
+ * rods, the batten, the cloth, and the screen), and the colors of the stage lights. The style
+ * "Classic hall" keeps the values of `BACKDROP`, of `scene/lights.ts`, and of `scene/stage.ts`.
  */
+
+import { srgb } from '../models/mesh.ts';
+import type { StageColors } from '../models/stage.ts';
+import { CLASSIC_LOOK, STAGE_FINISH } from './stage.ts';
+import type { StageLook } from './stage.ts';
 
 /** A stage style. */
 export type StageStyleId = 'classic' | 'gala' | 'midnight' | 'festival' | 'modern';
@@ -47,12 +53,175 @@ export interface LightStyle {
   readonly exposure: number;
 }
 
-/** One stage style: its label, the look of the dressing, and the lights. */
+/** One stage style: its label, the look of the stage and the dressing, and the lights. */
 export interface StageStyle {
   readonly label: string;
+  readonly stage: StageLook;
   readonly dressing: DressingStyle;
   readonly light: LightStyle;
 }
+
+/**
+ * Gives the linear colors of the stage parts from sRGB colors.
+ *
+ * @param hex The sRGB colors.
+ * @returns The linear colors.
+ */
+function stageColors(hex: Readonly<Record<keyof StageColors, string>>): StageColors {
+  return {
+    plank: srgb(hex.plank),
+    seam: srgb(hex.seam),
+    nosing: srgb(hex.nosing),
+    skirt: srgb(hex.skirt),
+    groove: srgb(hex.groove),
+    podium: srgb(hex.podium),
+    podiumPanel: srgb(hex.podiumPanel),
+    podiumTop: srgb(hex.podiumTop),
+    podiumTopPanel: srgb(hex.podiumTopPanel),
+  };
+}
+
+/**
+ * Royal gala: a basket weave of mahogany parquet under a high lacquer, a gilded molded edge, and a
+ * crimson skirt.
+ */
+const GALA_STAGE: StageLook = {
+  build: {
+    colors: stageColors({
+      plank: '#7c3519',
+      seam: '#4a1c0a',
+      nosing: '#b08a3a',
+      skirt: '#4c1418',
+      groove: '#2a080b',
+      podium: '#5c2216',
+      podiumPanel: '#481810',
+      podiumTop: '#a8823a',
+      podiumTopPanel: '#6e2c16',
+    }),
+    floor: 'parquet',
+    plankWidth: 0.15,
+    plankLength: { min: 0.6, extra: 0 },
+    plankTone: 0.14,
+    edge: 'molded',
+    skirt: { panel: 0.8, groove: 0.05 },
+  },
+  finish: {
+    ...STAGE_FINISH,
+    roughness: 0.45,
+    grain: 0.12,
+    clearcoat: 0.38,
+    clearcoatRoughness: 0.22,
+    sideGlow: 0.9,
+  },
+};
+
+/**
+ * Midnight blue: narrow planks of a dark blue stain under a glossy lacquer, a low bevel of silver,
+ * and a dark blue skirt.
+ */
+const MIDNIGHT_STAGE: StageLook = {
+  build: {
+    colors: stageColors({
+      plank: '#3c4458',
+      seam: '#1c2230',
+      nosing: '#9aa6bc',
+      skirt: '#141c2e',
+      groove: '#090e1a',
+      podium: '#28324a',
+      podiumPanel: '#1c2438',
+      podiumTop: '#566484',
+      podiumTopPanel: '#3a4560',
+    }),
+    floor: 'planks',
+    plankWidth: 0.1,
+    plankLength: { min: 1.4, extra: 1.6 },
+    plankTone: 0.12,
+    edge: 'chamfer',
+    skirt: { panel: 0.3, groove: 0.02 },
+  },
+  finish: {
+    ...STAGE_FINISH,
+    roughness: 0.32,
+    grain: 0.1,
+    specular: 0.6,
+    clearcoat: 0.3,
+    clearcoatRoughness: 0.26,
+    sideGlow: 1,
+  },
+};
+
+/**
+ * Festival: a grid of black stage decks of 1.2 m with a matte paint, an aluminium trim on a square
+ * edge, and a plain black skirt.
+ */
+const FESTIVAL_STAGE: StageLook = {
+  build: {
+    colors: stageColors({
+      plank: '#26262b',
+      seam: '#0b0b0d',
+      nosing: '#a4a6ae',
+      skirt: '#141417',
+      groove: '#0a0a0c',
+      podium: '#1c1c20',
+      podiumPanel: '#2a2a30',
+      podiumTop: '#34343a',
+      podiumTopPanel: '#1e1e22',
+    }),
+    floor: 'deck',
+    plankWidth: 1.2,
+    plankLength: { min: 1.2, extra: 0 },
+    plankTone: 0.05,
+    edge: 'square',
+    skirt: null,
+  },
+  finish: {
+    ...STAGE_FINISH,
+    roughness: 0.72,
+    grain: 0.03,
+    grainRoughness: 0.05,
+    specular: 0.5,
+    plankRoughness: 0.08,
+    plankGloss: 0.3,
+    clearcoat: 0.06,
+    clearcoatRoughness: 0.5,
+    sideGlow: 1.2,
+  },
+};
+
+/**
+ * Modern white: wide planks of pale ash with a matte oil, a square edge, a white skirt with no
+ * panels, and a white podium.
+ */
+const MODERN_STAGE: StageLook = {
+  build: {
+    colors: stageColors({
+      plank: '#a88c68',
+      seam: '#6e5a40',
+      nosing: '#dcdad6',
+      skirt: '#cfcfcc',
+      groove: '#a8a8a5',
+      podium: '#d6d6d3',
+      podiumPanel: '#c4c4c1',
+      podiumTop: '#b09470',
+      podiumTopPanel: '#9e8460',
+    }),
+    floor: 'planks',
+    plankWidth: 0.2,
+    plankLength: { min: 1.8, extra: 1.8 },
+    plankTone: 0.1,
+    edge: 'square',
+    skirt: null,
+  },
+  finish: {
+    ...STAGE_FINISH,
+    roughness: 0.72,
+    grain: 0.1,
+    specular: 0.3,
+    clearcoat: 0.04,
+    clearcoatRoughness: 0.5,
+    sideGlow: 0.35,
+  },
+};
 
 /**
  * The stage styles, in the order of the menu. "Classic hall" has the values of `BACKDROP` and of
@@ -60,7 +229,8 @@ export interface StageStyle {
  */
 export const STAGE_STYLES: Readonly<Record<StageStyleId, StageStyle>> = {
   classic: {
-    label: 'Classic hall: warm amber light, chrome poles',
+    label: 'Classic hall: walnut planks, warm amber light, chrome poles',
+    stage: CLASSIC_LOOK,
     dressing: {
       metal: '#b9b6b0',
       dark: '#1b1714',
@@ -83,7 +253,8 @@ export const STAGE_STYLES: Readonly<Record<StageStyleId, StageStyle>> = {
     },
   },
   gala: {
-    label: 'Royal gala: gold poles, crimson frame, golden light',
+    label: 'Royal gala: mahogany parquet, gilded edge, gold poles, golden light',
+    stage: GALA_STAGE,
     dressing: {
       metal: '#d9b25c',
       dark: '#3a1216',
@@ -106,7 +277,8 @@ export const STAGE_STYLES: Readonly<Record<StageStyleId, StageStyle>> = {
     },
   },
   midnight: {
-    label: 'Midnight blue: silver poles, cool moonlight',
+    label: 'Midnight blue: blue-stained planks, silver poles, cool moonlight',
+    stage: MIDNIGHT_STAGE,
     dressing: {
       metal: '#cdd6e4',
       dark: '#0d1424',
@@ -129,7 +301,8 @@ export const STAGE_STYLES: Readonly<Record<StageStyleId, StageStyle>> = {
     },
   },
   festival: {
-    label: 'Festival: black truss, magenta and cyan wash, bright screen',
+    label: 'Festival: black stage decks, black truss, magenta and cyan wash',
+    stage: FESTIVAL_STAGE,
     dressing: {
       metal: '#2b2b30',
       dark: '#121216',
@@ -152,7 +325,8 @@ export const STAGE_STYLES: Readonly<Record<StageStyleId, StageStyle>> = {
     },
   },
   modern: {
-    label: 'Modern white: matte white poles, neutral daylight',
+    label: 'Modern white: pale ash planks, white skirt and poles, daylight',
+    stage: MODERN_STAGE,
     dressing: {
       metal: '#e4e4e2',
       dark: '#232325',

@@ -1,7 +1,6 @@
 import { Group, Mesh, MeshPhysicalMaterial, ShaderChunk, Vector3, Vector4 } from 'three';
 import type { Texture } from 'three';
 
-import { STAGE_COLORS } from '../models/props.ts';
 import type { Vec3 } from '../models/tuples.ts';
 import {
   PODIUM_FROM_FRONT,
@@ -9,8 +8,10 @@ import {
   STAGE_CORNER_CUT,
   STAGE_LIP,
   STAGE_THICKNESS,
+  CLASSIC_STAGE,
   buildStage,
 } from '../models/stage.ts';
+import type { StageBuild } from '../models/stage.ts';
 import { createGeometry } from './geometry.ts';
 import { shadowChunkWithSamples } from './shadow-chunk.ts';
 import { addLightPool } from './light-pool.ts';
@@ -80,6 +81,99 @@ export const SIDE_GLOW = {
   /** The part of the light that the corners lose. */
   fade: 0.6,
 } as const;
+
+/** The look of the stage of the reference images: walnut planks under a thin lacquer. */
+export const CLASSIC_LOOK: StageLook = {
+  build: CLASSIC_STAGE,
+  finish: { ...STAGE_FINISH, sideGlow: 1 },
+};
+
+/** The finish of the stage top in one stage style: the values of {@link STAGE_FINISH}. */
+export interface StageFinish {
+  readonly roughness: number;
+  readonly grain: number;
+  readonly grainRoughness: number;
+  readonly specular: number;
+  readonly plankRoughness: number;
+  readonly plankGloss: number;
+  readonly seamGloss: number;
+  readonly clearcoat: number;
+  readonly clearcoatRoughness: number;
+  /** The factor of the baked light of the skirt and the edge ({@link SIDE_GLOW}). */
+  readonly sideGlow: number;
+}
+
+/** The look of the stage in one stage style (design 4.5, stage style): the build and the finish. */
+export interface StageLook {
+  readonly build: StageBuild;
+  readonly finish: StageFinish;
+}
+
+/**
+ * The uniforms of the finish of the stage. The stage of each layout shares them, so a new stage
+ * style shows at once on the shown stage.
+ */
+export interface StageFinishUniforms {
+  readonly uGrain: { value: number };
+  readonly uGrainRoughness: { value: number };
+  readonly uSpecular: { value: number };
+  readonly uSeamColor: { value: Vector3 };
+  /** The plank roughness, the plank gloss, and the seam gloss. */
+  readonly uPlank: { value: Vector3 };
+  /** The light of the skirt, the light of the edge, and the fade to the corners. */
+  readonly uSideGlow: { value: Vector3 };
+}
+
+/**
+ * Creates the uniforms of the finish of the classic stage.
+ *
+ * @returns New uniforms.
+ */
+export function classicFinishUniforms(): StageFinishUniforms {
+  const uniforms: StageFinishUniforms = {
+    uGrain: { value: 0 },
+    uGrainRoughness: { value: 0 },
+    uSpecular: { value: 0 },
+    uSeamColor: { value: new Vector3() },
+    uPlank: { value: new Vector3() },
+    uSideGlow: { value: new Vector3() },
+  };
+  setFinishUniforms(uniforms, CLASSIC_LOOK);
+  return uniforms;
+}
+
+/**
+ * Writes the finish and the seam color of a stage look to the uniforms.
+ *
+ * @param uniforms The uniforms.
+ * @param look The look of the stage.
+ */
+export function setFinishUniforms(uniforms: StageFinishUniforms, look: StageLook): void {
+  const { finish } = look;
+  uniforms.uGrain.value = finish.grain;
+  uniforms.uGrainRoughness.value = finish.grainRoughness;
+  uniforms.uSpecular.value = finish.specular;
+  uniforms.uSeamColor.value.set(...look.build.colors.seam);
+  uniforms.uPlank.value.set(finish.plankRoughness, finish.plankGloss, finish.seamGloss);
+  uniforms.uSideGlow.value.set(
+    SIDE_GLOW.skirt * finish.sideGlow,
+    SIDE_GLOW.edge * finish.sideGlow,
+    SIDE_GLOW.fade,
+  );
+}
+
+/**
+ * Sets the material values of the finish of a stage look on a stage material. The uniforms of
+ * {@link setFinishUniforms} hold the other values.
+ *
+ * @param material The stage material.
+ * @param finish The finish.
+ */
+export function setFinishMaterial(material: MeshPhysicalMaterial, finish: StageFinish): void {
+  material.roughness = finish.roughness;
+  material.clearcoat = finish.clearcoat;
+  material.clearcoatRoughness = finish.clearcoatRoughness;
+}
 
 /**
  * The GLSL of the grain: a value noise, stretched along x, the direction of the planks. It needs
@@ -151,7 +245,7 @@ float plankNumber(vec3 color) {
   return fract(sin(dot(color, vec3(1271.1, 3117.7, 7451.3))) * 43758.5453);
 }
 
-// 1 on the dark line between two planks, which has the color STAGE_COLORS.seam, else 0.
+// 1 on the dark line between two planks, which has the seam color of the style, else 0.
 float seamOf(vec3 color) {
   vec3 d = abs(color - uSeamColor);
   return 1.0 - step(1e-4, max(d.r, max(d.g, d.b)));
@@ -189,6 +283,16 @@ vec2 stageBakeAt(vec3 p, vec3 n) {
   // lines of it have no texel of their surface. With the rule of an overhang, the lines were dark,
   // and they broke into dashes.
   bool lipSlope = abs(n.y) < 0.9 && p.y < ${(STAGE_LIP.height + 0.001).toFixed(4)};
+  // The edge of a stage style can differ from the edge of the bake (design 4.5, stage style). A
+  // top face of the edge with no texel of its surface reads the bake at its place.
+  vec2 edgeAbs = abs(p.xz);
+  float edgeIn = min(
+    uHalfSide - max(edgeAbs.x, edgeAbs.y),
+    (2.0 * uHalfSide - uCornerCut - edgeAbs.x - edgeAbs.y) * 0.70710678
+  );
+  if (n.y > 0.5 && edgeIn < ${(STAGE_LIP.width + 0.001).toFixed(4)}) {
+    return texture2D(uStageBake, p.xz / (2.0 * uHalfSide) + 0.5).rg;
+  }
   // Under an overhang, the key light does not reach the point, and half the sky does.
   if (abs(n.y) > 0.5 && !lipSlope) {
     return vec2(0.0, 0.5);
@@ -440,6 +544,7 @@ function liftedShadowVertex(): string {
  * @param podium The podium center, or `null` for a layout with no podium: the place of the text on
  *   the floor.
  * @param text The uniforms of the stage text (design 4.5, stage text).
+ * @param finish The uniforms of the finish of the stage style (design 4.5, stage style).
  * @returns The material.
  */
 export function createStageMaterial(
@@ -449,6 +554,7 @@ export function createStageMaterial(
   rim: RimUniforms | null = null,
   podium: Vec3 | null = null,
   text: StageTextUniforms = noStageTextUniforms(),
+  finish: StageFinishUniforms = classicFinishUniforms(),
 ): MeshPhysicalMaterial {
   const [textFloor, textFront, textWide] = stageTextBoxes(stageSide, podium);
   const material = new MeshPhysicalMaterial({
@@ -464,19 +570,13 @@ export function createStageMaterial(
     if (rim) {
       addRimLight(shader, rim, 'stage');
     }
-    shader.uniforms['uGrain'] = { value: STAGE_FINISH.grain };
-    shader.uniforms['uGrainRoughness'] = { value: STAGE_FINISH.grainRoughness };
+    shader.uniforms['uGrain'] = finish.uGrain;
+    shader.uniforms['uGrainRoughness'] = finish.uGrainRoughness;
     shader.uniforms['uHalfSide'] = { value: stageSide / 2 };
     shader.uniforms['uCornerCut'] = { value: STAGE_CORNER_CUT * stageSide };
-    shader.uniforms['uSpecular'] = { value: STAGE_FINISH.specular };
-    shader.uniforms['uSeamColor'] = { value: new Vector3(...STAGE_COLORS.seam) };
-    shader.uniforms['uPlank'] = {
-      value: new Vector3(
-        STAGE_FINISH.plankRoughness,
-        STAGE_FINISH.plankGloss,
-        STAGE_FINISH.seamGloss,
-      ),
-    };
+    shader.uniforms['uSpecular'] = finish.uSpecular;
+    shader.uniforms['uSeamColor'] = finish.uSeamColor;
+    shader.uniforms['uPlank'] = finish.uPlank;
     shader.uniforms['uStageBake'] = bake.uStageBake;
     shader.uniforms['uShadowLift'] = bake.uShadowLift;
     shader.uniforms['uStageBlur'] = bake.uStageBlur;
@@ -486,9 +586,7 @@ export function createStageMaterial(
     shader.uniforms['uStageTextFloor'] = { value: textFloor };
     shader.uniforms['uStageTextFront'] = { value: textFront };
     shader.uniforms['uStageTextWide'] = { value: textWide };
-    shader.uniforms['uSideGlow'] = {
-      value: new Vector3(SIDE_GLOW.skirt, SIDE_GLOW.edge, SIDE_GLOW.fade),
-    };
+    shader.uniforms['uSideGlow'] = finish.uSideGlow;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -530,6 +628,8 @@ export function createStageMaterial(
  * @param bake The uniforms of the bake of the static props.
  * @param rim The uniforms of the rim lights (design 4.5), or `null` for no rim lights.
  * @param text The uniforms of the stage text (design 4.5, stage text).
+ * @param look The look of the stage style (design 4.5, stage style).
+ * @param finish The uniforms of the finish, which hold the finish of the look.
  * @returns A group with the stage mesh. The mesh has its own material.
  */
 export function createStage(
@@ -539,11 +639,12 @@ export function createStage(
   bake: StageBakeUniforms = noBakeUniforms(),
   rim: RimUniforms | null = null,
   text: StageTextUniforms = noStageTextUniforms(),
+  look: StageLook = CLASSIC_LOOK,
+  finish: StageFinishUniforms = classicFinishUniforms(),
 ): Group {
-  const stage = new Mesh(
-    createGeometry(buildStage(stageSide, podium)),
-    createStageMaterial(stageSide, pool, bake, rim, podium, text),
-  );
+  const material = createStageMaterial(stageSide, pool, bake, rim, podium, text, finish);
+  setFinishMaterial(material, look.finish);
+  const stage = new Mesh(createGeometry(buildStage(stageSide, podium, look.build)), material);
   stage.castShadow = true;
   stage.receiveShadow = true;
   return new Group().add(stage);

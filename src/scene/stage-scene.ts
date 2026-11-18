@@ -6,6 +6,7 @@ import {
   Line,
   Matrix4,
   Mesh,
+  MeshPhysicalMaterial,
   PMREMGenerator,
   Points,
   Scene,
@@ -38,7 +39,7 @@ import type { CameraPose } from '../shots/types.ts';
 import { CINEMA_ASPECT } from '../shots/view.ts';
 import type { ModelCache } from '../models/model-cache.ts';
 import { buildSceneProps } from '../models/props.ts';
-import { STAGE_THICKNESS, buildSheets } from '../models/stage.ts';
+import { STAGE_THICKNESS, buildSheets, buildStage } from '../models/stage.ts';
 import type { Steps } from '../score/steps.ts';
 import { StageCamera } from './camera.ts';
 import { disposeTree } from './dispose.ts';
@@ -51,7 +52,7 @@ import {
 import type { CaptureOptions } from './environment.ts';
 import { FREE_LENS, focusOf, freeFocusDistance, freeFocusOf, heroFocusDepth } from './focus.ts';
 import type { Focus, FocusSpot, FocusView } from './focus.ts';
-import { createMaterials } from './geometry.ts';
+import { createGeometry, createMaterials } from './geometry.ts';
 import { createHall, setHallCamera } from './hall.ts';
 import { BeamDepth, setBeamFrame } from './beam.ts';
 import { setBodyMapScale } from './body-texture.ts';
@@ -99,7 +100,16 @@ import { freeShotLight, shotRig } from '../shots/shot-light.ts';
 import { gradeLutSteps } from './grade.ts';
 import { createRenderer } from './renderer.ts';
 import { aimGap, easeAim, easeShare, soloAim } from './solo-light.ts';
-import { STAGE_SHADOW, createStage, noBakeUniforms } from './stage.ts';
+import {
+  CLASSIC_LOOK,
+  STAGE_SHADOW,
+  classicFinishUniforms,
+  createStage,
+  noBakeUniforms,
+  setFinishMaterial,
+  setFinishUniforms,
+} from './stage.ts';
+import type { StageLook } from './stage.ts';
 import { noStageTextUniforms } from './stage-text.ts';
 import type { StageTextUniforms } from './stage-text.ts';
 import { VariantMaterials } from './variants.ts';
@@ -338,6 +348,8 @@ interface LayoutView {
    * scene/post.ts).
    */
   readonly depthParts: readonly Object3D[];
+  /** The stage mesh, which a new stage style builds again (design 4.5, stage style). */
+  readonly stage: Mesh | null;
   /** The bake of the static props, or `null` for a GPU with no target of floats (design 4.5). */
   readonly bake: LayoutBake | null;
   /** The captured environment, or `null` for a GPU with no target of floats (design 4.5). */
@@ -566,6 +578,13 @@ export class StageScene {
    * them, so a new text shows at once on the shown stage.
    */
   readonly stageText: StageTextUniforms = noStageTextUniforms();
+  /** The look of the stage in the stage style (design 4.5, stage style). */
+  #stageLook: StageLook = CLASSIC_LOOK;
+  /**
+   * The uniforms of the finish of the stage style. The stage of each layout shares them, so a new
+   * style shows at once on the shown stage.
+   */
+  readonly #stageFinish = classicFinishUniforms();
 
   /**
    * Creates the renderer on a canvas. The scene shows nothing until {@link StageScene.show}.
@@ -649,6 +668,8 @@ export class StageScene {
       bakeUniforms,
       this.#rim,
       this.stageText,
+      this.#stageLook,
+      this.#stageFinish,
     );
     scene.add(stageGroup);
     yield;
@@ -730,6 +751,7 @@ export class StageScene {
         hall,
         effects: lightEffects(scene),
         depthParts: [stageGroup, props, playerGroup],
+        stage: stage ?? null,
         bake,
         capture,
         dressing,
@@ -824,6 +846,33 @@ export class StageScene {
   setLightStyle(style: LightStyle): void {
     this.#lightStyle = style;
     this.#restyleLights();
+  }
+
+  /**
+   * Sets the look of the stage of a stage style (design 4.5, stage style): the boards, the edge,
+   * the skirt, the podium, and the finish. The shown stage gets a new geometry at once. Its bake
+   * keeps the light of its build until the next build.
+   *
+   * @param look The look of the stage.
+   */
+  setStageLook(look: StageLook): void {
+    if (look === this.#stageLook) {
+      return;
+    }
+    this.#stageLook = look;
+    setFinishUniforms(this.#stageFinish, look);
+    const view = this.#view;
+    const stage = view?.stage;
+    if (!view || !stage) {
+      return;
+    }
+    const podium = view.layout.conductor ? view.layout.podium : null;
+    const old = stage.geometry;
+    stage.geometry = createGeometry(buildStage(view.stageSide, podium, look.build));
+    old.dispose();
+    if (stage.material instanceof MeshPhysicalMaterial) {
+      setFinishMaterial(stage.material, look.finish);
+    }
   }
 
   /**

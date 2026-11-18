@@ -58,17 +58,106 @@ export const STAGE_LIP = {
   drop: 0.06,
 } as const;
 
+/** The profile of the edge of the stage top (design 4.5, stage style). */
+export type StageEdge = 'lip' | 'molded' | 'chamfer' | 'square';
+
 /**
- * The profile of the lip ({@link STAGE_LIP}): each point is the distance in from the outline and
- * the height above the stage top, from the top of the skirt to the planks.
+ * The profiles of the edge ({@link STAGE_LIP}): each point is the distance in from the outline and
+ * the height above the stage top, from the top of the skirt to the planks. Each profile has the
+ * width and the drop of `STAGE_LIP`, so the stage shader finds the edge of each style.
  */
-const LIP_PROFILE: readonly (readonly [number, number])[] = [
-  [0, -STAGE_LIP.drop],
-  [0, STAGE_LIP.height - 0.02],
-  [0.02, STAGE_LIP.height],
-  [0.065, STAGE_LIP.height],
-  [STAGE_LIP.width, 0],
-];
+const EDGE_PROFILES: Readonly<Record<StageEdge, readonly (readonly [number, number])[]>> = {
+  /** The raised lip with a round top of `orchestra-latest.png`. */
+  lip: [
+    [0, -STAGE_LIP.drop],
+    [0, STAGE_LIP.height - 0.02],
+    [0.02, STAGE_LIP.height],
+    [0.065, STAGE_LIP.height],
+    [STAGE_LIP.width, 0],
+  ],
+  /** A taller molded lip with two steps, as the gilded edge of a gala stage. */
+  molded: [
+    [0, -STAGE_LIP.drop],
+    [0, 0.035],
+    [0.01, 0.058],
+    [0.025, 0.068],
+    [0.048, 0.068],
+    [0.058, 0.05],
+    [0.075, 0.05],
+    [STAGE_LIP.width, 0],
+  ],
+  /** A low bevel 1 cm above the stage top. */
+  chamfer: [
+    [0, -STAGE_LIP.drop],
+    [0, -0.012],
+    [0.025, 0.01],
+    [0.085, 0.01],
+    [STAGE_LIP.width, 0],
+  ],
+  /** A square edge, flush with the stage top, with a trim strip of the nosing color. */
+  square: [
+    [0, -STAGE_LIP.drop],
+    [0, 0],
+    [STAGE_LIP.width, 0],
+  ],
+};
+
+/** The pattern of the boards of the stage top (design 4.5, stage style). */
+export type StageFloor = 'planks' | 'parquet' | 'deck';
+
+/** The linear colors of the stage parts: the keys of `STAGE_COLORS` that the stage uses. */
+export type StageColors = Readonly<
+  Record<
+    | 'plank'
+    | 'seam'
+    | 'nosing'
+    | 'skirt'
+    | 'groove'
+    | 'podium'
+    | 'podiumPanel'
+    | 'podiumTop'
+    | 'podiumTopPanel',
+    Rgb
+  >
+>;
+
+/**
+ * The build of the stage in one stage style (design 4.5, stage style): the colors of the parts,
+ * the pattern of the boards, the profile of the edge, and the panels of the skirt. The outline of
+ * the stage and the height of the stage top stay the same in each style, so the layout and the
+ * seats do not change.
+ */
+export interface StageBuild {
+  /** The colors. The seam color must differ from each plank tone: the shader finds a seam by it. */
+  readonly colors: StageColors;
+  /**
+   * The pattern of the boards. `planks` are rows of staggered planks along x. `parquet` is a
+   * basket weave of square tiles, each of `boardCount` boards that turn 90 degrees from one tile to
+   * the next. `deck` is a grid of square stage decks of the plank length.
+   */
+  readonly floor: StageFloor;
+  /** The width of one board, in meters. */
+  readonly plankWidth: number;
+  /** The shortest board and the length that a board can add to it, in meters. */
+  readonly plankLength: { readonly min: number; readonly extra: number };
+  /** The largest change of the tone of one board from the mean color, as a factor. */
+  readonly plankTone: number;
+  /** The profile of the edge. */
+  readonly edge: StageEdge;
+  /** The panels of the skirt: a panel width and a groove between them, or `null` for none. */
+  readonly skirt: { readonly panel: number; readonly groove: number } | null;
+}
+
+/** The stage of the reference images: walnut planks, a raised lip, and a paneled skirt. */
+export const CLASSIC_STAGE: StageBuild = {
+  colors: STAGE_COLORS,
+  floor: 'planks',
+  plankWidth: PLANK_WIDTH,
+  plankLength: PLANK_LENGTH,
+  plankTone: PLANK_TONE,
+  edge: 'lip',
+  skirt: { panel: 0.5, groove: 0.03 },
+};
 
 /** A point on the stage top: x and z. */
 type FloorPoint = readonly [number, number];
@@ -153,9 +242,6 @@ export function keepsStageMargin(x: number, z: number, side: number, margin: num
   );
 }
 
-/** The panels of the skirt (the sides of the stage): a panel width and a groove between panels. */
-const SKIRT = { panel: 0.5, groove: 0.03 } as const;
-
 /**
  * The front distance `F` from the front edge of the stage to the podium center, with no piano
  * (design 4.5, stage origin).
@@ -228,16 +314,17 @@ export function plankHash(a: number, b: number): number {
 }
 
 /**
- * Gives the color of one plank: the mean plank color, lighter or darker by up to
- * {@link PLANK_TONE}.
+ * Gives the color of one plank: the mean plank color, lighter or darker by up to the tone of the
+ * build ({@link PLANK_TONE} on the classic stage).
  *
  * @param row The row of the plank, from the back.
  * @param index The plank in its row, from the left.
+ * @param build The build of the stage.
  * @returns The linear color.
  */
-export function plankColor(row: number, index: number): Rgb {
-  const tone = 1 + PLANK_TONE * (2 * plankHash(row, index) - 1);
-  const [r, g, b] = STAGE_COLORS.plank;
+export function plankColor(row: number, index: number, build: StageBuild = CLASSIC_STAGE): Rgb {
+  const tone = 1 + build.plankTone * (2 * plankHash(row, index) - 1);
+  const [r, g, b] = build.colors.plank;
   return [r * tone, g * tone, b * tone];
 }
 
@@ -342,8 +429,9 @@ function addTopPiece(
  * @param builder The builder.
  * @param from The start of the side, as x and z.
  * @param to The end of the side, as x and z.
+ * @param build The build of the stage.
  */
-function addSkirt(builder: MeshBuilder, from: FloorPoint, to: FloorPoint): void {
+function addSkirt(builder: MeshBuilder, from: FloorPoint, to: FloorPoint, build: StageBuild): void {
   const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
   const at = (d: number, y: number): Vec3 => [
     from[0] + ((to[0] - from[0]) * d) / length,
@@ -352,17 +440,18 @@ function addSkirt(builder: MeshBuilder, from: FloorPoint, to: FloorPoint): void 
   ];
   const bottom = -STAGE_THICKNESS;
   const top = -STAGE_LIP.drop;
-  const step = SKIRT.panel + SKIRT.groove;
+  const skirt = build.skirt ?? { panel: length, groove: 0 };
+  const step = skirt.panel + skirt.groove;
   for (let d = 0; d < length - 1e-9; d += step) {
-    const panelEnd = Math.min(d + SKIRT.panel, length);
+    const panelEnd = Math.min(d + skirt.panel, length);
     builder.add(quad(at(d, bottom), at(panelEnd, bottom), at(panelEnd, top), at(d, top)), {
-      color: STAGE_COLORS.skirt,
+      color: build.colors.skirt,
     });
     const grooveEnd = Math.min(d + step, length);
     if (grooveEnd > panelEnd) {
       builder.add(
         quad(at(panelEnd, bottom), at(grooveEnd, bottom), at(grooveEnd, top), at(panelEnd, top)),
-        { color: STAGE_COLORS.groove },
+        { color: build.colors.groove },
       );
     }
   }
@@ -433,24 +522,40 @@ function addCap(
  *
  * @param builder The builder.
  * @param side The stage side `S`, in meters.
+ * @param build The build of the stage.
  */
-function addSlab(builder: MeshBuilder, side: number): void {
+function addSlab(builder: MeshBuilder, side: number, build: StageBuild): void {
   const outline = stageOutline(side);
   for (let i = 0; i < outline.length; i++) {
-    addSkirt(builder, outline[i] ?? [0, 0], outline[(i + 1) % outline.length] ?? [0, 0]);
+    addSkirt(builder, outline[i] ?? [0, 0], outline[(i + 1) % outline.length] ?? [0, 0], build);
   }
-  addCap(builder, outline, -STAGE_THICKNESS, false, STAGE_COLORS.skirt);
+  addCap(builder, outline, -STAGE_THICKNESS, false, build.colors.skirt);
 
-  for (let k = 0; k + 1 < LIP_PROFILE.length; k++) {
-    const [d0, y0] = LIP_PROFILE[k] ?? [0, 0];
-    const [d1, y1] = LIP_PROFILE[k + 1] ?? [0, 0];
+  const profile = EDGE_PROFILES[build.edge];
+  for (let k = 0; k + 1 < profile.length; k++) {
+    const [d0, y0] = profile[k] ?? [0, 0];
+    const [d1, y1] = profile[k + 1] ?? [0, 0];
     addBand(
       builder,
       { points: stageOutline(side, d0), y: y0 },
       { points: stageOutline(side, d1), y: y1 },
-      STAGE_COLORS.nosing,
+      build.colors.nosing,
     );
   }
+}
+
+/**
+ * Gives the area of the boards inside the edge of the stage top.
+ *
+ * @param side The stage side `S`, in meters.
+ * @returns The area.
+ */
+function boardArea(side: number): PlankArea {
+  const [corner] = stageOutline(side, STAGE_LIP.width);
+  return {
+    half: side / 2 - STAGE_LIP.width,
+    diagonal: Math.abs(corner?.[0] ?? 0) + Math.abs(corner?.[1] ?? 0),
+  };
 }
 
 /**
@@ -460,47 +565,119 @@ function addSlab(builder: MeshBuilder, side: number): void {
  *
  * @param builder The builder.
  * @param side The stage side `S`, in meters.
+ * @param build The build of the stage.
  */
-function addPlanks(builder: MeshBuilder, side: number): void {
-  const inner = side / 2 - STAGE_LIP.width;
-  const [corner] = stageOutline(side, STAGE_LIP.width);
-  const area: PlankArea = {
-    half: inner,
-    diagonal: Math.abs(corner?.[0] ?? 0) + Math.abs(corner?.[1] ?? 0),
-  };
+function addPlanks(builder: MeshBuilder, side: number, build: StageBuild): void {
+  const area = boardArea(side);
+  const inner = area.half;
+  const seam = build.colors.seam;
+  const { min, extra } = build.plankLength;
   const half = PLANK_LINE_WIDTH / 2;
-  const rows = Math.ceil((2 * inner) / PLANK_WIDTH - 1e-9);
+  const rows = Math.ceil((2 * inner) / build.plankWidth - 1e-9);
   for (let row = 0; row < rows; row++) {
-    const z0 = -inner + row * PLANK_WIDTH;
-    const z1 = Math.min(z0 + PLANK_WIDTH, inner);
+    const z0 = -inner + row * build.plankWidth;
+    const z1 = Math.min(z0 + build.plankWidth, inner);
     const isLast = row === rows - 1;
     const plankZ0 = row === 0 ? z0 : z0 + half;
     const plankZ1 = isLast ? z1 : z1 - half;
     if (!isLast) {
-      addTopPiece(builder, [-inner, inner, plankZ1, z1 + half], area, STAGE_COLORS.seam);
+      addTopPiece(builder, [-inner, inner, plankZ1, z1 + half], area, seam);
     }
     // The first plank of a row starts at a staggered place, before the left edge.
-    let x0 = -inner - plankHash(row, -1) * (PLANK_LENGTH.min + PLANK_LENGTH.extra);
+    let x0 = -inner - plankHash(row, -1) * (min + extra);
     for (let index = 0; x0 < inner - 1e-9; index++) {
-      const x1 = x0 + PLANK_LENGTH.min + PLANK_LENGTH.extra * plankHash(row, index);
+      const x1 = x0 + min + extra * plankHash(row, index);
       const left = Math.max(x0, -inner);
       const right = Math.min(x1, inner);
       const plankLeft = x0 <= -inner ? left : left + half;
       const plankRight = x1 >= inner ? right : right - half;
       if (plankRight > plankLeft) {
         const rect = [plankLeft, plankRight, plankZ0, plankZ1] as const;
-        addTopPiece(builder, rect, area, plankColor(row, index));
+        addTopPiece(builder, rect, area, plankColor(row, index, build));
       }
       if (x1 < inner) {
         const rect = [plankRight, x1 + half, plankZ0, plankZ1] as const;
-        addTopPiece(builder, rect, area, STAGE_COLORS.seam);
+        addTopPiece(builder, rect, area, seam);
       }
       x0 = x1;
     }
   }
 }
 
-function addPodium(builder: MeshBuilder, podium: Vec3, stand = true): void {
+/**
+ * Adds one board of a grid of the stage top: the board, inset by half the width of a dark line,
+ * and the half lines around it. The half lines of two boards side by side make one line.
+ *
+ * @param builder The builder.
+ * @param rect The smallest and the largest x, then the smallest and the largest z, of the board
+ *   with its half lines.
+ * @param area The area of the boards.
+ * @param color The color of the board.
+ * @param seam The color of the dark lines.
+ */
+function addBoard(
+  builder: MeshBuilder,
+  rect: readonly [number, number, number, number],
+  area: PlankArea,
+  color: Rgb,
+  seam: Rgb,
+): void {
+  const [x0, x1, z0, z1] = rect;
+  const h = PLANK_LINE_WIDTH / 2;
+  addTopPiece(builder, [x0 + h, x1 - h, z0 + h, z1 - h], area, color);
+  addTopPiece(builder, [x0, x1, z0, z0 + h], area, seam);
+  addTopPiece(builder, [x0, x1, z1 - h, z1], area, seam);
+  addTopPiece(builder, [x0, x0 + h, z0 + h, z1 - h], area, seam);
+  addTopPiece(builder, [x1 - h, x1, z0 + h, z1 - h], area, seam);
+}
+
+/**
+ * Adds the boards of a grid on the stage top: a basket weave of parquet tiles, or a grid of square
+ * stage decks (`StageBuild.floor`). The grid has a line on the stage center, so it is symmetric
+ * from the left to the right.
+ *
+ * @param builder The builder.
+ * @param side The stage side `S`, in meters.
+ * @param build The build of the stage.
+ */
+function addGrid(builder: MeshBuilder, side: number, build: StageBuild): void {
+  const area = boardArea(side);
+  const parquet = build.floor === 'parquet';
+  const count = parquet ? Math.max(1, Math.round(build.plankLength.min / build.plankWidth)) : 1;
+  const tile = parquet ? count * build.plankWidth : build.plankLength.min;
+  const tiles = Math.ceil(area.half / tile);
+  for (let j = -tiles; j < tiles; j++) {
+    for (let i = -tiles; i < tiles; i++) {
+      const x0 = i * tile;
+      const z0 = j * tile;
+      const alongX = (i + j) % 2 === 0;
+      for (let k = 0; k < count; k++) {
+        const a = k * (tile / count);
+        const b = (k + 1) * (tile / count);
+        const rect = alongX
+          ? ([x0, x0 + tile, z0 + a, z0 + b] as const)
+          : ([x0 + a, x0 + b, z0, z0 + tile] as const);
+        const color = plankColor(j * 64 + k, i, build);
+        addBoard(builder, rect, area, color, build.colors.seam);
+      }
+    }
+  }
+}
+
+/**
+ * Builds the podium with cut corners and framed panels.
+ *
+ * @param builder The builder.
+ * @param podium The podium center.
+ * @param stand False for the podium alone, with no conductor stand.
+ * @param colors The colors of the stage parts.
+ */
+function addPodium(
+  builder: MeshBuilder,
+  podium: Vec3,
+  stand = true,
+  colors: StageColors = STAGE_COLORS,
+): void {
   const [px, , pz] = podium;
   const [w, h] = PODIUM_SIZE;
   const trim = PODIUM_TRIM;
@@ -509,12 +686,7 @@ function addPodium(builder: MeshBuilder, podium: Vec3, stand = true): void {
 
   // The body: a box with cut corners under the top plate.
   const bodyOutline = moved(insetOctagon(w / 2, trim.cut, trim.overhang), px, pz);
-  addBand(
-    builder,
-    { points: bodyOutline, y: 0 },
-    { points: bodyOutline, y: body },
-    STAGE_COLORS.podium,
-  );
+  addBand(builder, { points: bodyOutline, y: 0 }, { points: bodyOutline, y: body }, colors.podium);
 
   // A darker panel on each of the four main sides, inside a frame of the body color.
   for (let i = 0; i < bodyOutline.length; i += 2) {
@@ -530,7 +702,7 @@ function addPodium(builder: MeshBuilder, podium: Vec3, stand = true): void {
     const [from, to] = [trim.sideFrame, length - trim.sideFrame];
     const [low, high] = [trim.sideFrame, body - trim.sideFrame];
     builder.add(quad(at(from, low), at(to, low), at(to, high), at(from, high)), {
-      color: STAGE_COLORS.podiumPanel,
+      color: colors.podiumPanel,
     });
   }
 
@@ -540,19 +712,14 @@ function addPodium(builder: MeshBuilder, podium: Vec3, stand = true): void {
     builder,
     { points: plateOutline, y: body },
     { points: plateOutline, y: h },
-    STAGE_COLORS.podiumTop,
+    colors.podiumTop,
   );
-  addCap(builder, plateOutline, body, false, STAGE_COLORS.podiumTop);
+  addCap(builder, plateOutline, body, false, colors.podiumTop);
   const frameInner = moved(insetOctagon(w / 2, trim.cut, trim.topFrame), px, pz);
   const panel = moved(insetOctagon(w / 2, trim.cut, trim.topFrame + trim.groove), px, pz);
-  addBand(
-    builder,
-    { points: plateOutline, y: h },
-    { points: frameInner, y: h },
-    STAGE_COLORS.podiumTop,
-  );
-  addBand(builder, { points: frameInner, y: h }, { points: panel, y: h }, STAGE_COLORS.seam);
-  addCap(builder, panel, h, true, STAGE_COLORS.podiumTopPanel);
+  addBand(builder, { points: plateOutline, y: h }, { points: frameInner, y: h }, colors.podiumTop);
+  addBand(builder, { points: frameInner, y: h }, { points: panel, y: h }, colors.seam);
+  addCap(builder, panel, h, true, colors.podiumTopPanel);
 
   if (!stand) {
     return;
@@ -780,14 +947,23 @@ export function buildStandBanners(layout: SceneLayout, stands: BannerStands): Fl
  * @param podium The podium center of the layout, or `null` for a chamber group, which has no
  *   podium (design 4.2). The podium is 1.0 m behind the front edge, or further with a soloist
  *   (design 4.5, stage origin).
+ * @param build The build of the stage in the stage style (design 4.5, stage style).
  * @returns The mesh data. All vertices follow bone 0.
  */
-export function buildStage(stageSide: number, podium: Vec3 | null): MeshData {
+export function buildStage(
+  stageSide: number,
+  podium: Vec3 | null,
+  build: StageBuild = CLASSIC_STAGE,
+): MeshData {
   const builder = new MeshBuilder();
-  addSlab(builder, stageSide);
-  addPlanks(builder, stageSide);
+  addSlab(builder, stageSide, build);
+  if (build.floor === 'planks') {
+    addPlanks(builder, stageSide, build);
+  } else {
+    addGrid(builder, stageSide, build);
+  }
   if (podium) {
-    addPodium(builder, podium);
+    addPodium(builder, podium, true, build.colors);
   }
   return builder.build();
 }
