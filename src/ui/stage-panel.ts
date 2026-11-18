@@ -227,8 +227,9 @@ export class StagePanel {
   }
 
   /**
-   * Creates the section of the stage style: a menu that sets the look of the poles, the rods,
-   * the cloth, and the screen, and the colors of the stage lights (design 4.5, stage style).
+   * Creates the section of the stage style: a menu that sets the look of the stage, the poles,
+   * the rods, the cloth, and the screen, and the colors of the stage lights (design 4.5, stage
+   * style).
    *
    * @returns The section.
    */
@@ -239,7 +240,7 @@ export class StagePanel {
       createElement(
         'p',
         'render-hint',
-        'Sets the look of the banners, the flags, and the screen, and the color of the stage lights.',
+        'Sets the floor, the edge, the skirt, and the podium of the stage, the banners, the flags, the screen, and the color of the stage lights.',
       ),
       this.#row(
         'Style',
