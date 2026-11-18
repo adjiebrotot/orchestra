@@ -117,3 +117,35 @@ export function buildChoirFolder(): InstrumentModel {
     size: pieceSize(instrument),
   };
 }
+
+/** The margin of a logo inside the edges of a cover of the choir folder, in meters. */
+const LOGO_MARGIN = 0.02;
+
+/** The gap of a logo in front of the outer face of a cover, in meters. */
+const LOGO_GAP = 0.0015;
+
+/**
+ * Gives the corners of a logo on the outer face of a cover of the choir folder (design 4.5,
+ * folder logo), in the axes of the folder piece. The logo keeps the aspect of its image and fits
+ * inside the cover with a margin.
+ *
+ * @param side -1 for the front cover, at the left of the singer, or 1 for the back cover.
+ * @param aspect The height over the width of the image.
+ * @returns The corners at the lower left, the lower right, the upper right, and the upper left, as
+ *   a viewer in front of the singer sees the cover.
+ */
+export function folderLogoCorners(side: -1 | 1, aspect: number): [Vec3, Vec3, Vec3, Vec3] {
+  const f = CHOIR_FOLDER;
+  const roomW = f.width - 2 * LOGO_MARGIN;
+  const roomH = f.height - 2 * LOGO_MARGIN;
+  const fit = Math.min(roomW, roomH / Math.max(0.05, aspect));
+  const hw = fit / 2;
+  const hh = (fit * aspect) / 2;
+  const turn = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), -side * f.open);
+  const cx = (side * f.width) / 2;
+  const z = -0.003 - LOGO_GAP;
+  // A viewer at -z sees the +x side at the left.
+  const corner = (x: number, y: number): Vec3 =>
+    toVec3(new Vector3(cx + x, y, z).applyQuaternion(turn));
+  return [corner(hw, -hh), corner(-hw, -hh), corner(-hw, hh), corner(hw, hh)];
+}

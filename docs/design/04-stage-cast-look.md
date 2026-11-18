@@ -1494,7 +1494,11 @@ show country flags, which `scene/country-flags.ts` draws on a canvas at any aspe
   its mirrored back.
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
   inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide
-  shot shows no moire.
+  shot shows no moire. The screen also shows a video of the user (a `vid:` id, `VideoTexture`).
+  The video plays with no sound in a loop. Its time is the song time since the cue that brought
+  it on, modulo its length (`SCREEN_VIDEO` of `scene/backdrop.ts`). Thus a seek, a pause, and a
+  change of the speed keep it in step: a pause holds its frame, and a gap of more than
+  `SCREEN_VIDEO.drift` seeks it. Only the screen lists take a video.
 
 The rules of the layout:
 
@@ -1523,7 +1527,8 @@ The rules of the layout:
   cue fades over `SCREEN_FADE_SEC`, or cuts. Before the first cue, the screen shows the first image
   of its list.
 - The settings stay in the local storage. The images of the user stay in IndexedDB, at most
-  `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). No image leaves the browser (2.7).
+  `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). A video stays as its own file,
+  at most `VIDEO_MAX_BYTES`. No image or video leaves the browser (2.7).
 
 **Stage style**
 
@@ -1566,6 +1571,41 @@ and the letters.
 - The tones are a pale inlay, a dark stain, and a gold leaf (`STAGE_TEXT.floorTint`,
   `STAGE_TEXT.frontTint`). The skirt is darker than the planks, so its factors are larger.
 - A change of the text draws only the texture again, so each key shows at once.
+
+**Stand banner**
+
+The stand banner is a cloth over the desk of the music stands, as a lectern banner with a fringe
+(`STAND_BANNER` and `buildStandBanners()` of `models/stage.ts`, `scene/prop-dressing.ts`). The
+panel "Stage design" sets the stands (the conductor stand, the stands of the players, or all),
+the cloth color, the fringe, and one image.
+
+- The cloth has a short lip on the front of the desk, goes over the top edge, and hangs straight
+  down behind the desk, on the side away from the reader. The desk leans back, so the hanging
+  cloth stays clear of the desk and the post.
+- The banner has the aspect `STAND_BANNER.aspect`. On a low desk, the banner gets narrower, so
+  its lower edge stays `STAND_BANNER.floorGap` above the floor and the image keeps its aspect.
+- One canvas texture holds the front of the cloth with the image on its left half, and the back
+  on its right half. The image keeps its aspect above the fringe (`BANNER_ART`). The gaps between
+  the threads of the fringe are transparent, and the alpha test cuts them.
+- The banner is a copy of the shared material with the texture, as the printed music of the
+  sheets, so it takes the stage light and the shadows. It joins the props after the bake and the
+  capture of the layout, so a change of it later gives the same light as at the build.
+- The conductor stand faces the orchestra, so its banner faces the orchestra.
+
+**Folder logo**
+
+The folder logo is one image on the outer covers of the choir folders, which the audience sees
+(`folderLogoCorners()` of `models/instruments/folder.ts`, `scene/prop-dressing.ts`). The panel sets
+the covers (the front cover, at the left of the singer, or both covers) and the image.
+
+- The logo keeps the aspect of its image and fits inside the cover with a margin, a little in front
+  of its outer face.
+- The logo of each singer is a skinned mesh on the skeleton of the singer, with each corner on the
+  bone of the folder. Thus it moves with the folder in each pose. The skeleton computes its bone
+  matrices one time in each frame for both meshes (`FrameSkeleton`).
+- The transparent parts of a logo are holes (alpha test), so the folder shows around a logo with a
+  clear background.
+- The stand banner and the folder logo show only still images. A country flag draws flat.
 
 **Post effects**
 

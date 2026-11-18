@@ -8,7 +8,13 @@ import { pianoSheetCorners } from './instruments/piano.ts';
 import type { ModelCache } from './model-cache.ts';
 import { box, cylinder, quad } from './primitives.ts';
 import type { SceneLayout } from './layout.ts';
-import { STAGE_COLORS, addDesk, deskSheetCorners, standSheetCorners } from './props.ts';
+import {
+  MUSIC_STAND,
+  STAGE_COLORS,
+  addDesk,
+  deskSheetCorners,
+  standSheetCorners,
+} from './props.ts';
 
 /** The thickness of the stage slab (design 4.5, props). The floor is at y = -STAGE_THICKNESS. */
 export const STAGE_THICKNESS = 0.4;
@@ -653,6 +659,114 @@ export function buildSheets(layout: SceneLayout, models: ModelCache): Float32Arr
     }
   }
   return new Float32Array(corners);
+}
+
+/**
+ * The cloth banner on the desk of a music stand (design 4.5, stand banner), as a lectern banner:
+ * the cloth goes over the top edge of the desk and hangs straight down behind it, to the side
+ * away from the reader, with a fringe at its lower edge.
+ */
+export const STAND_BANNER = {
+  /** The width of the banner as a part of the width of the desk. */
+  width: 0.9,
+  /** The length of the hanging cloth over its width. */
+  aspect: 1.5,
+  /** The length of the lip on the front face of the desk, in meters. */
+  lip: 0.035,
+  /** The gap from the desk to the cloth, in meters. */
+  gap: 0.004,
+  /** The least height of the lower edge of the banner above the floor, in meters. */
+  floorGap: 0.15,
+} as const;
+
+/** The stands that carry a banner. */
+export interface BannerStands {
+  /** True for the stand of the conductor. */
+  readonly conductor: boolean;
+  /** True for the music stands of the players. */
+  readonly players: boolean;
+}
+
+/**
+ * Gives the three rows of corners of the banner on one desk, in the axes of its stand: the
+ * reader is at +z, and the desk leans back by its tilt (`buildMusicStand()`).
+ *
+ * @param desk The desk: its center height, its width, its depth, its thickness, and its tilt.
+ * @param desk.height The height of the middle of the desk above the floor.
+ * @param desk.width The width of the desk.
+ * @param desk.depth The depth of the desk, from its lower edge to its upper edge.
+ * @param desk.thickness The thickness of the desk plate.
+ * @param desk.tilt The tilt of the desk toward the reader.
+ * @returns 18 numbers: the left and the right corner of the lower edge, of the top edge, and of
+ *   the lip, as the audience behind the stand sees the left and the right.
+ */
+function bannerRows(desk: {
+  readonly height: number;
+  readonly width: number;
+  readonly depth: number;
+  readonly thickness: number;
+  readonly tilt: number;
+}): number[] {
+  const b = STAND_BANNER;
+  const turn = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), -desk.tilt);
+  const center = new Vector3(0, desk.height, 0);
+  const onDesk = (y: number, z: number): Vector3 =>
+    new Vector3(0, y, z).applyQuaternion(turn).add(center);
+  const edge = onDesk(desk.depth / 2 + b.gap, -desk.thickness / 2 - b.gap);
+  const lip = onDesk(desk.depth / 2 - b.lip, desk.thickness / 2 + b.gap);
+  const width = Math.min(desk.width * b.width, (edge.y - b.floorGap) / b.aspect);
+  const length = width * b.aspect;
+  const bottom = edge.clone().setY(edge.y - length);
+  const rows: number[] = [];
+  // The audience looks at the back of the desk, toward +z: its left is at +x.
+  for (const point of [bottom, edge, lip]) {
+    rows.push(width / 2, point.y, point.z, -width / 2, point.y, point.z);
+  }
+  return rows;
+}
+
+/**
+ * Gives the banners on the stands of a layout (design 4.5, stand banner).
+ *
+ * @param layout The layout of a score.
+ * @param stands The stands that carry a banner.
+ * @returns 18 numbers for each banner, in the world axes: the left and the right corner of its
+ *   lower edge, of the top edge of the desk, and of its lip on the front of the desk. The left is
+ *   the left of a viewer who looks at the back of the stand.
+ */
+export function buildStandBanners(layout: SceneLayout, stands: BannerStands): Float32Array {
+  const out: number[] = [];
+  const s = MUSIC_STAND;
+  if (stands.players) {
+    for (const at of layout.stands) {
+      const place = stagePlace(at.position, at.facing);
+      const rows = bannerRows({
+        height: at.deskHeight,
+        width: s.deskWidth,
+        depth: s.deskDepth,
+        thickness: 0.012,
+        tilt: s.tilt,
+      });
+      for (let i = 0; i < rows.length; i += 3) {
+        out.push(...applyTransform(place, [rows[i] ?? 0, rows[i + 1] ?? 0, rows[i + 2] ?? 0]));
+      }
+    }
+  }
+  if (stands.conductor && layout.conductor) {
+    const desk = CONDUCTOR_STAND;
+    const [px, , pz] = layout.podium;
+    const rows = bannerRows({
+      height: PODIUM_SIZE[1] + desk.deskHeight,
+      width: desk.deskWidth,
+      depth: desk.deskDepth,
+      thickness: 0.015,
+      tilt: desk.tilt,
+    });
+    for (let i = 0; i < rows.length; i += 3) {
+      out.push(px + (rows[i] ?? 0), rows[i + 1] ?? 0, pz - desk.forward + (rows[i + 2] ?? 0));
+    }
+  }
+  return new Float32Array(out);
 }
 
 /**

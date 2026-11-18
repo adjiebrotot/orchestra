@@ -2,7 +2,11 @@ import {
   ARRANGEMENTS,
   BACKDROP_LIMITS,
   BANNER_ASPECTS,
+  BANNER_CLOTHS,
   BANNER_CUTS,
+  BANNER_FRINGES,
+  BANNER_TARGETS,
+  FOLDER_COVERS,
   FLAG_STANDS,
   DEFAULT_BACKDROP,
   SCREEN_MATERIALS,
@@ -27,13 +31,15 @@ export interface PanelImage {
   readonly name: string;
   /** The URL of a small picture of the image. */
   readonly thumb: string;
+  /** True for a video, which only the screen shows. */
+  readonly video: boolean;
 }
 
 /** The actions of the stage panel. */
 export interface StagePanelActions {
   /** A change of the settings. */
   readonly onChange: (settings: BackdropSettings) => void;
-  /** New image files of the user. The promise gives their ids. */
+  /** New image or video files of the user. The promise gives their ids. */
   readonly onUpload: (files: readonly File[]) => Promise<string[]>;
   /** A click on "Delete" of an image of the user. */
   readonly onDelete: (id: string) => void;
@@ -47,20 +53,23 @@ export interface StagePanelActions {
 type BannerKey = 'standing' | 'hanging';
 
 /** The keys of the lists of images. */
-type ListKey = BannerKey | 'flags' | 'screen';
+type ListKey = BannerKey | 'flags' | 'screen' | 'stand' | 'folder';
 
-/** The most images of each list. */
+/** The most images of each list. A list of one image replaces its image. */
 const LIST_LIMITS: Readonly<Record<ListKey, number>> = {
   standing: BACKDROP_LIMITS.images,
   hanging: BACKDROP_LIMITS.images,
   flags: BACKDROP_LIMITS.flags,
   screen: BACKDROP_LIMITS.images,
+  stand: 1,
+  folder: 1,
 };
 
 /**
  * The panel "Stage design" (design 2.8, 4.5): the switches, the counts, the forms, and the
  * images of the standing banners, the hanging banners, the flags, and the screen behind the
- * stage. Each change applies at once and stays in the browser.
+ * stage, and of the banner on the music stands and the logo on the choir folders. Each change
+ * applies at once and stays in the browser.
  */
 export class StagePanel {
   readonly element: HTMLElement;
@@ -192,7 +201,7 @@ export class StagePanel {
       ),
       this.#section(
         'Screen',
-        'A screen above the back row. Change its image over time in the Camera director: click its Screen row.',
+        'A screen above the back row. It shows images or videos. A video plays with no sound, in step with the music. Change the image over time in the Camera director: click its Screen row.',
         s.screen.on,
         (on) => {
           this.#change({ ...this.#settings, screen: { ...s.screen, on } });
@@ -207,6 +216,8 @@ export class StagePanel {
           this.#row('Images', this.#images('screen')),
         ],
       ),
+      this.#standSection(),
+      this.#folderSection(),
       this.#uploadsSection(),
     );
     this.#body.scrollTop = scroll;
@@ -294,6 +305,77 @@ export class StagePanel {
             update({ size });
           }),
         ),
+      ],
+    );
+  }
+
+  /**
+   * Creates the section of the stand banner: a cloth over the desk of the music stands, with a
+   * fringe and an image, as a lectern banner.
+   *
+   * @returns The section.
+   */
+  #standSection(): HTMLElement {
+    const set = this.#settings.stand;
+    const update = (change: Partial<typeof set>): void => {
+      this.#change({ ...this.#settings, stand: { ...this.#settings.stand, ...change } });
+    };
+    return this.#section(
+      'Stand banner',
+      'A cloth banner over the desk of the music stands, with your logo. It hangs on the side away from the reader. The conductor stand faces the orchestra.',
+      set.on,
+      (on) => {
+        update({ on });
+      },
+      [
+        this.#row(
+          'Stands',
+          this.#select(BANNER_TARGETS, set.target, (target) => {
+            update({ target });
+          }),
+        ),
+        this.#row(
+          'Cloth',
+          this.#select(BANNER_CLOTHS, set.cloth, (cloth) => {
+            update({ cloth });
+          }),
+        ),
+        this.#row(
+          'Fringe',
+          this.#select(BANNER_FRINGES, set.fringe, (fringe) => {
+            update({ fringe });
+          }),
+        ),
+        this.#row('Image', this.#images('stand')),
+      ],
+    );
+  }
+
+  /**
+   * Creates the section of the folder logo: an image on the outer covers of the choir folders.
+   *
+   * @returns The section.
+   */
+  #folderSection(): HTMLElement {
+    const set = this.#settings.folder;
+    const update = (change: Partial<typeof set>): void => {
+      this.#change({ ...this.#settings, folder: { ...this.#settings.folder, ...change } });
+    };
+    return this.#section(
+      'Choir folder logo',
+      'A logo on the outer covers of the choir folders, which the audience sees. A logo with a clear background shows the folder around it.',
+      set.on,
+      (on) => {
+        update({ on });
+      },
+      [
+        this.#row(
+          'Covers',
+          this.#select(FOLDER_COVERS, set.covers, (covers) => {
+            update({ covers });
+          }),
+        ),
+        this.#row('Logo', this.#images('folder')),
       ],
     );
   }
@@ -541,6 +623,11 @@ export class StagePanel {
   #images(key: ListKey): HTMLElement {
     const box = createElement('div', 'stage-images');
     const list = this.#list(key);
+    const videos = key === 'screen';
+    const single = LIST_LIMITS[key] === 1;
+    /** Adds images to the list. A list of one image takes the last new image in place of its own. */
+    const addTo = (current: readonly string[], ids: readonly string[]): readonly string[] =>
+      single ? ids.slice(-1) : [...current, ...ids];
     const chips = createElement('div', 'stage-chips');
     for (const [i, id] of list.entries()) {
       const image = this.#actions.describe(id);
@@ -581,7 +668,15 @@ export class StagePanel {
     const tools = createElement('div', 'stage-image-tools');
     const add = createElement('select');
     add.setAttribute('aria-label', 'Add an image');
-    const first = createElement('option', '', 'Add a country flag or an image…');
+    const first = createElement(
+      'option',
+      '',
+      single
+        ? 'Choose a country flag or an image…'
+        : videos
+          ? 'Add a country flag, an image, or a video…'
+          : 'Add a country flag or an image…',
+    );
     first.value = '';
     add.append(first);
     const flags = createElement('optgroup');
@@ -592,10 +687,10 @@ export class StagePanel {
       flags.append(option);
     }
     add.append(flags);
-    const uploads = this.#actions.uploads();
+    const uploads = this.#actions.uploads().filter((image) => videos || !image.video);
     if (uploads.length > 0) {
       const own = createElement('optgroup');
-      own.label = 'Your images';
+      own.label = videos ? 'Your images and videos' : 'Your images';
       for (const image of uploads) {
         const option = createElement('option', '', image.name);
         option.value = image.id;
@@ -605,13 +700,13 @@ export class StagePanel {
     }
     add.addEventListener('change', () => {
       if (add.value) {
-        this.#setList(key, [...list, add.value]);
+        this.#setList(key, addTo(list, [add.value]));
       }
     });
     const file = createElement('input');
     file.type = 'file';
-    file.accept = 'image/*';
-    file.multiple = true;
+    file.accept = videos ? 'image/*,video/*' : 'image/*';
+    file.multiple = !single;
     file.hidden = true;
     file.addEventListener('change', () => {
       const files = [...(file.files ?? [])];
@@ -622,15 +717,15 @@ export class StagePanel {
       this.#actions
         .onUpload(files)
         .then((ids) => {
-          this.#setList(key, [...this.#list(key), ...ids]);
+          this.#setList(key, addTo(this.#list(key), ids));
         })
         .catch(reportError);
     });
-    const upload = this.#textButton('Upload image…', () => {
+    const upload = this.#textButton(videos ? 'Upload image or video…' : 'Upload image…', () => {
       file.click();
     });
     upload.classList.add('is-accent');
-    const full = list.length >= LIST_LIMITS[key];
+    const full = !single && list.length >= LIST_LIMITS[key];
     add.disabled = full;
     upload.disabled = full;
     tools.append(add, upload, file);
@@ -645,7 +740,7 @@ export class StagePanel {
    */
   #uploadsSection(): HTMLElement {
     const section = createElement('div', 'stage-section');
-    section.append(createElement('div', 'stage-section-head', 'Your images'));
+    section.append(createElement('div', 'stage-section-head', 'Your images and videos'));
     const uploads = this.#actions.uploads();
     const chips = createElement('div', 'stage-chips');
     for (const image of uploads) {
@@ -661,7 +756,8 @@ export class StagePanel {
           this.#actions.onDelete(image.id);
         }
       });
-      chip.append(picture, createElement('span', 'stage-chip-name', image.name), remove);
+      const label = image.video ? `${image.name} (video)` : image.name;
+      chip.append(picture, createElement('span', 'stage-chip-name', label), remove);
       chips.append(chip);
     }
     if (uploads.length === 0) {

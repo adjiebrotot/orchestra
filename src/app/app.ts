@@ -644,6 +644,9 @@ export class App {
       (style) => {
         scene.setLightStyle(STAGE_STYLES[style].light);
       },
+      (dressing) => {
+        scene.setPropDressing(dressing);
+      },
     );
     scene.setBackdrop(this.#backdrop.group);
     this.#orchestraPanel = new OrchestraPanel({
