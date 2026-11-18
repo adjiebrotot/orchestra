@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "ode-to-joy",
+    "title": "Ode to Joy",
+    "composer": "Ludwig van Beethoven",
+    "credit": "Theme from Symphony No. 9, IV (public domain). Orchestral arrangement written for this site (tools/write-ode-to-joy.ts).",
+    "lengthSec": 79
+  }
+]
