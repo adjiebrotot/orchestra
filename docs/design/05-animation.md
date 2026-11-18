@@ -1742,6 +1742,14 @@ uses a wide lens near the podium and looks up at the bear. It stands to one side
 the conductor. "Over the orchestra" stands high over the back rows, inside the back edge of the
 stage, and looks at the bear over the players (`ORCHESTRA_VIEW`).
 
+The group "Parts from behind" of the focus menu has one view for each seat (`part:<seat>`,
+`partCamera()` of `shots/part-view.ts`). The camera stands behind the reader of the stand of the
+seat, to the side of one shoulder and above its head, and looks at the printed part (4.5, sheet
+music). The search tries the turns and the rises of `PART_VIEW` in order, and keeps the first
+camera that is clear of the bodies and sees the sheet past each head. The focus stays on the
+sheet. A seat with no stand, such as the piano or the timpani, or with no clear camera, gets its
+normal close shot.
+
 **Bow shot.** A render with "Include the ending" (design 2.5, render) films the bow of the conductor (5.4).
 `withBowShot()` of `shots/bow-shot.ts` ends the plan, automatic or directed, with a low camera on
 the audience side that orbits around the podium (`BOW_SHOT`). It starts after the release of the
@@ -1857,7 +1865,10 @@ shows the main shot at its time, with no focus pull.
 
 - **Details.** The paws on the keys, the bow on the strings, the left paw of a violin or a viola,
   the paws of a woodwind, the harp strings, the slide of a trombone, the bell of the other brass,
-  the heads of the drums under the sticks, the bars, and the baton. The point comes from the play
+  the heads of the drums under the sticks, the bars, the baton, and the part on the stand of the
+  principal player of a seat (`part`, the part view of the camera director, `PART_VIEW`). The
+  part counts as a held detail, and its camera comes from `partCamera()` with no play pose,
+  because a stand does not move. The point comes from the play
   targets and the grips of the instrument (4.6). The keys and the bars take the
   place of the mean key of the notes of the insert. A cello or a double bass shows only its bow,
   because its left paw travels along the long neck, away from its grip.

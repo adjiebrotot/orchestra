@@ -3,6 +3,7 @@ import type { Json, ScreenCue } from '../scene/backdrop-settings.ts';
 import {
   CONDUCTOR_VIEWS,
   DIRECTOR_MOTIONS,
+  focusPart,
   focusSeat,
   isConductorFocus,
   isScenicFocus,
@@ -131,7 +132,7 @@ function isCue(value: unknown): value is DirectorCue {
   return (
     typeof cue['timeSec'] === 'number' &&
     typeof cue['focus'] === 'string' &&
-    (/^(wide|high|seat:\d+)$/u.test(cue['focus']) ||
+    (/^(wide|high|seat:\d+|part:\d+)$/u.test(cue['focus']) ||
       isScenicFocus(cue['focus']) ||
       isConductorFocus(cue['focus'])) &&
     DIRECTOR_MOTIONS.some(([motion]) => motion === cue['motion']) &&
@@ -549,7 +550,9 @@ export class Director {
   #focusLabel(focus: DirectorFocus): string {
     const seat = focusSeat(focus);
     if (seat !== null) {
-      return this.#piece?.rows.find((row) => row.seatIndex === seat)?.name ?? `Seat ${seat + 1}`;
+      const name =
+        this.#piece?.rows.find((row) => row.seatIndex === seat)?.name ?? `Seat ${seat + 1}`;
+      return focusPart(focus) === null ? name : `${name} part (from behind)`;
     }
     const named = [...SCENIC_MOVES, ...CONDUCTOR_VIEWS].find(([view]) => view === focus);
     if (named) {
@@ -594,7 +597,14 @@ export class Director {
         add(`seat:${row.seatIndex}`, row.name, seats);
       }
     }
-    select.append(views, conductor, scenic, seats);
+    const parts = createElement('optgroup');
+    parts.label = 'Parts from behind';
+    for (const row of this.#piece?.rows ?? []) {
+      if (row.onStage) {
+        add(`part:${row.seatIndex}`, `${row.name} part (from behind)`, parts);
+      }
+    }
+    select.append(views, conductor, scenic, seats, parts);
     return select;
   }
 
