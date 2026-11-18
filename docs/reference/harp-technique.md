@@ -188,10 +188,12 @@ The app does not follow these facts:
   the right shoulder joint, and not on the shoulder. The chest of the deer stands about 17 cm in
   front of its shoulder joints, so with the soundbox on the shoulder, the strings lay 15 to 19 cm
   further forward, out of the reach of its arms (derived from the body of the deer). The chest
-  touches the neck and the top of the soundbox: it goes up to 1.5 cm into the neck in 2 % of the
-  play (`pnpm body-clip harpist`).
-- **The tilt (section 2).** The harp stands upright (`HARP_PLACE.tilt`). The soundbox of the
-  model leans toward the player, and a tilt back puts the left paw of the deer into its body.
+  touches the neck and the top of the soundbox: it goes up to 1.0 cm into them, in no sample
+  over the limit (`pnpm body-clip harpist`).
+- **The tilt (section 2).** The harp stands almost upright, with a tilt of 1.5° away from the
+  player (`HARP_PLACE.tilt`). The soundbox of the model leans toward the player, and a tilt back
+  puts the left paw of the deer into its body. The small tilt away, with a shallow upper soundbox
+  and a thin end of the neck, keeps the chest and the right upper arm out of the harp.
 - **The reach (section 3).** The arms of the deer are short, also at 1.5 times the arms of the
   source mesh (42 cm), so the base stands near the stool, and the left hand plays only up to D4. A harpist reaches the column with the stretched left arm,
   and the left hand plays up to about C5.
