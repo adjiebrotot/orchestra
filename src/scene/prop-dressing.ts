@@ -71,7 +71,96 @@ const BANNER_ART = {
   threadStep: 4,
   /** The brightness of the back of the cloth against its front. */
   back: 0.78,
+  /** The width of one thread of the weave, in pixels. */
+  weaveThread: 3,
+  /** The dark of the edges of a thread, which makes the over and under of the weave. */
+  weaveDepth: 0.16,
+  /** The largest change of the brightness from one thread to the next (slubs). */
+  slub: 0.07,
+  /** The dark of the deepest fold of the hanging cloth. */
+  fold: 0.09,
+  /** The distance of the stitches of a hem from the edge of the cloth, in pixels. */
+  hem: 10,
 } as const;
+
+/**
+ * Gives a fixed value from 0 to 1 for an integer, so each build of the weave is the same.
+ *
+ * @param n The integer.
+ * @returns The value.
+ */
+function hash(n: number): number {
+  const value = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+/**
+ * Draws the stitches of the hems along the sides and the lower edge of one side of the cloth.
+ *
+ * @param context The context of the banner canvas.
+ * @param left The left edge of the side.
+ * @param clothBottom The lower edge of the cloth.
+ */
+function drawHems(context: CanvasRenderingContext2D, left: number, clothBottom: number): void {
+  const a = BANNER_ART;
+  context.save();
+  context.strokeStyle = 'rgba(0,0,0,0.22)';
+  context.lineWidth = 1.5;
+  context.setLineDash([6, 4]);
+  context.beginPath();
+  context.moveTo(left + a.hem, 0);
+  context.lineTo(left + a.hem, clothBottom - a.hem);
+  context.lineTo(left + a.width - a.hem, clothBottom - a.hem);
+  context.lineTo(left + a.width - a.hem, 0);
+  context.stroke();
+  context.restore();
+}
+
+/**
+ * Gives the cloth its weave and its folds: threads that go over and under, a small change of the
+ * brightness from thread to thread, and soft vertical folds that get deeper down the hanging
+ * cloth. The weave also goes over the printed image, as ink on a fabric.
+ *
+ * @param context The context of the banner canvas.
+ * @param clothBottom The lower edge of the cloth, above the fringe.
+ */
+function weaveCloth(context: CanvasRenderingContext2D, clothBottom: number): void {
+  const a = BANNER_ART;
+  const width = 2 * a.width;
+  const pixels = context.getImageData(0, 0, width, clothBottom);
+  const data = pixels.data;
+  const t = a.weaveThread;
+  const warpShade = new Float32Array(width);
+  const foldShade = new Float32Array(width);
+  for (let x = 0; x < width; x++) {
+    const local = x % a.width;
+    const thread = Math.floor(local / t);
+    const across = (local % t) / (t - 1) - 0.5;
+    const fold =
+      0.6 * Math.sin((2 * Math.PI * 2.3 * local) / a.width + 1.1) +
+      0.4 * Math.sin((2 * Math.PI * 5.2 * local) / a.width + 0.4);
+    warpShade[x] = (1 - a.weaveDepth * 4 * across * across) * (1 + a.slub * (hash(thread) - 0.5));
+    foldShade[x] = fold;
+  }
+  for (let y = 0; y < clothBottom; y++) {
+    const row = Math.floor(y / t);
+    const across = (y % t) / (t - 1) - 0.5;
+    const weftShade =
+      (1 - a.weaveDepth * 4 * across * across) * (1 + a.slub * (hash(row + 7919) - 0.5));
+    const hang = 0.35 + 0.65 * (y / clothBottom);
+    for (let x = 0; x < width; x++) {
+      const over = (Math.floor((x % a.width) / t) + row) % 2 === 0;
+      const shade =
+        (over ? (warpShade[x] ?? 1) : weftShade) *
+        (1 - a.fold * hang * (0.5 + 0.5 * (foldShade[x] ?? 0)));
+      const i = 4 * (y * width + x);
+      data[i] = (data[i] ?? 0) * shade;
+      data[i + 1] = (data[i + 1] ?? 0) * shade;
+      data[i + 2] = (data[i + 2] ?? 0) * shade;
+    }
+  }
+  context.putImageData(pixels, 0, 0);
+}
 
 /** The parts of a shown layout that the props of the dressing need. */
 export interface DressingParts {
@@ -104,7 +193,7 @@ function drawBanner(
   const canvas = document.createElement('canvas');
   canvas.width = 2 * a.width;
   canvas.height = a.height;
-  const context = canvas.getContext('2d');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
     return canvas;
   }
@@ -142,6 +231,9 @@ function drawBanner(
     const h = image.height * scale;
     context.drawImage(image, (a.width - w) / 2, boxTop + (boxH - h) / 2, w, h);
   }
+  drawHems(context, 0, clothBottom);
+  drawHems(context, a.width, clothBottom);
+  weaveCloth(context, clothBottom);
   return canvas;
 }
 
