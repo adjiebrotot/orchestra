@@ -47,6 +47,11 @@ of 23 June 2021 add one rule: no training or test of a machine learning model.
 
 ## 8.2 List
 
+This fork ships one demo, `ode-to-joy`: an arrangement of the theme of the finale of the Ninth
+Symphony of Beethoven that this repository wrote (`tools/write-ode-to-joy.ts`). The strings play
+the theme, and then the full orchestra plays it again. The table gives the demo list of
+Pawchestra, which a user can add with `demos/README.md`.
+
 | # | Hash id | Piece | Source | License | What it shows |
 |---|---|---|---|---|---|
 | 1 | `mozart-k191` | Mozart, Bassoon Concerto, mvt 3 | Mutopia 686 | public domain | Solo bassoon, oboes, horns, strings |
