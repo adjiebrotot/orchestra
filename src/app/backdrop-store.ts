@@ -16,13 +16,19 @@ const DATABASE = { name: 'orchestra-backdrop', version: 1, store: 'images' } as 
 /** The longest side of a stored image, in pixels. A banner or a screen needs no more. */
 export const IMAGE_MAX_SIDE = 1600;
 
-/** One image of the user, as the database keeps it. */
+/**
+ * The largest video file that the store keeps, in bytes. The browser can keep less: a video then
+ * stays for the visit.
+ */
+export const VIDEO_MAX_BYTES = 300 * 1024 * 1024;
+
+/** One image or video of the user, as the database keeps it. */
 export interface StoredImage {
-  /** The id: `img:<uuid>`. */
+  /** The id: `img:<uuid>` for an image, or `vid:<uuid>` for a video. */
   readonly id: string;
   /** The file name, for the list of the panel. */
   readonly name: string;
-  /** The image, as a PNG file. */
+  /** The image as a PNG file, or the video file as the user gave it. */
   readonly blob: Blob;
 }
 
@@ -185,4 +191,65 @@ export function canvasBlob(canvas: HTMLCanvasElement): Promise<Blob> {
       }
     }, 'image/png');
   });
+}
+
+/** A video of the user, ready to play on the screen. */
+export interface DecodedVideo {
+  /** The video element: muted, in a loop, and not in the page. */
+  readonly video: HTMLVideoElement;
+  /** One frame of the video, for the picture of the panel. */
+  readonly poster: HTMLCanvasElement;
+}
+
+/**
+ * Opens a video file for the screen (design 4.5, backdrop). The video plays with no sound, because
+ * the music comes from the score.
+ *
+ * @param blob The video file.
+ * @returns The video and one frame of it.
+ * @throws Error if the browser cannot play the file.
+ */
+export async function decodeVideo(blob: Blob): Promise<DecodedVideo> {
+  const video = document.createElement('video');
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.src = URL.createObjectURL(blob);
+  await new Promise<void>((resolve, reject) => {
+    video.addEventListener(
+      'loadeddata',
+      () => {
+        resolve();
+      },
+      { once: true },
+    );
+    video.addEventListener(
+      'error',
+      () => {
+        reject(new Error('The video could not be read.'));
+      },
+      { once: true },
+    );
+  });
+  // The first frame is often black: a frame a short time in shows the video better.
+  const at = Number.isFinite(video.duration) ? Math.min(0.5, video.duration / 2) : 0;
+  if (at > 0) {
+    await new Promise<void>((resolve) => {
+      video.addEventListener(
+        'seeked',
+        () => {
+          resolve();
+        },
+        { once: true },
+      );
+      video.currentTime = at;
+    });
+  }
+  const scale = Math.min(1, 320 / Math.max(1, video.videoWidth, video.videoHeight));
+  const poster = document.createElement('canvas');
+  poster.width = Math.max(1, Math.round(video.videoWidth * scale));
+  poster.height = Math.max(1, Math.round(video.videoHeight * scale));
+  poster.getContext('2d')?.drawImage(video, 0, 0, poster.width, poster.height);
+  return { video, poster };
 }

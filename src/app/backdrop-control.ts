@@ -1,8 +1,10 @@
 import type { Group } from 'three';
 
 import { Backdrop } from '../scene/backdrop.ts';
+import { isVideoId } from '../scene/backdrop-settings.ts';
 import type { BackdropSettings, ScreenCue } from '../scene/backdrop-settings.ts';
 import { FLAG_ASPECT, drawFlag, flagName } from '../scene/country-flags.ts';
+import type { PropDressing } from '../scene/prop-dressing.ts';
 import { StageText } from '../scene/stage-text.ts';
 import type { StageStyleId } from '../scene/stage-style.ts';
 import type { StageTextUniforms } from '../scene/stage-text.ts';
@@ -10,8 +12,10 @@ import type { ScreenImage } from '../ui/director.ts';
 import { StagePanel } from '../ui/stage-panel.ts';
 import type { PanelImage } from '../ui/stage-panel.ts';
 import {
+  VIDEO_MAX_BYTES,
   canvasBlob,
   decodeImage,
+  decodeVideo,
   deleteImage,
   loadBackdropSettings,
   loadImages,
@@ -22,12 +26,18 @@ import {
 /** The longest side of the picture of an image in the panel, in pixels. */
 const THUMB_SIDE = 96;
 
-/** An image of the user in memory. */
+/** The longest side of a country flag on a prop, in pixels. */
+const PROP_FLAG_SIDE = 640;
+
+/** An image or a video of the user in memory. */
 interface Upload {
   readonly name: string;
+  /** The image, or one frame of a video. */
   readonly canvas: HTMLCanvasElement;
   /** The URL of the small picture of the panel. */
   readonly thumb: string;
+  /** The video, or `null` for an image. */
+  readonly video: HTMLVideoElement | null;
 }
 
 /**
@@ -58,6 +68,7 @@ export class BackdropControl {
   readonly #flagThumbs = new Map<string, string>();
   readonly #onScreenImages: (images: readonly ScreenImage[]) => void;
   readonly #onStyle: (style: StageStyleId) => void;
+  readonly #onProps: (dressing: PropDressing) => void;
   #settings: BackdropSettings;
   #stageSide = 0;
 
@@ -70,20 +81,25 @@ export class BackdropControl {
    *   text).
    * @param onStyle Gets the stage style of the settings at the start and after each change, for
    *   the colors of the stage lights (design 4.5, stage style).
+   * @param onProps Gets the stand banner and the folder logo at the start and after each change
+   *   (design 4.5, stand banner and folder logo).
    */
   constructor(
     onScreenImages: (images: readonly ScreenImage[]) => void,
     stageText: StageTextUniforms,
     onStyle: (style: StageStyleId) => void,
+    onProps: (dressing: PropDressing) => void,
   ) {
     this.#onScreenImages = onScreenImages;
     this.#onStyle = onStyle;
+    this.#onProps = onProps;
     this.#settings = loadBackdropSettings();
     onStyle(this.#settings.style);
     this.#stageText = new StageText(stageText);
     this.#stageText.set(this.#settings.text);
     this.#backdrop = new Backdrop({
       canvasOf: (id) => this.#uploads.get(id)?.canvas ?? null,
+      videoOf: (id) => this.#uploads.get(id)?.video ?? null,
     });
     this.panel = new StagePanel({
       onChange: (settings) => {
@@ -94,10 +110,10 @@ export class BackdropControl {
         this.#delete(id).catch(reportError);
       },
       describe: (id) => this.#describe(id),
-      uploads: () =>
-        [...this.#uploads].map(([id, upload]) => ({ id, name: upload.name, thumb: upload.thumb })),
+      uploads: () => [...this.#uploads.keys()].flatMap((id) => this.#describe(id) ?? []),
     });
     this.panel.setSettings(this.#settings);
+    this.#tellProps();
     this.#readImages().catch(reportError);
   }
 
@@ -155,6 +171,43 @@ export class BackdropControl {
       this.#backdrop.build(this.#stageSide, settings);
       this.#tellScreen();
     }
+    if (settings.stand !== old.stand || settings.folder !== old.folder) {
+      this.#tellProps();
+    }
+  }
+
+  /** Tells the stage the stand banner and the folder logo, with their images. */
+  #tellProps(): void {
+    const { stand, folder } = this.#settings;
+    const standImage = stand.images[0];
+    const folderImage = folder.images[0];
+    const logo = folder.on && folderImage ? this.#propCanvas(folderImage) : null;
+    this.#onProps({
+      stand: stand.on
+        ? {
+            target: stand.target,
+            cloth: stand.cloth,
+            fringe: stand.fringe,
+            image: standImage ? this.#propCanvas(standImage) : null,
+          }
+        : null,
+      folder: logo ? { covers: folder.covers, image: logo } : null,
+    });
+  }
+
+  /**
+   * Gives the canvas of an image for a prop: a country flag, drawn flat, or an image of the user.
+   *
+   * @param id The image id.
+   * @returns The canvas, or `null` for an image that is not there or a video.
+   */
+  #propCanvas(id: string): HTMLCanvasElement | null {
+    const code = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    if (code) {
+      return drawFlag(code, PROP_FLAG_SIDE, Math.round(PROP_FLAG_SIDE * FLAG_ASPECT), false);
+    }
+    const upload = this.#uploads.get(id);
+    return upload && !upload.video ? upload.canvas : null;
   }
 
   /** Tells the camera director the images of the screen. */
@@ -181,59 +234,84 @@ export class BackdropControl {
         thumb = thumbOf(drawFlag(code, THUMB_SIDE, THUMB_SIDE * FLAG_ASPECT, false));
         this.#flagThumbs.set(code, thumb);
       }
-      return { id, name: flagName(code), thumb };
+      return { id, name: flagName(code), thumb, video: false };
     }
     const upload = this.#uploads.get(id);
-    return upload ? { id, name: upload.name, thumb: upload.thumb } : null;
+    return upload ? { id, name: upload.name, thumb: upload.thumb, video: !!upload.video } : null;
   }
 
-  /** Reads the stored images, then builds the dressing again with them. */
+  /** Reads the stored images and videos, then builds the dressing again with them. */
   async #readImages(): Promise<void> {
     const images = await loadImages();
-    const canvases = await Promise.all(
-      // A broken image stays out of the list.
-      images.map((image) => decodeImage(image.blob).catch(() => null)),
+    const uploads = await Promise.all(
+      // A broken image or video stays out of the list.
+      images.map((image) => this.#decode(image.id, image.name, image.blob).catch(() => null)),
     );
     for (const [i, image] of images.entries()) {
-      const canvas = canvases[i];
-      if (canvas) {
-        this.#uploads.set(image.id, { name: image.name, canvas, thumb: thumbOf(canvas) });
+      const upload = uploads[i];
+      if (upload) {
+        this.#uploads.set(image.id, upload);
       }
     }
     if (this.#uploads.size > 0) {
       this.#backdrop.rebuild();
       this.#tellScreen();
+      this.#tellProps();
       this.panel.refresh();
     }
   }
 
   /**
-   * Reads, stores, and adds image files of the user.
+   * Opens an image or a video file of the user.
+   *
+   * @param id The id: a `vid:` id opens a video.
+   * @param name The name.
+   * @param blob The file.
+   * @returns The upload.
+   */
+  async #decode(id: string, name: string, blob: Blob): Promise<Upload> {
+    if (isVideoId(id)) {
+      const { video, poster } = await decodeVideo(blob);
+      return { name, canvas: poster, thumb: thumbOf(poster), video };
+    }
+    const canvas = await decodeImage(blob);
+    return { name, canvas, thumb: thumbOf(canvas), video: null };
+  }
+
+  /**
+   * Reads, stores, and adds image and video files of the user. A file that the browser cannot
+   * read stays out.
    *
    * @param files The files.
-   * @returns The ids of the new images.
+   * @returns The ids of the new images and videos.
    */
   async #upload(files: readonly File[]): Promise<string[]> {
-    const images = files.filter((file) => file.type.startsWith('image/'));
-    const canvases = await Promise.all(images.map((file) => decodeImage(file)));
+    const kept = files.filter(
+      (file) =>
+        file.type.startsWith('image/') ||
+        (file.type.startsWith('video/') && file.size <= VIDEO_MAX_BYTES),
+    );
+    const named = kept.map((file) => ({
+      file,
+      id: `${file.type.startsWith('video/') ? 'vid' : 'img'}:${crypto.randomUUID()}`,
+      name: file.name.replace(/\.[^.]+$/u, '') || 'Image',
+    }));
+    const uploads = await Promise.all(
+      named.map(({ file, id, name }) => this.#decode(id, name, file).catch(() => null)),
+    );
     const ids: string[] = [];
     const saves: Promise<void>[] = [];
-    for (const [i, file] of images.entries()) {
-      const canvas = canvases[i];
-      if (!canvas) {
+    for (const [i, { file, id, name }] of named.entries()) {
+      const upload = uploads[i];
+      if (!upload) {
         continue;
       }
-      const id = `img:${crypto.randomUUID()}`;
-      const name = file.name.replace(/\.[^.]+$/u, '') || 'Image';
-      this.#uploads.set(id, { name, canvas, thumb: thumbOf(canvas) });
+      this.#uploads.set(id, upload);
       ids.push(id);
-      // The browser can keep no data, for example in a private window: the image then stays for
-      // the visit.
-      saves.push(
-        canvasBlob(canvas)
-          .then((blob) => saveImage({ id, name, blob }))
-          .catch(() => undefined),
-      );
+      // The browser can keep no data, for example in a private window: the file then stays for
+      // the visit. A video keeps its own file, and an image a PNG file of its canvas.
+      const blob = upload.video ? Promise.resolve<Blob>(file) : canvasBlob(upload.canvas);
+      saves.push(blob.then((data) => saveImage({ id, name, blob: data })).catch(() => undefined));
     }
     await Promise.all(saves);
     return ids;
@@ -245,8 +323,13 @@ export class BackdropControl {
    * @param id The image id.
    */
   async #delete(id: string): Promise<void> {
+    const video = this.#uploads.get(id)?.video;
     this.#uploads.delete(id);
     this.#backdrop.forget(id);
+    if (video) {
+      video.pause();
+      URL.revokeObjectURL(video.src);
+    }
     const s = this.#settings;
     const without = (images: readonly string[]): readonly string[] =>
       images.filter((image) => image !== id);
@@ -256,6 +339,8 @@ export class BackdropControl {
       hanging: { ...s.hanging, images: without(s.hanging.images) },
       flags: { ...s.flags, images: without(s.flags.images) },
       screen: { ...s.screen, images: without(s.screen.images) },
+      stand: { ...s.stand, images: without(s.stand.images) },
+      folder: { ...s.folder, images: without(s.folder.images) },
     });
     this.panel.setSettings(this.#settings);
     await deleteImage(id);
