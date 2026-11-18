@@ -476,7 +476,7 @@ const BODY_EYES: ReadonlyMap<number, number> = new Map([
  * @param bone The bone of the player.
  * @returns The index of the matrix.
  */
-function playerJoint(bone: number): number {
+export function playerJoint(bone: number): number {
   return BODY_EYES.get(bone) ?? BODY_BONES.length + bone;
 }
 
