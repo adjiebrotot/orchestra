@@ -643,6 +643,7 @@ export class App {
       scene.stageText,
       (style) => {
         scene.setLightStyle(STAGE_STYLES[style].light);
+        scene.setStageLook(STAGE_STYLES[style].stage);
       },
       (dressing) => {
         scene.setPropDressing(dressing);
