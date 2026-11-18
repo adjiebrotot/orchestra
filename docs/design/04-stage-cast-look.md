@@ -1532,7 +1532,12 @@ The rules of the layout:
 - Many logo files have no alpha: the transparent part is a baked grey and white checkerboard, or
   plain white. When an image has no transparent pixels and its border is light and neutral, the
   decode makes the light background that touches the border transparent, with soft edges
-  (`clearBakedBackground()` of `app/image-matte.ts`). The white parts inside the logo stay.
+  (`clearBakedBackground()` of `app/image-matte.ts`).
+- A checkerboard also goes where the logo encloses it. The matte finds the grid of the
+  checkerboard on the border: the tile side, the offsets, and the two grey levels. A region goes
+  when its pixels follow the grid with both levels. A white part of the logo does not follow the
+  grid, so it stays. A plain white background goes only where it touches the border, because a
+  white part of the logo has the same color.
 - A transparent part of an image shows the cloth color on a banner or a flag, and the dark
   screen on the screen. The textures have premultiplied alpha, so a filtered edge gets no dark
   fringe.
@@ -1623,6 +1628,11 @@ the cloth color, the fringe, and one image.
 - One canvas texture holds the front of the cloth with the image on its left half, and the back
   on its right half. The image keeps its aspect above the fringe (`BANNER_ART`). The gaps between
   the threads of the fringe are transparent, and the alpha test cuts them.
+- The cloth has a plain weave of threads `BANNER_ART.weaveThread` wide, a small change of the
+  brightness from thread to thread, soft vertical folds that get deeper down the cloth, and
+  stitched hems along the sides and the lower edge (`weaveCloth()`, `drawHems()`). The weave also
+  goes over the image, so the image reads as a print on the fabric. The mipmaps blend the weave
+  in a far shot.
 - The banner is a copy of the shared material with the texture, as the printed music of the
   sheets, so it takes the stage light and the shadows. It joins the props after the bake and the
   capture of the layout, so a change of it later gives the same light as at the build.
