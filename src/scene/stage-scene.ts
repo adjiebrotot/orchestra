@@ -88,6 +88,8 @@ import { createPoseCull, markNeeded } from './pose-cull.ts';
 import type { PoseCull } from './pose-cull.ts';
 import { setBandViewHeight } from './harp-strings.ts';
 import { createSheetMesh } from './sheets.ts';
+import { NO_PROP_DRESSING, PropDecor } from './prop-dressing.ts';
+import type { DressingParts, PropDressing } from './prop-dressing.ts';
 import { PostPipeline, targetFormatOf } from './post.ts';
 import type { HazeFrame, PostView, TargetFormat } from './post.ts';
 import { FRAME_VIGNETTE, POST_LOOK } from './post.ts';
@@ -338,6 +340,13 @@ interface LayoutView {
   readonly bake: LayoutBake | null;
   /** The captured environment, or `null` for a GPU with no target of floats (design 4.5). */
   readonly capture: LayoutCapture | null;
+  /** The banners and the logos of the prop dressing on the layout (design 4.5). */
+  readonly dressing: {
+    readonly parts: DressingParts;
+    /** The dressing of the objects. */
+    from: PropDressing;
+    objects: Object3D[];
+  };
 }
 
 /** The scene of a layout from {@link StageScene.prepareSteps}, ready to show. */
@@ -508,6 +517,9 @@ export class StageScene {
   readonly #materials = createMaterials(this.#pool, this.#shot, this.#rim);
   /** The copies of the shared material for each program variant of the players. */
   readonly #variants = new VariantMaterials(this.#materials);
+  /** The banners and the logos of the props (design 4.5, stand banner and folder logo). */
+  readonly #decor = new PropDecor(this.#materials[0]);
+  #propDressing: PropDressing = NO_PROP_DRESSING;
   #view: LayoutView | null = null;
   /** The build of a layout that does not show yet, or `null`. */
   #pending: PendingBuild | null = null;
@@ -648,7 +660,8 @@ export class StageScene {
       props.add(sheets);
     }
     scene.add(props);
-    const players = yield* createPlayersSteps(playerSpots(layout), materials, models);
+    const spots = playerSpots(layout);
+    const players = yield* createPlayersSteps(spots, materials, models);
     this.#variants.assign(players);
     const culled = yield* cullPlayersSteps(players);
     const playerGroup = new Group().add(...players);
@@ -687,6 +700,14 @@ export class StageScene {
           pending,
         )
       : null;
+    // The banners and the logos come after the bake and the capture, so a change of them later
+    // gives the same light as at the build.
+    const parts: DressingParts = { layout, models, spots, players, props };
+    const dressing = {
+      parts,
+      from: this.#propDressing,
+      objects: this.#decor.attach(parts),
+    };
     // The captured environment can give other programs to the materials that reflect it.
     yield* this.#compileSteps(scene, camera.camera, players);
     yield* this.#warmSteps(scene, camera.camera, players);
@@ -707,6 +728,7 @@ export class StageScene {
         depthParts: [stageGroup, props, playerGroup],
         bake,
         capture,
+        dressing,
       },
     };
   }
@@ -744,6 +766,34 @@ export class StageScene {
     if (this.#backdrop) {
       view.hall.add(this.#backdrop);
     }
+    if (view.dressing.from !== this.#propDressing) {
+      this.#attachDressing(view);
+    }
+  }
+
+  /**
+   * Sets the props that carry an image of the user: the stand banners and the folder logos
+   * (design 4.5). The shown layout changes at once.
+   *
+   * @param dressing The dressing.
+   */
+  setPropDressing(dressing: PropDressing): void {
+    this.#propDressing = dressing;
+    this.#decor.set(dressing);
+    if (this.#view) {
+      this.#attachDressing(this.#view);
+    }
+  }
+
+  /**
+   * Replaces the banners and the logos of a layout with those of the current dressing.
+   *
+   * @param view The layout.
+   */
+  #attachDressing(view: LayoutView): void {
+    PropDecor.detach(view.dressing.objects);
+    view.dressing.objects = this.#decor.attach(view.dressing.parts);
+    view.dressing.from = this.#propDressing;
   }
 
   /**
