@@ -39,6 +39,8 @@ import type { InsertDetailPart, InsertView, PosedPlayer } from './insert-frame.t
 import { entriesIn, musicIn } from './music.ts';
 import type { ScoreMusic, WindowMusic } from './music.ts';
 import { frontOf, onStage } from './subjects.ts';
+import { PART_VIEW, partCamera, partSpots } from './part-view.ts';
+import type { PartSpot } from './part-view.ts';
 import type { InsertDetail, Shot, ShotKey, ShotPlan } from './types.ts';
 import { CINEMA_ASPECT } from './view.ts';
 import { clamp01, DEG } from '../math.ts';
@@ -158,6 +160,7 @@ export const INSERT_SIZES = {
   sticks: 0.36,
   bars: 0.36,
   baton: 0.36,
+  part: PART_VIEW.half,
 } as const satisfies Record<InsertDetail, number>;
 
 /**
@@ -170,6 +173,7 @@ const HELD_DETAILS: ReadonlySet<InsertDetail> = new Set([
   'fingers',
   'slide',
   'bell',
+  'part',
 ]);
 
 /** One detail of a player on the stage, which an insert can show. */
@@ -390,6 +394,26 @@ function stageDetails(layout: SceneLayout, models: ModelCache): DetailSpot[] {
         place,
       });
     }
+  }
+  for (const part of partSpots(layout)) {
+    const place = layout.players[part.owner];
+    if (!place) {
+      continue;
+    }
+    const { species, instrument, kettles, support } = place.cast;
+    spots.push({
+      detail: 'part',
+      seat: part.seat,
+      owner: part.owner,
+      front: part.behind,
+      lift: 0,
+      point: part.target,
+      end: null,
+      keys: null,
+      bone: -1,
+      model: models.get(species, instrument, kettles, support),
+      place,
+    });
   }
   if (layout.conductor) {
     const bear = models.get(CONDUCTOR.species, CONDUCTOR.instrument);
@@ -1029,6 +1053,8 @@ export function planInserts(inputs: InsertInputs, shots: readonly Shot[]): Shot[
     insertStarts: new Float64Array(0),
   };
   const poses = createScenePose(inputs.poses);
+  // The stands do not move, so the view of each part needs no play pose.
+  const parts = new Map<number, PartSpot>(partSpots(inputs.layout).map((p) => [p.owner, p]));
   const stageResults = new Map<string, StagePoint>();
   const poseRefusals = new Map<string, Map<number, InsertRefusal>>();
   const framed = new Set<string>();
@@ -1087,54 +1113,89 @@ export function planInserts(inputs: InsertInputs, shots: readonly Shot[]): Shot[
       const into = mainCamera(main, start);
       const back = mainCamera(main, end);
       for (const { spot, meanKey } of ranked) {
-        const spotKey = `${spot.owner} ${spot.detail}`;
-        let refusedBySpot = poseRefusals.get(spotKey);
-        if (!refusedBySpot) {
-          refusedBySpot = new Map();
-          poseRefusals.set(spotKey, refusedBySpot);
+        if (spot.detail === 'part') {
+          const part = parts.get(spot.owner);
+          const side = decisionRandom(seed, start, `${spot.owner} part`)() < 0.5 ? -1 : 1;
+          const camera =
+            part &&
+            partCamera(
+              part,
+              inputs.clearance,
+              inputs.heads,
+              side,
+              (at, half) =>
+                cutKeepsGrammar(into, at, part.target, half) &&
+                cutKeepsGrammar(back, at, part.target, half),
+            );
+          if (!part || !camera) {
+            continue;
+          }
+          inserts.push({
+            kind: 'insert',
+            startSec: start,
+            endSec: end,
+            moveEndSec: end,
+            seats: [part.seat],
+            part: null,
+            target: part.target,
+            halfHeight: camera.half,
+            composition: null,
+            from: camera.from,
+            to: camera.to,
+            blendSec: 0,
+            hero: spot.owner,
+            detail: 'part',
+          });
+        } else {
+          const spotKey = `${spot.owner} ${spot.detail}`;
+          let refusedBySpot = poseRefusals.get(spotKey);
+          if (!refusedBySpot) {
+            refusedBySpot = new Map();
+            poseRefusals.set(spotKey, refusedBySpot);
+          }
+          // A detail whose play pose refused many cameras, and none passed, has no clear view.
+          if (refusedBySpot.size >= INSERT_LENS.poseTries && !framed.has(spotKey)) {
+            continue;
+          }
+          const view = detailView(inputs, spot, poses, (start + end) / 2, meanKey);
+          const { target } = view.detail;
+          const point = `${spotKey} ${target.map((v) => v.toFixed(2)).join(',')}`;
+          let known = stageResults.get(point);
+          if (!known) {
+            known = stagePoint(inputs.clearance, spot.owner, target);
+            stageResults.set(point, known);
+          }
+          const camera = insertCamera(
+            inputs,
+            view,
+            decisionRandom(seed, start, `${spot.owner} ${spot.detail}`),
+            (c) =>
+              cutKeepsGrammar(into, c.camera, target, c.half) &&
+              cutKeepsGrammar(back, c.camera, target, c.half),
+            known,
+            refusedBySpot,
+          );
+          if (!camera) {
+            continue;
+          }
+          framed.add(spotKey);
+          inserts.push({
+            kind: 'insert',
+            startSec: start,
+            endSec: end,
+            moveEndSec: end,
+            seats: spot.seat === null ? [] : [spot.seat],
+            part: null,
+            target,
+            halfHeight: camera.half,
+            composition: null,
+            from: camera.from,
+            to: camera.to,
+            blendSec: 0,
+            hero: spot.owner,
+            detail: spot.detail,
+          });
         }
-        // A detail whose play pose refused many cameras, and none passed, has no clear view.
-        if (refusedBySpot.size >= INSERT_LENS.poseTries && !framed.has(spotKey)) {
-          continue;
-        }
-        const view = detailView(inputs, spot, poses, (start + end) / 2, meanKey);
-        const { target } = view.detail;
-        const point = `${spotKey} ${target.map((v) => v.toFixed(2)).join(',')}`;
-        let known = stageResults.get(point);
-        if (!known) {
-          known = stagePoint(inputs.clearance, spot.owner, target);
-          stageResults.set(point, known);
-        }
-        const camera = insertCamera(
-          inputs,
-          view,
-          decisionRandom(seed, start, `${spot.owner} ${spot.detail}`),
-          (c) =>
-            cutKeepsGrammar(into, c.camera, target, c.half) &&
-            cutKeepsGrammar(back, c.camera, target, c.half),
-          known,
-          refusedBySpot,
-        );
-        if (!camera) {
-          continue;
-        }
-        framed.add(spotKey);
-        inserts.push({
-          kind: 'insert',
-          startSec: start,
-          endSec: end,
-          moveEndSec: end,
-          seats: spot.seat === null ? [] : [spot.seat],
-          part: null,
-          target,
-          halfHeight: camera.half,
-          composition: null,
-          from: camera.from,
-          to: camera.to,
-          blendSec: 0,
-          hero: spot.owner,
-          detail: spot.detail,
-        });
         const gap = R.gapSec[0] + (R.gapSec[1] - R.gapSec[0]) * random();
         nextFrom = start + gap;
         last = spot;

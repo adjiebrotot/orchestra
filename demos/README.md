@@ -1,6 +1,6 @@
 # Demo pieces
 
-The site ships with no demo pieces. Add your own:
+The site ships with one demo piece, `ode-to-joy` (see "Files" below). Add your own:
 
 1. Put each MIDI file in `demos/src/`, for example `demos/src/mozart-k525.mid`. The file name with
    no `.mid` is the id of the piece, and a link with `#demo=<id>` opens it.
@@ -36,3 +36,13 @@ Optional:
   checksum of that file.
 
 Check the license of each MIDI file before you publish it.
+
+## Files
+
+`ode-to-joy.mid` is an arrangement of the theme of the Ninth Symphony of Beethoven (public
+domain) that `node tools/write-ode-to-joy.ts` writes. The strings play the theme, and then the full
+orchestra plays it again.
+
+| File                  | SHA-256                                                            |
+| --------------------- | ------------------------------------------------------------------ |
+| `src/ode-to-joy.mid`  | `00e45b1b32a8802625a37295c6119639162bc11d199b6c51733a6a1e75398041` |

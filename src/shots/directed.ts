@@ -8,6 +8,8 @@ import type { ClearBox, StageClearance } from './clearance.ts';
 import { thirdOf } from './grammar.ts';
 import { SCENIC_MOVES, scenicFraming } from './scenic.ts';
 import type { ScenicMove } from './scenic.ts';
+import { partCamera, partSpots } from './part-view.ts';
+import type { PartSpot } from './part-view.ts';
 import { SHOT_SIZES, frameHalfHeight } from './shot-size.ts';
 import type { ShotSize } from './shot-size.ts';
 import { conductorCloseSubject, prepareSubjects, sectionSubject, soloSubject } from './subjects.ts';
@@ -27,9 +29,16 @@ const DEG = Math.PI / 180;
 /**
  * Where a cue points the camera: the whole stage (`wide`), the stage from high in the hall
  * (`high`), a scenic move that shows the background (`ScenicMove`, design 5.6), a view of the
- * conductor ({@link ConductorFocus}), or one seat of the score (`seat:<index>`).
+ * conductor ({@link ConductorFocus}), one seat of the score (`seat:<index>`), or the part on the
+ * stand of a seat from behind its player (`part:<index>`, `part-view.ts`).
  */
-export type DirectorFocus = 'wide' | 'high' | ScenicMove | ConductorFocus | `seat:${number}`;
+export type DirectorFocus =
+  | 'wide'
+  | 'high'
+  | ScenicMove
+  | ConductorFocus
+  | `seat:${number}`
+  | `part:${number}`;
 
 /**
  * The views of the conductor (design 5.6, camera director):
@@ -181,7 +190,18 @@ interface Framing {
  * @returns The index of the seat in `Score.seats`, or `null`.
  */
 export function focusSeat(focus: string): number | null {
-  const match = /^seat:(\d+)$/u.exec(focus);
+  const match = /^(?:seat|part):(\d+)$/u.exec(focus);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Gives the seat of a part view, or `null` for another focus.
+ *
+ * @param focus The focus.
+ * @returns The index of the seat in `Score.seats`, or `null`.
+ */
+export function focusPart(focus: string): number | null {
+  const match = /^part:(\d+)$/u.exec(focus);
   return match ? Number(match[1]) : null;
 }
 
@@ -431,14 +451,62 @@ function conductorFraming(
 }
 
 /**
+ * Makes the framing of a part view: the music on the stand of a seat from behind its player. The
+ * focus stays on the sheet, so the framing has no hero.
+ *
+ * @param subjects The subjects of the layout.
+ * @param clearance The obstacles of the layout.
+ * @param spot The stand of the seat.
+ * @param motion The move.
+ * @returns The framing, or `null` with no clear camera.
+ */
+function partFraming(
+  subjects: StageSubjects,
+  clearance: StageClearance,
+  spot: PartSpot,
+  motion: DirectorMotion,
+): Framing | null {
+  const camera = partCamera(spot, clearance, subjects.heads);
+  if (!camera) {
+    return null;
+  }
+  const [from, to] =
+    motion === 'static' ? [camera.from, camera.from] : moveKeys(camera.from, motion, true);
+  return {
+    kind: 'solo',
+    target: spot.target,
+    halfHeight: camera.half,
+    composition: null,
+    from,
+    to,
+    seats: [spot.seat],
+    hero: null,
+  };
+}
+
+/**
  * Makes the framing of a cue.
  *
  * @param subjects The subjects of the layout.
+ * @param clearance The obstacles of the layout.
+ * @param parts The stand of each seat that has one.
  * @param cue The cue.
- * @returns The framing. A focus with no players on the stage gives the wide shot.
+ * @returns The framing. A focus with no players on the stage gives the wide shot, and a part view
+ *   with no stand or no clear camera gives the shot of its seat.
  */
-function framingOf(subjects: StageSubjects, clearance: StageClearance, cue: DirectorCue): Framing {
+function framingOf(
+  subjects: StageSubjects,
+  clearance: StageClearance,
+  parts: readonly PartSpot[],
+  cue: DirectorCue,
+): Framing {
   const { stageSide } = subjects;
+  const partSeat = focusPart(cue.focus);
+  const spot = partSeat === null ? undefined : parts.find((p) => p.seat === partSeat);
+  const part = spot ? partFraming(subjects, clearance, spot, cue.motion) : null;
+  if (part) {
+    return part;
+  }
   if (cue.focus === 'high') {
     return farFraming('high', stageSide, cue.motion);
   }
@@ -530,6 +598,7 @@ export function directedPlan(
   }
   const subjects = prepareSubjects(score, layout, models);
   const clearance = prepareClearance(layout, models);
+  const parts = partSpots(layout);
   const shots: Shot[] = [];
   const inserts: Shot[] = [];
   /** Adds the shots and the inserts of the automatic plan in a span. */
@@ -558,7 +627,7 @@ export function directedPlan(
     }
     const span = (Number.isFinite(end) ? end : score.durationSec) - Math.max(start, 0);
     const blendSec = shots.length === 0 ? 0 : blendOf(cue.cut, span);
-    const framing = framingOf(subjects, clearance, cue);
+    const framing = framingOf(subjects, clearance, parts, cue);
     shots.push({
       kind: framing.kind,
       startSec: start,
