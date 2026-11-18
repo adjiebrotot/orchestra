@@ -244,9 +244,16 @@ The app does not follow these facts:
   at most `LENS.maxNearBlur` of the image height (design 4.5), so the head at the edge of a dirty
   frame is only a little soft. A sharp head of another player in a third of the frame took the
   eye from the subject, so the dirty frame keeps a fifth.
-- **Other cutaways (section 6).** The film has no insert of the printed music and no out of focus
-  lamps. No source of this file gives such a cutaway in a concert film, and the music faces the
-  players, away from the cameras of the hall.
+- **The part view (sections 3 and 6).** At the request of the user, the film can show the printed
+  music of a stand from behind its player (`shots/part-view.ts`, `PART_VIEW`), because the sheets
+  print the real part (design 4.5, sheet music). No source of this file gives such a cutaway in a
+  concert film, because the music faces the players, away from the cameras of the hall. The view
+  is an over-the-shoulder shot (section 3): the camera stands behind the player, to the side of
+  one shoulder and above the head, and the soft head and shoulder frame the music. The focus
+  stays on the sheet. The automatic plan uses it as one more detail insert, `part`, and the
+  camera director has one view for each seat.
+- **Other cutaways (section 6).** The film has no out of focus lamps. No source of this file gives
+  such a cutaway in a concert film.
 
 ## 8. Sources
 

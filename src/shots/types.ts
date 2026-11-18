@@ -6,7 +6,10 @@ import type { Vec3 } from '../models/tuples.ts';
  */
 export type ShotKind = 'wide' | 'high' | 'conductor' | 'side' | 'section' | 'solo' | 'insert';
 
-/** The details that an insert shows (design 5.6). */
+/**
+ * The details that an insert shows (design 5.6). A `part` is the printed music on the stand of a
+ * player, from behind the player (`part-view.ts`).
+ */
 export type InsertDetail =
   | 'keys'
   | 'bow'
@@ -16,7 +19,8 @@ export type InsertDetail =
   | 'bell'
   | 'sticks'
   | 'bars'
-  | 'baton';
+  | 'baton'
+  | 'part';
 
 /**
  * Tells if a kind of shot is a close shot, which fits the frame to its subject.
