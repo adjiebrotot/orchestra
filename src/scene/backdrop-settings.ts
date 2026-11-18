@@ -3,8 +3,10 @@ import type { StageStyleId } from './stage-style.ts';
 
 /**
  * The settings of the stage dressing behind the stage (design 4.5, backdrop): the standing
- * banners, the hanging banners, the flags, and the screen. An image of a setting is an id: a
- * built-in country flag (`flag:<code>`) or an image of the user (`img:<uuid>`).
+ * banners, the hanging banners, the flags, and the screen, and the props that carry an image: the
+ * banner on the music stands and the logo on the choir folders. An image of a setting is an id: a
+ * built-in country flag (`flag:<code>`), an image of the user (`img:<uuid>`), or a video of the
+ * user (`vid:<uuid>`). Only the screen shows a video.
  */
 
 /** The cut of the bottom edge of a banner, as the five banners of the reference image. */
@@ -116,6 +118,63 @@ export interface ScreenSettings {
   readonly images: readonly string[];
 }
 
+/** The stands that carry a banner: the stand of the conductor, the stands of the players, or all. */
+export type BannerTarget = 'conductor' | 'players' | 'all';
+
+/** The stands that carry a banner, in the order of the menu, with their labels. */
+export const BANNER_TARGETS: readonly (readonly [BannerTarget, string])[] = [
+  ['conductor', 'Conductor stand'],
+  ['players', 'Stands of the players'],
+  ['all', 'All stands'],
+];
+
+/** The colors of the cloth of a stand banner, as sRGB, in the order of the menu. */
+export const BANNER_CLOTHS: readonly (readonly [string, string])[] = [
+  ['#b3141c', 'Red'],
+  ['#6b1622', 'Maroon'],
+  ['#1d2b5c', 'Navy'],
+  ['#1f4d31', 'Green'],
+  ['#1b1a1c', 'Black'],
+  ['#efebe1', 'White'],
+];
+
+/** The fringe of a stand banner: none, or its color as sRGB, in the order of the menu. */
+export const BANNER_FRINGES: readonly (readonly [string, string])[] = [
+  ['#f1eee6', 'White fringe'],
+  ['#d3ae4b', 'Gold fringe'],
+  ['#c5c8cf', 'Silver fringe'],
+  ['', 'No fringe'],
+];
+
+/** The cloth banner on the desks of the music stands (design 4.5, stand banner). */
+export interface StandBannerSettings {
+  readonly on: boolean;
+  readonly target: BannerTarget;
+  /** The color of the cloth, as sRGB. */
+  readonly cloth: string;
+  /** The color of the fringe, as sRGB, or an empty text for no fringe. */
+  readonly fringe: string;
+  /** The image in the middle of the banner: zero or one image id. */
+  readonly images: readonly string[];
+}
+
+/** The covers of a choir folder that carry the logo. */
+export type FolderCovers = 'front' | 'both';
+
+/** The covers, in the order of the menu, with their labels. */
+export const FOLDER_COVERS: readonly (readonly [FolderCovers, string])[] = [
+  ['front', 'Front cover'],
+  ['both', 'Both covers'],
+];
+
+/** The logo on the outer covers of the choir folders (design 4.5, folder logo). */
+export interface FolderLogoSettings {
+  readonly on: boolean;
+  readonly covers: FolderCovers;
+  /** The logo: zero or one image id. */
+  readonly images: readonly string[];
+}
+
 /** The place of the stage text: the floor in front of the podium, or the front of the stage. */
 export type StageTextPlace = 'floor' | 'front';
 
@@ -179,6 +238,8 @@ export interface BackdropSettings {
   readonly flags: FlagSettings;
   readonly screen: ScreenSettings;
   readonly text: StageTextSettings;
+  readonly stand: StandBannerSettings;
+  readonly folder: FolderLogoSettings;
 }
 
 /** The limits of the counts. */
@@ -227,6 +288,8 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     images: ['flag:id', 'flag:jp', 'flag:gb', 'flag:fr'],
   },
   text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif', size: 'fit' },
+  stand: { on: false, target: 'conductor', cloth: '#b3141c', fringe: '#f1eee6', images: [] },
+  folder: { on: false, covers: 'front', images: [] },
 };
 
 /** A value of JSON text. */
@@ -263,10 +326,20 @@ export function isText(value: unknown): value is string {
  * Tells if a value is an image id.
  *
  * @param value A value of JSON.
- * @returns True for `flag:<code>` or `img:<id>`.
+ * @returns True for `flag:<code>`, `img:<id>`, or `vid:<id>`.
  */
 export function isImageId(value: unknown): value is string {
-  return isText(value) && /^(flag:[a-z]{2}|img:[\w-]{1,64})$/u.test(value);
+  return isText(value) && /^(flag:[a-z]{2}|(img|vid):[\w-]{1,64})$/u.test(value);
+}
+
+/**
+ * Tells if an image id is a video of the user.
+ *
+ * @param id An image id.
+ * @returns True for `vid:<id>`.
+ */
+export function isVideoId(id: string): boolean {
+  return id.startsWith('vid:');
 }
 
 /**
@@ -363,7 +436,7 @@ function readBanners(
     cut: readOption(data['cut'], BANNER_CUTS, fallback.cut),
     aspect: readOption(data['aspect'], BANNER_ASPECTS, fallback.aspect),
     arrangement: readOption(data['arrangement'], ARRANGEMENTS, fallback.arrangement),
-    images: readImages(data['images'], fallback.images),
+    images: readImages(data['images'], fallback.images).filter((id) => !isVideoId(id)),
   };
 }
 
@@ -379,7 +452,14 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const flags = isRecord(data['flags']) ? data['flags'] : {};
   const screen = isRecord(data['screen']) ? data['screen'] : {};
   const text = isRecord(data['text']) ? data['text'] : {};
+  const stand = isRecord(data['stand']) ? data['stand'] : {};
+  const folder = isRecord(data['folder']) ? data['folder'] : {};
   const base = DEFAULT_BACKDROP;
+  /** Reads the one still image of a prop: a video stays out. */
+  const propImage = (list: Json | undefined): readonly string[] =>
+    readImages(list, [])
+      .filter((id) => !isVideoId(id))
+      .slice(0, 1);
   return {
     style: readOption(data['style'], STAGE_STYLE_OPTIONS, base.style),
     standing: readBanners(data['standing'], base.standing, BACKDROP_LIMITS.standing),
@@ -390,7 +470,9 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
       arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
       limpness: readShare(flags['limpness'], base.flags.limpness),
-      images: readImages(flags['images'], base.flags.images).slice(0, BACKDROP_LIMITS.flags),
+      images: readImages(flags['images'], base.flags.images)
+        .filter((id) => !isVideoId(id))
+        .slice(0, BACKDROP_LIMITS.flags),
     },
     screen: {
       on: isBoolean(screen['on']) ? screen['on'] : base.screen.on,
@@ -404,6 +486,18 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       tone: readOption(text['tone'], STAGE_TEXT_TONES, base.text.tone),
       font: readOption(text['font'], STAGE_TEXT_FONTS, base.text.font),
       size: readOption(text['size'], STAGE_TEXT_SIZES, base.text.size),
+    },
+    stand: {
+      on: isBoolean(stand['on']) ? stand['on'] : base.stand.on,
+      target: readOption(stand['target'], BANNER_TARGETS, base.stand.target),
+      cloth: readOption(stand['cloth'], BANNER_CLOTHS, base.stand.cloth),
+      fringe: readOption(stand['fringe'], BANNER_FRINGES, base.stand.fringe),
+      images: propImage(stand['images']),
+    },
+    folder: {
+      on: isBoolean(folder['on']) ? folder['on'] : base.folder.on,
+      covers: readOption(folder['covers'], FOLDER_COVERS, base.folder.covers),
+      images: propImage(folder['images']),
     },
   };
 }
@@ -455,6 +549,10 @@ export interface ScreenFrame {
   readonly to: string | null;
   /** The share of `to`, from 0 to 1. */
   readonly mix: number;
+  /** The song time at which `from` came on the screen, for the time of a video. */
+  readonly fromSince: number;
+  /** The song time at which `to` came on the screen, for the time of a video. */
+  readonly toSince: number;
 }
 
 /**
@@ -480,9 +578,16 @@ export function screenFrame(
   }
   const cue = cues[index];
   if (!cue) {
-    return { from: null, to: first, mix: 1 };
+    return { from: null, to: first, mix: 1, fromSince: 0, toSince: 0 };
   }
-  const before = index > 0 ? (cues[index - 1]?.image ?? first) : first;
+  const previous = index > 0 ? cues[index - 1] : undefined;
+  const before = previous?.image ?? first;
   const mix = cue.cut ? 1 : Math.min(1, (songSec - cue.timeSec) / SCREEN_FADE_SEC);
-  return { from: before, to: cue.image, mix };
+  return {
+    from: before,
+    to: cue.image,
+    mix,
+    fromSince: previous?.timeSec ?? 0,
+    toSince: cue.timeSec,
+  };
 }
