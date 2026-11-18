@@ -100,9 +100,13 @@ export const HARP_PLACE = {
    * The tilt of the harp back to the player. A concert harp leans back onto the shoulder, but the
    * soundbox of the model already leans 33° toward the player. On the harp of 0.85, with a tilt of
    * 3°, the left paw went 7.2 cm into the body in 55 % of the samples, and the right thigh 1.8 cm
-   * into the soundbox. So the harp stands upright, as some smaller harps do (section 1).
+   * into the soundbox. So the harp stands almost upright, as some smaller harps do (section 1),
+   * with a small tilt away from the player. Upright, with the slim soundbox and neck, the chest went
+   * 1.3 cm into the soundbox and the right upper arm 1.3 cm into the neck. At -1.5°, each part of
+   * the body stays within 1.0 cm of the harp, in 1 of 854 samples over 1.0 cm before 702
+   * (`pnpm body-clip harpist`, round harp-clip).
    */
-  tilt: 0,
+  tilt: -1.5 * MathUtils.DEG2RAD,
   /**
    * The turn of the harp around the vertical, seen from above, so that the column goes to the
    * front left: the harp is diagonal to the player. The left hand plays the bass strings at the
@@ -131,14 +135,15 @@ const SOUNDBOX = {
   /**
    * The exponent of the narrowing of the width and the depth along the axis. Above 1, the
    * soundbox narrows fast near the base and slowly near the top, as the pear outline of a
-   * soundboard.
+   * soundboard. At 1.4, the upper back of the soundbox went 1.3 cm into the chest of the deer.
    */
-  narrowing: 1.4,
+  narrowing: 2,
   /**
    * The depth of the back below the soundboard at the bottom and at the top of the axis. The top
-   * is shallow, so that the back stays off the chest of the player.
+   * is shallow, so that the back stays off the chest of the player. With the top 0.035, the chest
+   * went into the back in 8.5 % of the play.
    */
-  depth: [0.12, 0.035],
+  depth: [0.12, 0.02],
   /** The places of the rings of the soundbox along its axis, from 0 (bottom) to 1 (top). */
   rings: [0, 0.3, 0.65, 1],
   /** The height of the center strip above the soundboard. The strings start on its top. */
@@ -171,8 +176,11 @@ const NECK = {
    * the play, and with this end, more than 1.0 cm in 0.2 %.
    */
   height: [0.1, 0.04],
-  /** The half thickness of the neck on x, at the column and at the top of the soundbox. */
-  thickness: [0.024, 0.012],
+  /**
+   * The half thickness of the neck on x, at the column and at the top of the soundbox. With the
+   * end 0.012, the right upper arm of the deer went 1.3 cm into the end of the neck.
+   */
+  thickness: [0.024, 0.009],
   /** The height of each brass plate above the bottom of the neck. */
   plate: 0.03,
 } as const;
