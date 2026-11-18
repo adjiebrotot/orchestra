@@ -2,7 +2,7 @@ import type { Group } from 'three';
 
 import { Backdrop } from '../scene/backdrop.ts';
 import { isVideoId } from '../scene/backdrop-settings.ts';
-import type { BackdropSettings, ScreenCue } from '../scene/backdrop-settings.ts';
+import type { BackdropSettings, LightSettings, ScreenCue } from '../scene/backdrop-settings.ts';
 import { FLAG_ASPECT, drawFlag, flagName } from '../scene/country-flags.ts';
 import type { PropDressing } from '../scene/prop-dressing.ts';
 import { StageText } from '../scene/stage-text.ts';
@@ -69,6 +69,7 @@ export class BackdropControl {
   readonly #onScreenImages: (images: readonly ScreenImage[]) => void;
   readonly #onStyle: (style: StageStyleId) => void;
   readonly #onProps: (dressing: PropDressing) => void;
+  readonly #onLight: (light: LightSettings) => void;
   #settings: BackdropSettings;
   #stageSide = 0;
 
@@ -83,18 +84,23 @@ export class BackdropControl {
    *   the colors of the stage lights (design 4.5, stage style).
    * @param onProps Gets the stand banner and the folder logo at the start and after each change
    *   (design 4.5, stand banner and folder logo).
+   * @param onLight Gets the light controls at the start and after each change (design 4.5, light
+   *   controls).
    */
   constructor(
     onScreenImages: (images: readonly ScreenImage[]) => void,
     stageText: StageTextUniforms,
     onStyle: (style: StageStyleId) => void,
     onProps: (dressing: PropDressing) => void,
+    onLight: (light: LightSettings) => void,
   ) {
     this.#onScreenImages = onScreenImages;
     this.#onStyle = onStyle;
     this.#onProps = onProps;
+    this.#onLight = onLight;
     this.#settings = loadBackdropSettings();
     onStyle(this.#settings.style);
+    onLight(this.#settings.light);
     this.#stageText = new StageText(stageText);
     this.#stageText.set(this.#settings.text);
     this.#backdrop = new Backdrop({
@@ -173,6 +179,10 @@ export class BackdropControl {
     }
     if (settings.stand !== old.stand || settings.folder !== old.folder) {
       this.#tellProps();
+    }
+    if (settings.light !== old.light) {
+      this.#backdrop.setLight(settings.light);
+      this.#onLight(settings.light);
     }
   }
 

@@ -1547,6 +1547,21 @@ look of the reference images. The other styles are "Royal gala", "Midnight blue"
 - A change of the style shows at once on the shown layout. Its bake and its captured environment
   keep the light of its build until the next build.
 
+**Light controls**
+
+The section "Light" of the panel "Stage design" changes the light of the stage style
+(`LightSettings` of `scene/backdrop-settings.ts`). Each slider is a factor of the value of the
+style, and 100 % keeps the look of the style. "Reset" sets all the factors to 100 %.
+
+- "Haze" multiplies the density of the room haze (`ROOM_HAZE.density`). 0 % gives clear air, so
+  the screen and the back of the hall show with no veil. The range is 0 % to 200 %.
+- "Beams" multiplies the light of the visible beams of the rim lights (`styleLights()`). The range
+  is 0 % to 200 %.
+- "Brightness" multiplies the exposure of the frame. The range is 50 % to 200 %.
+- "Screen" multiplies the light of the screen. The range is 25 % to 200 %.
+- A change shows at once and builds no object again. The settings stay in the local storage with
+  the other settings of the dressing, and the video render uses them.
+
 **Stage text**
 
 The stage text is one line of text in the wood of the stage, near the conductor

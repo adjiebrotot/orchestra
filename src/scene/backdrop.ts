@@ -28,6 +28,7 @@ import type {
   BannerCut,
   BannerSettings,
   FlagSettings,
+  LightSettings,
   ScreenCue,
   ScreenMaterial,
 } from './backdrop-settings.ts';
@@ -945,6 +946,8 @@ export class Backdrop {
   #stageSide = 0;
   #screenCues: readonly ScreenCue[] = [];
   #screen: ShaderMaterial | null = null;
+  /** The light of the screen before the factor of the user (`LightSettings.screen`). */
+  #screenLevel = 1;
   readonly #waving: ShaderMaterial[] = [];
   /** The videos that the screen plays. */
   readonly #videos = new Set<HTMLVideoElement>();
@@ -966,6 +969,20 @@ export class Backdrop {
   /** The settings of the last build. */
   get settings(): BackdropSettings {
     return this.#settings;
+  }
+
+  /**
+   * Sets the light controls of the user (design 4.5, light controls) with no new build: the light
+   * of the screen changes at once.
+   *
+   * @param light The light controls.
+   */
+  setLight(light: LightSettings): void {
+    this.#settings = { ...this.#settings, light };
+    const level = this.#screen?.uniforms['uLevel'];
+    if (level) {
+      level.value = this.#screenLevel * light.screen;
+    }
   }
 
   /**
@@ -1776,6 +1793,7 @@ export class Backdrop {
       surface.waves.push(0);
     }
     const unit = hallUnit(side);
+    this.#screenLevel = (led ? place.level.led : place.level.cloth) * this.#style.screenLevel;
     const screen = new ShaderMaterial({
       vertexShader: SCREEN_VERTEX,
       fragmentShader: SCREEN_FRAGMENT,
@@ -1786,7 +1804,7 @@ export class Backdrop {
         uToFit: { value: new Vector2(1, 1) },
         uMix: { value: 1 },
         uLed: { value: led ? 1 : 0 },
-        uLevel: { value: (led ? place.level.led : place.level.cloth) * this.#style.screenLevel },
+        uLevel: { value: this.#screenLevel * this.#settings.light.screen },
         uTint: { value: new Vector3(...this.#style.screenTint) },
         uGrid: { value: new Vector2(place.ledColumns, Math.round((place.ledColumns * 9) / 16)) },
         uUnit: { value: unit },

@@ -229,6 +229,29 @@ export interface StageTextSettings {
   readonly size: StageTextSize;
 }
 
+/**
+ * The light controls of the user (design 4.5, light controls). Each value is a factor of the
+ * value of the stage style: 1 keeps the look of the style.
+ */
+export interface LightSettings {
+  /** The factor of the density of the room haze. 0 gives clear air. */
+  readonly haze: number;
+  /** The factor of the light of the visible beams in the haze. 0 hides the beams. */
+  readonly beams: number;
+  /** The factor of the exposure of the frame. */
+  readonly brightness: number;
+  /** The factor of the light of the screen. */
+  readonly screen: number;
+}
+
+/** The limits of each light factor, as [smallest, largest]. */
+export const LIGHT_LIMITS: Readonly<Record<keyof LightSettings, readonly [number, number]>> = {
+  haze: [0, 2],
+  beams: [0, 2],
+  brightness: [0.5, 2],
+  screen: [0.25, 2],
+};
+
 /** All the stage dressing. */
 export interface BackdropSettings {
   /** The stage style: the look of the dressing and the colors of the stage lights. */
@@ -240,6 +263,7 @@ export interface BackdropSettings {
   readonly text: StageTextSettings;
   readonly stand: StandBannerSettings;
   readonly folder: FolderLogoSettings;
+  readonly light: LightSettings;
 }
 
 /** The limits of the counts. */
@@ -290,6 +314,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
   text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif', size: 'fit' },
   stand: { on: false, target: 'conductor', cloth: '#b3141c', fringe: '#f1eee6', images: [] },
   folder: { on: false, covers: 'front', images: [] },
+  light: { haze: 1, beams: 1, brightness: 1, screen: 1 },
 };
 
 /** A value of JSON text. */
@@ -454,7 +479,14 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const text = isRecord(data['text']) ? data['text'] : {};
   const stand = isRecord(data['stand']) ? data['stand'] : {};
   const folder = isRecord(data['folder']) ? data['folder'] : {};
+  const light = isRecord(data['light']) ? data['light'] : {};
   const base = DEFAULT_BACKDROP;
+  /** Reads one light factor in its limits. */
+  const factor = (key: keyof LightSettings): number => {
+    const given = light[key];
+    const [min, max] = LIGHT_LIMITS[key];
+    return isNumber(given) ? Math.min(max, Math.max(min, given)) : base.light[key];
+  };
   /** Reads the one still image of a prop: a video stays out. */
   const propImage = (list: Json | undefined): readonly string[] =>
     readImages(list, [])
@@ -498,6 +530,12 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       on: isBoolean(folder['on']) ? folder['on'] : base.folder.on,
       covers: readOption(folder['covers'], FOLDER_COVERS, base.folder.covers),
       images: propImage(folder['images']),
+    },
+    light: {
+      haze: factor('haze'),
+      beams: factor('beams'),
+      brightness: factor('brightness'),
+      screen: factor('screen'),
     },
   };
 }

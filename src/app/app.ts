@@ -647,6 +647,9 @@ export class App {
       (dressing) => {
         scene.setPropDressing(dressing);
       },
+      (light) => {
+        scene.setLightSettings(light);
+      },
     );
     scene.setBackdrop(this.#backdrop.group);
     this.#orchestraPanel = new OrchestraPanel({
