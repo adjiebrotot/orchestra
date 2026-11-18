@@ -15,12 +15,13 @@ import {
   ShaderMaterial,
   Vector2,
   Vector3,
+  VideoTexture,
 } from 'three';
 import type { Texture } from 'three';
 
 import { STAGE_THICKNESS } from '../models/stage.ts';
 import { rimLightPlace } from '../models/beam.ts';
-import { DEFAULT_BACKDROP, screenFrame } from './backdrop-settings.ts';
+import { DEFAULT_BACKDROP, isVideoId, screenFrame } from './backdrop-settings.ts';
 import type {
   Arrangement,
   BackdropSettings,
@@ -201,7 +202,29 @@ export interface BackdropImageSource {
    * @returns The canvas, or `null` for an image that is not there.
    */
   canvasOf(id: string): HTMLCanvasElement | null;
+  /**
+   * Gives the video element of a video of the user.
+   *
+   * @param id The video id.
+   * @returns The video, or `null` for a video that is not there.
+   */
+  videoOf(id: string): HTMLVideoElement | null;
 }
+
+/**
+ * The play of a video on the screen. The time of the video follows the song time from the cue
+ * that brought it on, so a seek, a pause, and a change of the speed stay in step.
+ */
+const SCREEN_VIDEO = {
+  /** The largest gap of the video time from its song time, in seconds, before a seek. */
+  drift: 0.3,
+  /** The gap of a paused video from its song time, in seconds, before a seek. */
+  stillDrift: 0.04,
+  /** The smallest and the largest play rate of a video. */
+  rates: [0.0625, 16],
+  /** The step of the play rate, so that a small change of the rate does not reset the decoder. */
+  rateStep: 0.05,
+} as const;
 
 /** A list of triangles: positions, and texture coordinates and wave weights for a cloth. */
 class Triangles {
@@ -923,6 +946,12 @@ export class Backdrop {
   #screenCues: readonly ScreenCue[] = [];
   #screen: ShaderMaterial | null = null;
   readonly #waving: ShaderMaterial[] = [];
+  /** The videos that the screen plays. */
+  readonly #videos = new Set<HTMLVideoElement>();
+  /** The song time of the last frame, in seconds, for the play rate of the videos. */
+  #lastSongSec = 0;
+  /** The wall time of the last frame, in seconds, for the play rate of the videos. */
+  #lastWallSec = 0;
 
   /**
    * Creates the dressing. It is empty until {@link Backdrop.build}.
@@ -1019,7 +1048,15 @@ export class Backdrop {
       }
     }
     const screen = this.#screen;
+    const wallSec = performance.now() / 1000;
+    const songRate =
+      wallSec > this.#lastWallSec
+        ? (songSec - this.#lastSongSec) / (wallSec - this.#lastWallSec)
+        : 0;
+    this.#lastSongSec = songSec;
+    this.#lastWallSec = wallSec;
     if (!screen) {
+      this.#playVideos(new Map(), 0);
       return;
     }
     const first = this.#settings.screen.images[0] ?? null;
@@ -1030,10 +1067,69 @@ export class Backdrop {
     if (mix) {
       mix.value = shown.mix;
     }
+
+    const targets = new Map<HTMLVideoElement, number>();
+    const parts: readonly (readonly [string | null, number])[] = [
+      [shown.to, shown.toSince],
+      [shown.mix < 1 ? shown.from : null, shown.fromSince],
+    ];
+    for (const [id, since] of parts) {
+      const video = id && isVideoId(id) ? this.#images.videoOf(id) : null;
+      if (video && !targets.has(video)) {
+        targets.set(video, Math.max(0, songSec - since));
+      }
+    }
+    this.#playVideos(targets, songRate);
+  }
+
+  /**
+   * Plays the videos on the screen at their song times, and pauses each other video.
+   *
+   * @param targets The time of each video on the screen, in seconds from its start.
+   * @param songRate The song seconds in each wall second: 0 while the song pauses.
+   */
+  #playVideos(targets: ReadonlyMap<HTMLVideoElement, number>, songRate: number): void {
+    const v = SCREEN_VIDEO;
+    for (const video of this.#videos) {
+      if (!targets.has(video)) {
+        video.pause();
+        this.#videos.delete(video);
+      }
+    }
+    for (const [video, since] of targets) {
+      this.#videos.add(video);
+      const length = video.duration;
+      if (!Number.isFinite(length) || length <= 0) {
+        continue;
+      }
+      const target = since % length;
+      // The gap goes around the loop: the end of the video is next to its start.
+      const gap = ((((video.currentTime - target) % length) + 1.5 * length) % length) - length / 2;
+      const playing = songRate > 0.01;
+      if (!playing) {
+        video.pause();
+        if (Math.abs(gap) > v.stillDrift && !video.seeking) {
+          video.currentTime = target;
+        }
+        continue;
+      }
+      const rate = Math.min(v.rates[1], Math.max(v.rates[0], songRate));
+      const stepped = Math.max(v.rates[0], Math.round(rate / v.rateStep) * v.rateStep);
+      if (Math.abs(video.playbackRate - stepped) > v.rateStep / 2) {
+        video.playbackRate = stepped;
+      }
+      if (Math.abs(gap) > v.drift && !video.seeking) {
+        video.currentTime = target;
+      }
+      if (video.paused) {
+        video.play().catch(() => undefined);
+      }
+    }
   }
 
   /** Frees the GPU resources. */
   dispose(): void {
+    this.#playVideos(new Map(), 0);
     this.#clear();
     for (const texture of this.#textures.values()) {
       texture.dispose();
@@ -1081,6 +1177,21 @@ export class Backdrop {
         this.#textures.set(key, texture);
       }
       return { texture, box: FULL_BOX };
+    }
+    if (isVideoId(id)) {
+      const video = this.#images.videoOf(id);
+      if (!video) {
+        return null;
+      }
+      used.add(id);
+      let texture = this.#textures.get(id);
+      if (!texture) {
+        texture = new VideoTexture(video);
+        texture.colorSpace = SRGBColorSpace;
+        this.#textures.set(id, texture);
+      }
+      const ratio = video.videoWidth > 0 ? video.videoHeight / video.videoWidth : 9 / 16;
+      return { texture, box: coverBox(ratio, aspect) };
     }
     const canvas = this.#images.canvasOf(id);
     if (!canvas) {
@@ -1741,11 +1852,14 @@ export function screenWidth(side: number): number {
 /**
  * Gives the height over the width of the image of a texture.
  *
- * @param texture The texture of a canvas.
+ * @param texture The texture of a canvas or of a video.
  * @returns The aspect, or 9/16 for an image of unknown size.
  */
 function textureAspect(texture: Texture): number {
   const image = texture.image;
+  if (image instanceof HTMLVideoElement) {
+    return image.videoWidth > 0 ? image.videoHeight / image.videoWidth : 9 / 16;
+  }
   return image instanceof HTMLCanvasElement && image.width > 0
     ? image.height / image.width
     : 9 / 16;
