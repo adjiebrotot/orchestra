@@ -1473,6 +1473,20 @@ surfaces.
 The stage dressing behind the stage (`Backdrop` of `scene/backdrop.ts`, `BACKDROP`) has four
 objects. The panel "Stage design" turns each one on or off (`ui/stage-panel.ts`). The defaults
 show country flags, which `scene/country-flags.ts` draws on a canvas at any aspect.
+Each list of images adds an item through a search field (`createCombobox()` of
+`ui/combobox.ts`). The list below the field shows the flags in the order of their names, and the
+images of the user. The search ignores accents and finds other names, such as "UAE" or "DPRK"
+(`ALIASES` of `scene/country-flags.ts`). A flag code has two to five letters, for groups such as
+ASEAN.
+
+A flag with an emblem crops the emblem from its Wikimedia artwork (`assets/flags/`,
+`loadFlagArt()`), which loads only when the dressing shows the flag. Until then the field shows
+with no emblem. A vertical banner hangs the flag with its hoist at the top and its top edge at
+the left, as a flag that shows its reverse side (Flags of the World, "Hanging Flags Vertically").
+Text and figures stay upright and readable, as in the vertical flags of Saudi Arabia,
+Kazakhstan, and Cambodia. A flag with its own vertical design (the fourth item of an entry of
+`FLAGS`) shows that design: China, Taiwan, Malaysia, and North Korea. Iran keeps its stripes
+horizontal. The United Kingdom and Portugal turn a quarter turn.
 
 - **Standing banners.** Chrome poles on round bases, each with a cross bar and a banner.
 - **Hanging banners.** Banners on wooden rods below a dark batten.
