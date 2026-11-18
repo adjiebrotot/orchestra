@@ -1,5 +1,6 @@
 import { isText, readBackdrop } from '../scene/backdrop-settings.ts';
 import type { BackdropSettings, Json } from '../scene/backdrop-settings.ts';
+import { clearBakedBackground } from './image-matte.ts';
 
 /**
  * The browser storage of the stage dressing (design 4.5, backdrop): the settings in the local
@@ -159,7 +160,8 @@ export async function deleteImage(id: string): Promise<void> {
 }
 
 /**
- * Draws an image file on a canvas, at most {@link IMAGE_MAX_SIDE} on its longest side.
+ * Draws an image file on a canvas, at most {@link IMAGE_MAX_SIDE} on its longest side. A baked
+ * light background along the border becomes transparent (`clearBakedBackground()`).
  *
  * @param blob The image file.
  * @returns The canvas.
@@ -170,8 +172,15 @@ export async function decodeImage(blob: Blob): Promise<HTMLCanvasElement> {
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(bitmap.width * scale));
   canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-  canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  context?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
   bitmap.close();
+  if (context) {
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+    if (clearBakedBackground(pixels.data, canvas.width, canvas.height)) {
+      context.putImageData(pixels, 0, 0);
+    }
+  }
   return canvas;
 }
 

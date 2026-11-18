@@ -1529,6 +1529,13 @@ The rules of the layout:
 - The settings stay in the local storage. The images of the user stay in IndexedDB, at most
   `IMAGE_MAX_SIDE` on the longest side (`app/backdrop-store.ts`). A video stays as its own file,
   at most `VIDEO_MAX_BYTES`. No image or video leaves the browser (2.7).
+- Many logo files have no alpha: the transparent part is a baked grey and white checkerboard, or
+  plain white. When an image has no transparent pixels and its border is light and neutral, the
+  decode makes the light background that touches the border transparent, with soft edges
+  (`clearBakedBackground()` of `app/image-matte.ts`). The white parts inside the logo stay.
+- A transparent part of an image shows the cloth color on a banner or a flag, and the dark
+  screen on the screen. The textures have premultiplied alpha, so a filtered edge gets no dark
+  fringe.
 
 **Stage style**
 
