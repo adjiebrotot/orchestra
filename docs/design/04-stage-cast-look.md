@@ -1532,11 +1532,24 @@ The rules of the layout:
 
 **Stage style**
 
-The menu "Stage style" of the panel "Stage design" sets the look of the dressing and the colors of
-the stage lights (`STAGE_STYLES` of `scene/stage-style.ts`). "Classic hall" keeps the warm amber
-look of the reference images. The other styles are "Royal gala", "Midnight blue", "Festival", and
-"Modern white".
+The menu "Stage style" of the panel "Stage design" sets the look of the stage, the dressing, and
+the colors of the stage lights (`STAGE_STYLES` of `scene/stage-style.ts`). "Classic hall" keeps the
+warm amber look of the reference images. The other styles are "Royal gala", "Midnight blue",
+"Festival", and "Modern white".
 
+- `StageLook` gives the build of the stage (`StageBuild` of `models/stage.ts`) and its finish
+  (`StageFinish` of `scene/stage.ts`). The build gives the colors of the boards, the seams, the
+  edge, the skirt, and the podium, the pattern of the boards, the profile of the edge, and the
+  panels of the skirt. The finish gives the roughness, the grain, the gloss, the lacquer, and the
+  baked light of the sides.
+- The patterns are `planks` (staggered rows), `parquet` (a basket weave of tiles), and `deck` (a
+  grid of square stage decks). The edge profiles are `lip`, `molded`, `chamfer`, and `square`.
+  Each profile keeps the width and the drop of `STAGE_LIP`.
+- The outline of the stage, the height of the stage top, and the podium size stay the same in
+  each style. Thus the layout, the seats, and the bake do not change. The choir risers keep the
+  colors of `STAGE_COLORS`.
+- A top face of the edge with no texel of its surface in the bake reads the bake at its place.
+  Thus a new edge profile after the build gets no dark band.
 - `DressingStyle` gives the colors of the poles, the batten, the frame of the screen, and the
   rods, the sheen of the cloth and of the metal, the light of the cloth, and the light and the
   tint of the screen.
@@ -1544,8 +1557,9 @@ look of the reference images. The other styles are "Royal gala", "Midnight blue"
   lights, the beams, and the fill light, a gain of each spotlight and beam, and extra exposure in
   stops. `styleLights()` of `scene/lights.ts` sets them on the lights of a layout. The build of a
   layout sets them before the bake and the capture, so its environment matches the style.
-- A change of the style shows at once on the shown layout. Its bake and its captured environment
-  keep the light of its build until the next build.
+- A change of the style shows at once on the shown layout. The stage gets a new geometry, and the
+  shared uniforms of the finish change. Its bake and its captured environment keep the light of
+  its build until the next build.
 
 **Light controls**
 
