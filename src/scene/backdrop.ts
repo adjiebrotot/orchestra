@@ -805,8 +805,10 @@ void main() {
   float glow = uGlow / (1.0 + pow(distance / uReach, 2.0));
   float height = clamp((vWorld.y - uFloorY) / uWallHeight, 0.0, 1.0);
   float light = (uAmbient + glow * (0.3 + 0.7 * facing)) * mix(1.0, uTop, height) * (1.0 - vCrease);
+  // The texture has premultiplied alpha, so a filtered edge of a transparent image gets no dark
+  // fringe.
   vec4 image = texture2D(uMap, uUvBox.xy + vUv * uUvBox.zw);
-  vec3 albedo = mix(uBase, image.rgb, image.a) * uTint;
+  vec3 albedo = (uBase * (1.0 - image.a) + image.rgb) * uTint;
   vec3 h = normalize(normalize(uSheenLight - vWorld) + view);
   float sheen = uSheen * pow(max(dot(n, h), 0.0), 28.0);
   gl_FragColor = vec4((albedo * light + sheen * uSheenColor) * uLevel, 1.0);
@@ -853,7 +855,7 @@ vec3 fitted(sampler2D map, vec2 fit) {
   vec2 q = (vUv - 0.5) / fit + 0.5;
   vec2 inside = step(vec2(0.0), q) * step(q, vec2(1.0));
   vec4 color = texture2D(map, clamp(q, 0.0, 1.0));
-  return color.rgb * color.a * inside.x * inside.y;
+  return color.rgb * inside.x * inside.y;
 }
 void main() {
   vec3 image = mix(fitted(uFrom, uFromFit), fitted(uTo, uToFit), uMix) * uTint;
@@ -1205,6 +1207,7 @@ export class Backdrop {
       if (!texture) {
         texture = new VideoTexture(video);
         texture.colorSpace = SRGBColorSpace;
+        texture.premultiplyAlpha = true;
         this.#textures.set(id, texture);
       }
       const ratio = video.videoWidth > 0 ? video.videoHeight / video.videoWidth : 9 / 16;
@@ -1892,6 +1895,8 @@ function textureAspect(texture: Texture): number {
 function canvasTexture(canvas: HTMLCanvasElement): CanvasTexture {
   const texture = new CanvasTexture(canvas);
   texture.colorSpace = SRGBColorSpace;
+  // The cloth and the screen shaders read premultiplied colors.
+  texture.premultiplyAlpha = true;
   texture.minFilter = LinearMipmapLinearFilter;
   texture.magFilter = LinearFilter;
   texture.anisotropy = 4;

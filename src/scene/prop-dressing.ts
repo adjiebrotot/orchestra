@@ -158,6 +158,8 @@ function decalTexture(canvas: HTMLCanvasElement): CanvasTexture {
   // The finish table of the shared material reads `uv`.
   texture.channel = 1;
   texture.anisotropy = 4;
+  // The material divides by the alpha again, so a filtered edge gets no dark fringe.
+  texture.premultiplyAlpha = true;
   return texture;
 }
 
@@ -183,6 +185,10 @@ function decalMaterial(
   material.polygonOffsetUnits = -4;
   material.onBeforeCompile = (shader, renderer) => {
     shared.onBeforeCompile(shader, renderer);
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      '#include <map_fragment>\ndiffuseColor.rgb /= max(diffuseColor.a, 1e-4);',
+    );
   };
   material.customProgramCacheKey = () => `${shared.customProgramCacheKey()} ${key}`;
   return material;
