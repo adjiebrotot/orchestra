@@ -9,6 +9,7 @@ import {
   FOLDER_COVERS,
   FLAG_STANDS,
   DEFAULT_BACKDROP,
+  LIGHT_LIMITS,
   SCREEN_MATERIALS,
   STAGE_TEXT_FONTS,
   STAGE_TEXT_SIZES,
@@ -19,6 +20,7 @@ import {
 import type {
   BackdropSettings,
   BannerSettings,
+  LightSettings,
   StageTextSettings,
 } from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
@@ -149,6 +151,7 @@ export class StagePanel {
     const scroll = this.#body.scrollTop;
     this.#body.replaceChildren(
       this.#styleSection(),
+      this.#lightSection(),
       this.#textSection(),
       this.#bannerSection(
         'standing',
@@ -246,6 +249,79 @@ export class StagePanel {
       ),
     );
     return section;
+  }
+
+  /**
+   * Creates the section of the light controls (design 4.5, light controls): the haze, the beams,
+   * the brightness, and the light of the screen, each as a part of the value of the stage style.
+   *
+   * @returns The section.
+   */
+  #lightSection(): HTMLElement {
+    const light = this.#settings.light;
+    /** Makes the slider of one light factor. A drag applies at once, with no new controls. */
+    const factor = (key: keyof LightSettings, label: string): HTMLElement =>
+      this.#factor(label, light[key], LIGHT_LIMITS[key], (value) => {
+        this.#settings = {
+          ...this.#settings,
+          light: { ...this.#settings.light, [key]: value },
+        };
+        this.#actions.onChange(this.#settings);
+      });
+    const reset = this.#textButton('Reset', () => {
+      this.#change({ ...this.#settings, light: DEFAULT_BACKDROP.light });
+    });
+    reset.setAttribute('aria-label', 'Reset the light');
+    const section = createElement('div', 'stage-section');
+    section.append(
+      createElement('div', 'stage-section-head', 'Light'),
+      createElement(
+        'p',
+        'render-hint',
+        'Changes the light of the stage style. Less haze makes the screen and the back of the hall clear. 100 % keeps the look of the style.',
+      ),
+      this.#row('Haze', factor('haze', 'Haze in the hall')),
+      this.#row('Beams', factor('beams', 'Light of the beams')),
+      this.#row('Brightness', factor('brightness', 'Brightness of the frame')),
+      this.#row('Screen', factor('screen', 'Light of the screen')),
+      this.#row('', reset),
+    );
+    return section;
+  }
+
+  /**
+   * Creates a slider of a factor, with its value in percent. Each move applies at once. The panel
+   * does not write its controls again, so the drag goes on.
+   *
+   * @param label The name of the slider, for a screen reader.
+   * @param value The factor.
+   * @param limits The smallest and the largest factor.
+   * @param onSet The action of a new factor.
+   * @param step The step of the slider, in percent.
+   * @returns The slider and its value.
+   */
+  #factor(
+    label: string,
+    value: number,
+    limits: readonly [number, number],
+    onSet: (value: number) => void,
+    step = 5,
+  ): HTMLElement {
+    const box = createElement('div', 'stage-slider');
+    const input = createElement('input');
+    input.type = 'range';
+    input.min = String(Math.round(limits[0] * 100));
+    input.max = String(Math.round(limits[1] * 100));
+    input.step = String(step);
+    input.value = String(Math.round(value * 100));
+    input.setAttribute('aria-label', label);
+    const text = createElement('span', 'stage-slider-value', `${input.value} %`);
+    input.addEventListener('input', () => {
+      text.textContent = `${input.value} %`;
+      onSet(Number(input.value) / 100);
+    });
+    box.append(input, text);
+    return box;
   }
 
   /**
@@ -528,21 +604,7 @@ export class StagePanel {
    * @returns The slider and its value.
    */
   #slider(label: string, value: number, onSet: (value: number) => void): HTMLElement {
-    const box = createElement('div', 'stage-slider');
-    const input = createElement('input');
-    input.type = 'range';
-    input.min = '0';
-    input.max = '100';
-    input.step = '1';
-    input.value = String(Math.round(value * 100));
-    input.setAttribute('aria-label', label);
-    const text = createElement('span', 'stage-slider-value', `${input.value} %`);
-    input.addEventListener('input', () => {
-      text.textContent = `${input.value} %`;
-      onSet(Number(input.value) / 100);
-    });
-    box.append(input, text);
-    return box;
+    return this.#factor(label, value, [0, 1], onSet, 1);
   }
 
   /**
