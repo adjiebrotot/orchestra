@@ -1184,7 +1184,7 @@ export class Backdrop {
    *   there.
    */
   #texture(id: string, aspect: number, upright: boolean, used: Set<string>): ClothTexture | null {
-    const flag = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const flag = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (flag) {
       const height = upright ? 1024 : Math.round(768 * aspect);
       const width = upright ? Math.round(1024 / aspect) : 768;

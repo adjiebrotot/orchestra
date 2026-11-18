@@ -212,7 +212,7 @@ export class BackdropControl {
    * @returns The canvas, or `null` for an image that is not there or a video.
    */
   #propCanvas(id: string): HTMLCanvasElement | null {
-    const code = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const code = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (code) {
       return drawFlag(code, PROP_FLAG_SIDE, Math.round(PROP_FLAG_SIDE * FLAG_ASPECT), false);
     }
@@ -237,7 +237,7 @@ export class BackdropControl {
    * @returns The image, or `null` for an image that is not there.
    */
   #describe(id: string): PanelImage | null {
-    const code = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const code = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (code) {
       let thumb = this.#flagThumbs.get(code);
       if (!thumb) {
