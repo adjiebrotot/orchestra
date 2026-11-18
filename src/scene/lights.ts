@@ -724,8 +724,10 @@ interface LightOptions {
  *
  * @param lights The group of {@link createLights}.
  * @param style The colors of the style.
+ * @param beams The factor of the user for the light of the visible beams (design 4.5, light
+ *   controls).
  */
-export function styleLights(lights: Group, style: LightStyle): void {
+export function styleLights(lights: Group, style: LightStyle, beams = 1): void {
   const colors = new Map([
     [KEY_NAME, style.key],
     [CONDUCTOR_NAME, style.key],
@@ -752,7 +754,7 @@ export function styleLights(lights: Group, style: LightStyle): void {
       // The haze of each beam, its throat, and its motes share the beam color. The lamp has its
       // own color uniform, with no `uHeight`.
       if (uniform?.value instanceof Color && object.material.uniforms['uHeight']) {
-        uniform.value.set(style.beam).multiplyScalar(style.gain);
+        uniform.value.set(style.beam).multiplyScalar(style.gain * beams);
       }
     }
   });

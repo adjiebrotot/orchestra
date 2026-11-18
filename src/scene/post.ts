@@ -144,6 +144,8 @@ export interface HazeFrame {
   readonly light: Vec3;
   /** The height of the hall floor, in meters. */
   readonly floorY: number;
+  /** The factor of the density of the user ({@link ROOM_HAZE}.density), 0 for clear air. */
+  readonly density: number;
 }
 
 /**
@@ -1010,7 +1012,12 @@ export class PostPipeline {
     }
     const values = uniforms['uHaze']?.value;
     if (values instanceof Vector4) {
-      values.set(haze.start, ROOM_HAZE.density / haze.stageSide, ROOM_HAZE.forward, haze.floorY);
+      values.set(
+        haze.start,
+        (ROOM_HAZE.density * haze.density) / haze.stageSide,
+        ROOM_HAZE.forward,
+        haze.floorY,
+      );
     }
   }
 

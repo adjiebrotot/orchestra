@@ -109,6 +109,8 @@ import { compileInto, gpuDoneSteps, programsReadySteps } from './programs.ts';
 import { depthGeometryOf } from './shared-corners.ts';
 import { STAGE_STYLES } from './stage-style.ts';
 import type { LightStyle } from './stage-style.ts';
+import { DEFAULT_BACKDROP } from './backdrop-settings.ts';
+import type { LightSettings } from './backdrop-settings.ts';
 
 /**
  * Gives the strength of the vignette of a frame (design 4.5, post effects). A close shot gets the
@@ -557,6 +559,8 @@ export class StageScene {
   #backdrop: Group | null = null;
   /** The colors of the stage lights of the stage style (design 4.5, stage style). */
   #lightStyle: LightStyle = STAGE_STYLES.classic.light;
+  /** The light controls of the user (design 4.5, light controls). */
+  #lightSettings: LightSettings = DEFAULT_BACKDROP.light;
   /**
    * The uniforms of the stage text (design 4.5, stage text). The stage of each layout shares
    * them, so a new text shows at once on the shown stage.
@@ -650,7 +654,7 @@ export class StageScene {
     yield;
     const lights = createLights(layout.stageSide, this.#tier, layout.conductor);
     // The bake and the capture of the environment then see the lights of the stage style.
-    styleLights(lights, this.#lightStyle);
+    styleLights(lights, this.#lightStyle, this.#lightSettings.beams);
     scene.add(lights);
     setRimLights(this.#rim, lights);
     yield;
@@ -819,9 +823,25 @@ export class StageScene {
    */
   setLightStyle(style: LightStyle): void {
     this.#lightStyle = style;
+    this.#restyleLights();
+  }
+
+  /**
+   * Sets the light controls of the user (design 4.5, light controls): the haze, the beams, and
+   * the brightness. The shown layout changes at once.
+   *
+   * @param settings The light controls.
+   */
+  setLightSettings(settings: LightSettings): void {
+    this.#lightSettings = settings;
+    this.#restyleLights();
+  }
+
+  /** Writes the stage style and the beams of the user to the lights of the shown layout. */
+  #restyleLights(): void {
     const view = this.#view;
     if (view) {
-      styleLights(view.lights, style);
+      styleLights(view.lights, this.#lightStyle, this.#lightSettings.beams);
       setRimLights(this.#rim, view.lights);
     }
   }
@@ -1480,7 +1500,8 @@ export class StageScene {
     const rig = shotRig(camera.position.toArray(), view.camera.target, camera.fov, spot);
     setShotLight(this.#shot, rig, light, spot);
     const stops = SHOT_LOOK.exposure * light * rig.shade;
-    this.#renderer.toneMappingExposure = this.#exposure * 2 ** (stops + this.#lightStyle.exposure);
+    this.#renderer.toneMappingExposure =
+      this.#exposure * this.#lightSettings.brightness * 2 ** (stops + this.#lightStyle.exposure);
   }
 
   /**
@@ -1498,6 +1519,7 @@ export class StageScene {
       stageSide: view.stageSide,
       light: rimLightPlace(view.stageSide),
       floorY: -STAGE_THICKNESS,
+      density: this.#lightSettings.haze,
     };
   }
 
