@@ -675,6 +675,7 @@ export class App {
       },
       onTitles: (lines) => {
         this.#ui.titleCard.setPiece(lines.title, lines.subtitle);
+        this.#scene.setSheetTitles(lines);
       },
       onCancel: () => {
         // In the last step, the stop ends the wait for the encoders.
@@ -1189,7 +1190,7 @@ export class App {
       // The first call of the pose code is slower, so it runs in a step before the first frame.
       poseAt(plans.plan, 0, 0, STOPPED.transport, [], createScenePose(plans.plan));
       yield;
-      const prepared = yield* scene.prepareSteps(plans.layout, plans.models);
+      const prepared = yield* scene.prepareSteps(plans.layout, plans.models, score);
       return { score, scene: plans, prepared };
     })();
     const run = before.then(async () => {
@@ -1454,6 +1455,7 @@ export class App {
     this.#ui.title.show(lines.title, lines.composer);
     this.#ui.titleCard.setPiece(lines.title, lines.composer);
     this.#renderPanel.setTitles({ title: lines.title, subtitle: lines.composer });
+    this.#scene.setSheetTitles({ title: lines.title, subtitle: lines.composer });
     this.#media.showPiece(lines);
     document.title = pageTitle(lines, stageFile);
   }

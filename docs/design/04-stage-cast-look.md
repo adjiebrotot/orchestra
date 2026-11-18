@@ -1752,7 +1752,7 @@ flute, the oboe, the clarinet, the horn, the trumpet, or the trombone, as in a c
 | Stool           | For the harp, with no back (`STOOL`). It fits the legs, so the knees and the hooves stay out of it.       |
 | Piano bench     | A padded seat with four tapered legs (`PIANO_BENCH`), as in `polar-bear-views.png`. It fits the legs and holds the whole haunch. |
 | Music stand     | A tripod and a tilted desk with a sheet (`MUSIC_STAND`), below the eyes of its players.                   |
-| Sheet music     | Staff lines, bar lines, and notes on each stand sheet, the sheet on each piano desk, and each page of the conductor score (`SHEET_PRINT` of `scene/sheets.ts`). |
+| Sheet music     | The real part of the readers on each stand sheet and on the piano desk, and the full score on the conductor stand, under the title and the subtitle of the render panel (`ENGRAVE` of `score/engrave.ts`, `SHEET_PRINT` of `scene/sheets.ts`). |
 | Podium          | A box with cut corners and framed panels (`PODIUM_SIZE`, `PODIUM_TRIM`), as in `bear-views.png`.          |
 | Conductor stand | A desk on a post in front of the podium (`CONDUCTOR_STAND`), with its top edge at the bear shoulders.     |
 | Stage           | A slab of side `S` with cut corners (`STAGE_CORNER_CUT`), a raised lip (`STAGE_LIP`), and lacquered planks. |
@@ -1760,9 +1760,32 @@ flute, the oboe, the clarinet, the horn, the trumpet, or the trombone, as in a c
 
 The props give the sheets as plain corners (`buildSheets()` of `models/stage.ts`). The piano does
 not move in a pose, so the sheet of its desk (`pianoSheetCorners()`) stays at its place in the bind
-pose of the pianist. The scene draws the music into one canvas texture of 256 pixels at start,
-with no file, and lays it on the white sheets with a polygon offset. The lines fade to gray with the mip levels at a distance, so they
-make no moiré. Reason: the close shots showed the sheets as blank white quads.
+pose of the pianist. Each stand records its readers (`StandPlace.readers`), and `buildSheets()`
+gives the music of each sheet: the part of its readers, or a page of the full score.
+
+The rules of the printed music (`engravePart()` of `score/engrave.ts`) follow the parts of a real
+orchestra:
+
+- The bars come from the downbeats of the score, and the time signatures from `Score.meters`.
+  The notes snap to a grid of sixteenths.
+- One key signature holds for the score. The profiles of Krumhansl and Kessler find it from the
+  pitched notes. A minor key gets the signature of its relative major.
+- Each section reads its clef: the alto clef for the viola, the bass clef for the low strings,
+  the bassoon, the low brass, and the timpani, and one line for the percussion. The piano and the
+  harp read a grand staff, split at middle C.
+- The clarinet and the trumpet print in B♭, the horn in F, and the double bass an octave up.
+- An accidental holds to the end of its bar. The eighths and the sixteenths of one beat share a
+  beam. A run of empty bars prints as one multi-bar rest on a stand part.
+- A string desk prints the part of its whole seat. Each other stand prints the part of its own
+  player.
+
+A stand page and the piano page start at bar 1, with the title, the subtitle, and the name of the
+part. The conductor score prints one system of all the seats on two pages, with the titles on the
+left page. The scene draws all the pages into one canvas atlas at the build, with no file, and
+draws it again at each edit of the titles in the render panel (`StageScene.setSheetTitles()`).
+The texture lies on the white sheets with a polygon offset. The lines fade to gray with the mip
+levels at a distance, so they make no moiré. Reason: a real orchestra reads the real music, and
+the close shots show it.
 
 **Choir risers.** The risers follow real choral risers and stage stairs (`buildRisers()`):
 

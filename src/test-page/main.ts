@@ -164,7 +164,7 @@ function* playerPieceSteps(role: PlayerRole, stage: StageScene): Steps<Piece> {
   // The first call of the pose code is slower, so it runs in a step before the first frame.
   poseAt(plan, 0, 0, STOPPED.transport, [], poses);
   yield;
-  const prepared = yield* stage.prepareSteps(layout, models);
+  const prepared = yield* stage.prepareSteps(layout, models, score);
 
   const [place] = layout.players;
   if (!place) {
@@ -228,7 +228,7 @@ function* conductorPieceSteps(role: ConductorRole, stage: StageScene): Steps<Pie
   poseAt(plan, 0, 0, STOPPED.transport, [], poses);
   yield;
   const alone = { ...layout, stageSide: SMALLEST_STAGE, players: [], stands: [], risers: [] };
-  const prepared = yield* stage.prepareSteps(alone, models);
+  const prepared = yield* stage.prepareSteps(alone, models, score);
 
   const model = models.get(CONDUCTOR.species, CONDUCTOR.instrument);
   const subject = {
