@@ -3,7 +3,13 @@ import type { Group } from 'three';
 import { Backdrop } from '../scene/backdrop.ts';
 import { isVideoId } from '../scene/backdrop-settings.ts';
 import type { BackdropSettings, LightSettings, ScreenCue } from '../scene/backdrop-settings.ts';
-import { FLAG_ASPECT, drawFlag, flagName } from '../scene/country-flags.ts';
+import {
+  FLAG_ASPECT,
+  drawFlag,
+  flagArtReady,
+  flagName,
+  loadFlagArt,
+} from '../scene/country-flags.ts';
 import type { PropDressing } from '../scene/prop-dressing.ts';
 import { StageText } from '../scene/stage-text.ts';
 import type { StageStyleId } from '../scene/stage-style.ts';
@@ -121,6 +127,7 @@ export class BackdropControl {
     this.panel.setSettings(this.#settings);
     this.#tellProps();
     this.#readImages().catch(reportError);
+    this.#loadArt();
   }
 
   /** The group of the 3D objects, for the scene. */
@@ -184,6 +191,35 @@ export class BackdropControl {
       this.#backdrop.setLight(settings.light);
       this.#onLight(settings.light);
     }
+    this.#loadArt();
+  }
+
+  /**
+   * Loads the artwork of each flag of the settings that is not loaded yet, then draws the
+   * dressing, the props, and the pictures of the panel again with it.
+   */
+  #loadArt(): void {
+    const codes = new Set(
+      [...JSON.stringify(this.#settings).matchAll(/"flag:([a-z]{2,5})"/gu)].flatMap((match) =>
+        match[1] && !flagArtReady(match[1]) ? [match[1]] : [],
+      ),
+    );
+    if (codes.size === 0) {
+      return;
+    }
+    loadFlagArt(codes)
+      .then(() => {
+        for (const code of codes) {
+          this.#flagThumbs.delete(code);
+        }
+        if (this.#stageSide > 0) {
+          this.#backdrop.build(this.#stageSide, this.#settings);
+          this.#tellScreen();
+        }
+        this.#tellProps();
+        this.panel.setSettings(this.#settings);
+      })
+      .catch(reportError);
   }
 
   /** Tells the stage the stand banner and the folder logo, with their images. */
@@ -212,7 +248,7 @@ export class BackdropControl {
    * @returns The canvas, or `null` for an image that is not there or a video.
    */
   #propCanvas(id: string): HTMLCanvasElement | null {
-    const code = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const code = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (code) {
       return drawFlag(code, PROP_FLAG_SIDE, Math.round(PROP_FLAG_SIDE * FLAG_ASPECT), false);
     }
@@ -237,7 +273,7 @@ export class BackdropControl {
    * @returns The image, or `null` for an image that is not there.
    */
   #describe(id: string): PanelImage | null {
-    const code = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const code = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (code) {
       let thumb = this.#flagThumbs.get(code);
       if (!thumb) {

@@ -32,7 +32,7 @@ import type {
   ScreenCue,
   ScreenMaterial,
 } from './backdrop-settings.ts';
-import { FLAG_ASPECT, drawFlag } from './country-flags.ts';
+import { FLAG_ASPECT, drawFlag, flagArtReady } from './country-flags.ts';
 import { HALL, HALL_LIGHT, hallUnit } from './hall.ts';
 import { STAGE_STYLES } from './stage-style.ts';
 import type { DressingStyle } from './stage-style.ts';
@@ -1184,11 +1184,12 @@ export class Backdrop {
    *   there.
    */
   #texture(id: string, aspect: number, upright: boolean, used: Set<string>): ClothTexture | null {
-    const flag = /^flag:([a-z]{2})$/u.exec(id)?.[1];
+    const flag = /^flag:([a-z]{2,5})$/u.exec(id)?.[1];
     if (flag) {
       const height = upright ? 1024 : Math.round(768 * aspect);
       const width = upright ? Math.round(1024 / aspect) : 768;
-      const key = `${id}@${width}x${height}`;
+      // A flag drawn before its artwork loaded gets a new texture once the artwork is there.
+      const key = `${id}@${width}x${height}${flagArtReady(flag) ? '' : ':field'}`;
       used.add(key);
       let texture = this.#textures.get(key);
       if (!texture) {

@@ -354,7 +354,7 @@ export function isText(value: unknown): value is string {
  * @returns True for `flag:<code>`, `img:<id>`, or `vid:<id>`.
  */
 export function isImageId(value: unknown): value is string {
-  return isText(value) && /^(flag:[a-z]{2}|(img|vid):[\w-]{1,64})$/u.test(value);
+  return isText(value) && /^(flag:[a-z]{2,5}|(img|vid):[\w-]{1,64})$/u.test(value);
 }
 
 /**

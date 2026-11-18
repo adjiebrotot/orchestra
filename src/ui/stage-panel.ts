@@ -24,6 +24,7 @@ import type {
   StageTextSettings,
 } from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
+import { type ComboGroup, createCombobox } from './combobox.ts';
 import { STAGE_STYLE_OPTIONS } from '../scene/stage-style.ts';
 import { createButton, createElement } from './dom.ts';
 
@@ -729,43 +730,34 @@ export class StagePanel {
     }
 
     const tools = createElement('div', 'stage-image-tools');
-    const add = createElement('select');
-    add.setAttribute('aria-label', 'Add an image');
-    const first = createElement(
-      'option',
-      '',
+    const groups: ComboGroup[] = [
+      {
+        label: 'Country flags',
+        options: COUNTRY_FLAGS.map(([code, name, keywords]) => ({
+          value: `flag:${code}`,
+          text: name,
+          keywords,
+        })),
+      },
+    ];
+    const uploads = this.#actions.uploads().filter((image) => videos || !image.video);
+    if (uploads.length > 0) {
+      groups.push({
+        label: videos ? 'Your images and videos' : 'Your images',
+        options: uploads.map((image) => ({ value: image.id, text: image.name, keywords: '' })),
+      });
+    }
+    const add = createCombobox(
       single
         ? 'Choose a country flag or an image…'
         : videos
           ? 'Add a country flag, an image, or a video…'
           : 'Add a country flag or an image…',
+      groups,
+      (value) => {
+        this.#setList(key, addTo(list, [value]));
+      },
     );
-    first.value = '';
-    add.append(first);
-    const flags = createElement('optgroup');
-    flags.label = 'Country flags';
-    for (const [code, name] of COUNTRY_FLAGS) {
-      const option = createElement('option', '', name);
-      option.value = `flag:${code}`;
-      flags.append(option);
-    }
-    add.append(flags);
-    const uploads = this.#actions.uploads().filter((image) => videos || !image.video);
-    if (uploads.length > 0) {
-      const own = createElement('optgroup');
-      own.label = videos ? 'Your images and videos' : 'Your images';
-      for (const image of uploads) {
-        const option = createElement('option', '', image.name);
-        option.value = image.id;
-        own.append(option);
-      }
-      add.append(own);
-    }
-    add.addEventListener('change', () => {
-      if (add.value) {
-        this.#setList(key, addTo(list, [add.value]));
-      }
-    });
     const file = createElement('input');
     file.type = 'file';
     file.accept = videos ? 'image/*,video/*' : 'image/*';
@@ -789,9 +781,9 @@ export class StagePanel {
     });
     upload.classList.add('is-accent');
     const full = !single && list.length >= LIST_LIMITS[key];
-    add.disabled = full;
+    add.input.disabled = full;
     upload.disabled = full;
-    tools.append(add, upload, file);
+    tools.append(add.element, upload, file);
     box.append(chips, tools);
     return box;
   }
