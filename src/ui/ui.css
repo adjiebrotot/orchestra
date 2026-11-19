@@ -2770,6 +2770,168 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   text-decoration: none;
 }
 
+/* The capture editor (design 2.5, capture): the image at the left, the tools at the right, and
+   the save row below. On a narrow window, the tools go below the image. */
+.capture-editor {
+  width: min(1180px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+}
+
+.capture-editor .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capture-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 14px;
+  min-height: 0;
+}
+
+.capture-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px;
+  border-radius: var(--radius-button);
+  background: #000;
+}
+
+.capture-preview {
+  display: block;
+  max-width: 100%;
+  max-height: min(66dvh, 640px);
+  touch-action: none;
+  cursor: move;
+}
+
+.capture-status {
+  margin: 0;
+  min-height: 1.4em;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.capture-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.capture-group {
+  display: grid;
+  gap: 6px;
+}
+
+.capture-group h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.capture-group input[type='checkbox'],
+.capture-group input[type='range'] {
+  accent-color: var(--accent);
+}
+
+.capture-editor select {
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.capture-size {
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.capture-texts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.capture-texts {
+  display: grid;
+  gap: 8px;
+}
+
+.capture-text-item {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+}
+
+.capture-text-item.is-selected {
+  border-color: var(--accent);
+}
+
+.capture-text-input {
+  padding: 6px 8px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+}
+
+.capture-text-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.capture-color {
+  width: 36px;
+  height: 30px;
+  padding: 0 2px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-button);
+  cursor: pointer;
+}
+
+.capture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.capture-actions .render-hint {
+  flex: 1 1 260px;
+}
+
+.capture-actions .director-button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .capture-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .capture-preview {
+    max-height: 48dvh;
+  }
+}
+
 /* The panel "Stage design": the dressing behind the stage, below the buttons of the studio. */
 .stage-panel {
   position: fixed;
@@ -3193,7 +3355,7 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   cursor: default;
 }
 
-/* A very narrow phone sets the studio buttons in two rows of two, so that no label is cut. */
+/* A very narrow phone sets the five studio buttons in two rows of three, so that no label is cut. */
 @media (max-width: 379px) {
   :root {
     --studio-height: 64px;
@@ -3201,7 +3363,7 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
 
   .studio {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
   }
 }
 

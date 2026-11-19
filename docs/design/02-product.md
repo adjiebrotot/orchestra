@@ -102,7 +102,7 @@ The UI has the style of a video player. The theme is dark only, because the scen
   up and the down arrows move the volume slider by 5 of 100, and turn the mute off, as the slider
   does. C toggles the cinematic camera, M the mute, and F the full screen. Escape closes the
   drawer, a message, or the dialog. The keys do nothing in a text field, with Ctrl, Alt, or Meta,
-  while the dialog is open, and when the focused control uses the key (`keyAction()` in
+  while the credits dialog or the capture editor (2.5) is open, and when the focused control uses the key (`keyAction()` in
   `app/keys.ts`). C also acts on a focused button or slider, because no control uses it. A row of
   the piece list uses only Enter, so Space plays and pauses after a click on a piece. A button or
   a tab that a click focused gives each key to the page (`keepKeysAfterClick()`), so Space pauses
@@ -185,6 +185,23 @@ page starts in Free mode (`app/camera-mode.ts`).
   above the lowest fifth, which the apps of a phone cover. The fields "Title" and "Subtitle" of
   the panel change the card of the page and of the video. A new piece writes its own lines into
   the fields. The page stores the two choices.
+- **Capture.** The studio button "Capture" makes a still image, for example a thumbnail
+  (`ui/capture-editor.ts`, `app/capture-image.ts`). The music pauses, the drawer closes, and a
+  modal editor opens. The next frame renders the stage one time at the size of the image, in the
+  current camera mode, and copies it (`App.#renderStill()`). The frame of Cinematic mode takes
+  the aspect of the image, as a full-frame render does, so the image has no bars. The page UI is
+  not in the image. The editor gives these choices:
+  - an aspect (`CAPTURE_ASPECTS`) and a short side (`CAPTURE_SHORT_SIDES`). A change renders a new
+    still, so the shot fills the new frame in place of a crop. The long side stops at
+    `CAPTURE_MAX_SIDE`.
+  - the title card of the piece (`drawTitleCard()`) and a dark shade from the bottom edge.
+  - texts with a font, a size, a color, bold, and an outline. A drag on the image moves a text,
+    and the menu "Move to" puts it at one of nine places.
+  - the file type: PNG, JPEG, or WebP (`CAPTURE_TYPES`). A browser with no encoder of a type
+    saves a PNG file.
+
+  The texts stay for the session, so a new capture at another moment keeps them. The page stores
+  the other choices. A render blocks the capture, because the render owns the size of the canvas.
 - **Orchestra.** The studio button "Orchestra" opens the panel of the rows and the players
   (`ui/orchestra-panel.ts`). It shares its place with "Stage design", so one closes when the other
   opens. Each section has a line with its players in the current piece, a menu of its count
@@ -193,7 +210,7 @@ page starts in Free mode (`app/camera-mode.ts`).
   makes a new row. Each change builds the scene again behind the cover of the stage, and the music
   goes on. The choir has only its count. The page stores the settings.
 - **Studio on a phone.** On a phone width, the studio buttons fill one row across the top, and the
-  title moves below them. On a very narrow phone, the buttons are in two rows of two, so no label
+  title moves below them. On a very narrow phone, the five buttons are in two rows of three, so no label
   is cut (`ui.css`). Each studio panel starts below the buttons and ends above the bar, and it scrolls
   when it is too tall. While a panel is open, the title and the intro do not show, because they
   were visible through the glass of the panel.

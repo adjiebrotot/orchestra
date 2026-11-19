@@ -76,7 +76,11 @@ export function pageFonts(): RenderTitleFonts {
  * @param width The widest line, in pixels.
  * @returns The lines.
  */
-function breakLines(context: CanvasRenderingContext2D, text: string, width: number): string[] {
+export function breakLines(
+  context: CanvasRenderingContext2D,
+  text: string,
+  width: number,
+): string[] {
   const words = text.split(/(?<=[\s_-])/u);
   const lines: string[] = [];
   let line = '';
