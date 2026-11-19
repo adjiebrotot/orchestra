@@ -1478,6 +1478,8 @@ Each list of images adds an item through a search field (`createCombobox()` of
 images of the user. The search ignores accents and finds other names, such as "UAE" or "DPRK"
 (`ALIASES` of `scene/country-flags.ts`). A flag code has two to five letters, for groups such as
 ASEAN.
+The list also has one flag that is not a country: "Question Mark (?)" (`qmark`), a black
+question mark in the middle of a white cloth. The mark stays upright at each aspect.
 
 A flag with an emblem crops the emblem from its Wikimedia artwork (`assets/flags/`,
 `loadFlagArt()`), which loads only when the dressing shows the flag. Until then the field shows

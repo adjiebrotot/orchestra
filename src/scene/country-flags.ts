@@ -658,6 +658,28 @@ function europe(context: Context, w: number, h: number): void {
 }
 
 /**
+ * Draws the question mark: a black "?" in the middle of a white cloth. The mark stays upright and
+ * keeps its form at any aspect.
+ *
+ * @param context The context.
+ * @param w The width.
+ * @param h The height.
+ */
+function questionMark(context: Context, w: number, h: number): void {
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, w, h);
+  const u = Math.min(w, h);
+  context.font = `bold ${String(Math.round(0.8 * u))}px Georgia, 'Times New Roman', serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'alphabetic';
+  const metrics = context.measureText('?');
+  const ascent = metrics.actualBoundingBoxAscent;
+  const descent = metrics.actualBoundingBoxDescent;
+  context.fillStyle = '#1a1a1a';
+  context.fillText('?', w / 2, h / 2 + (ascent - descent) / 2);
+}
+
+/**
  * Draws the flag of ASEAN: eleven stalks of rice in a red disc. The emblem stays upright at any
  * aspect.
  *
@@ -1577,6 +1599,7 @@ const FLAGS: readonly (readonly [string, string, FlagDrawer, FlagDrawer?])[] = [
     },
   ],
   ['asean', 'ASEAN', asean, asean],
+  ['qmark', 'Question Mark (?)', questionMark, questionMark],
   ['eu', 'European Union', europe, europe],
 ];
 
@@ -1592,6 +1615,7 @@ const ALIASES = new Map([
   ['kr', 'ROK Korea'],
   ['la', 'Lao'],
   ['nl', 'Holland'],
+  ['qmark', 'Unknown Mystery'],
   ['tr', 'Turkey Turkiye'],
   ['us', 'USA America'],
   ['va', 'Holy See'],
