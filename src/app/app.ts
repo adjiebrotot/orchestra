@@ -12,7 +12,8 @@ import type { Steps } from '../score/steps.ts';
 import { stageMix } from '../score/stage-mix.ts';
 import type { ChannelMix } from '../score/stage-mix.ts';
 import { cameraAt, createCameraPose } from '../shots/camera-at.ts';
-import type { CameraPose, ShotPlan } from '../shots/types.ts';
+import type { CameraPose, CameraPoseBuffer, ShotPlan } from '../shots/types.ts';
+import type { FrameCover, ScreenBox } from '../shots/frame.ts';
 import { CINEMA_ASPECT } from '../shots/view.ts';
 import type { Score, SectionId, SectionSize } from '../score/types.ts';
 import { focusKindOf, keepKeysAfterClick } from '../ui/dom.ts';
@@ -36,6 +37,8 @@ import type { RenderTitleFonts, RenderTitleLines } from './render-titles.ts';
 import { letterbox } from '../scene/letterbox.ts';
 import { END_BOW_SEC } from '../pose/end-bow.ts';
 import type { VideoRender } from './render-video.ts';
+import type { CaptureSize } from './capture-image.ts';
+import type { CaptureEditor } from '../ui/capture-editor.ts';
 import { songTimeAt } from '../audio/clock.ts';
 import type { ClockAnchor } from '../audio/clock.ts';
 import type { FirstScreenView } from '../ui/first-screen.ts';
@@ -123,6 +126,21 @@ const RENDER_IDLE_FAIL_SEC = 20;
 
 /** The time without encoder output after which the last step of a render shows a warning. */
 const RENDER_QUIET_WARN_MS = 5000;
+
+/** The time that the frame of the stage takes to glide after the drawer closes, in milliseconds. */
+const DRAWER_GLIDE_MS = 450;
+
+/** A still of the stage that the capture editor waits for (design 2.5, capture). */
+interface StillRequest {
+  /** The size of the still, in pixels. */
+  readonly size: CaptureSize;
+  /**
+   * Gives the still to the editor.
+   *
+   * @param still The canvas of the still, at its size.
+   */
+  readonly resolve: (still: HTMLCanvasElement) => void;
+}
 
 /** A render that runs: its video, and the state that the frame loop keeps for it. */
 interface RunningRender {
@@ -477,6 +495,12 @@ export class App {
   #writing: VideoRender | null = null;
   /** True while a render starts: the encoders load. */
   #renderStarting = false;
+  /** The editor of the still image of a capture (design 2.5, capture), after its first load. */
+  #captureEditor: CaptureEditor | null = null;
+  /** The still that the next frame renders for the capture editor, or `null`. */
+  #stillRequest: StillRequest | null = null;
+  /** The camera of the shot of a still, which `cameraAt()` writes. */
+  readonly #stillCamera = createCameraPose();
 
   /**
    * Creates the UI over the canvas and connects its controls.
@@ -725,6 +749,12 @@ export class App {
         }
       });
     }
+    const captureButton = document.createElement('button');
+    captureButton.className = 'studio-button';
+    captureButton.textContent = 'Capture';
+    captureButton.addEventListener('click', () => {
+      this.#openCapture(captureButton).catch(reportError);
+    });
     const renderButton = document.createElement('button');
     renderButton.className = 'studio-button is-accent';
     renderButton.textContent = 'Render MP4';
@@ -738,7 +768,7 @@ export class App {
         );
       }
     });
-    this.#studio.append(directorButton, stageButton, orchestraButton, renderButton);
+    this.#studio.append(directorButton, stageButton, orchestraButton, captureButton, renderButton);
     this.#studio.hidden = true;
     document.body.append(
       this.#studio,
@@ -773,8 +803,8 @@ export class App {
    * toggles the cinematic camera, M the mute button, and F the full screen. Escape closes the
    * drawer, and the drawer button gets the focus that the drawer held. A key action shows the bar,
    * as a pointer motion does, and Tab shows the hidden UI of Cinematic mode (design 2.3). While the
-   * credits dialog is open, no key of the page acts, and Escape closes only the dialog (design
-   * 2.8).
+   * credits dialog or the capture editor is open, no key of the page acts, and Escape closes only
+   * the dialog (design 2.5, 2.8).
    *
    * @param event The key event.
    */
@@ -783,7 +813,7 @@ export class App {
     if (event.key === 'Tab') {
       this.#activeAt = performance.now() / 1000;
     }
-    const dialog = this.#ui.creditsDialog.open;
+    const dialog = this.#ui.creditsDialog.open || this.#captureEditor?.open === true;
     if (event.key === 'Escape' && !modified && this.#ui.drawer.open && !dialog) {
       this.#ui.closeDrawer();
       return;
@@ -1955,6 +1985,7 @@ export class App {
     const wallTime = performance.now() / 1000;
     const piece = this.#piece;
     let shot: CameraPose | null = null;
+    let shotOf: ((frameAspect: number, target: CameraPoseBuffer) => CameraPose) | null = null;
     let poser: FramePoser | null = null;
     if (piece) {
       // After a failure, the clock of the `Player` stays at the song time of the failure (6.8).
@@ -1990,7 +2021,9 @@ export class App {
         const cameraTime = ended
           ? piece.score.durationSec + Math.max(0, wallTime - (transport.changedAtWall ?? wallTime))
           : this.#songTime;
-        shot = cameraAt(shots, cameraTime, transport, view, this.#shotCamera);
+        shotOf = (frameAspect, target) =>
+          cameraAt(shots, cameraTime, transport, { ...view, frameAspect }, target);
+        shot = shotOf(view.frameAspect, this.#shotCamera);
       }
     }
     if (!this.#render) {
@@ -2006,6 +2039,7 @@ export class App {
     // The sheet of a phone covers the first screen, so the stage does not need to clear it.
     const ring = this.#phone.matches && drawer.open ? null : this.#ui.firstScreen.ringBox;
     this.#backdrop.frame(this.#songTime, effectTime(performance.now(), this.#scene.reducedMotion));
+    this.#renderStill(shotOf, cover, ring, poser);
     this.#scene.render(shot, cover, ring, poser);
     this.#director.update(this.#songTime);
     this.#followRender(wallTime);
@@ -2017,6 +2051,83 @@ export class App {
         this.#fail(piece, error, 'load');
       });
     }
+  }
+
+  /**
+   * Opens the capture editor (design 2.5, capture): the music pauses, and the editor gets a still
+   * of the stage at the size of the image. The drawer closes first, and the still waits until the
+   * frame of the stage glides to its free place. A render blocks the capture, because it owns the
+   * size of the canvas.
+   *
+   * @param opener The button that opens the editor, which gets the focus when it closes.
+   */
+  async #openCapture(opener: HTMLElement): Promise<void> {
+    if (this.#render || this.#renderStarting || this.#writing || this.#captureEditor?.open) {
+      return;
+    }
+    if (this.#state.transport.playing) {
+      this.#pause();
+    }
+    const glide = this.#ui.drawer.open;
+    this.#ui.closeDrawer();
+    const [{ CaptureEditor }] = await Promise.all([
+      import('../ui/capture-editor.ts'),
+      new Promise((resolve) => {
+        window.setTimeout(resolve, glide ? DRAWER_GLIDE_MS : 0);
+      }),
+    ]);
+    if (!this.#captureEditor) {
+      this.#captureEditor = new CaptureEditor({
+        onStill: async (size) =>
+          new Promise<HTMLCanvasElement>((resolve) => {
+            this.#stillRequest = { size, resolve };
+          }),
+      });
+      document.body.append(this.#captureEditor.element);
+    }
+    const lines = this.#renderPanel.titles;
+    this.#captureEditor.show(opener, lines, pageFonts());
+  }
+
+  /**
+   * Renders the still that the capture editor waits for, before the frame of the page (design 2.5,
+   * capture). The canvas takes the size of the image for one render, and the frame of Cinematic
+   * mode takes its aspect, as a full-frame render does, so the shot fills the image with no bars.
+   * The copy comes in the task of the render, so the canvas still holds its image. Then the canvas
+   * takes the size of the page again, and the frame of the page renders over it.
+   *
+   * @param shotOf Gives the shot of Cinematic mode for a frame aspect, or `null` in Free mode.
+   * @param cover The parts of the page over the canvas.
+   * @param ring The box of the load ring of the first screen, or `null`.
+   * @param poser The poses of the frame, or `null`.
+   */
+  #renderStill(
+    shotOf: ((frameAspect: number, target: CameraPoseBuffer) => CameraPose) | null,
+    cover: FrameCover,
+    ring: ScreenBox | null,
+    poser: FramePoser | null,
+  ): void {
+    const request = this.#stillRequest;
+    if (!request) {
+      return;
+    }
+    this.#stillRequest = null;
+    const { width, height } = request.size;
+    const aspect = width / height;
+    this.#scene.setFrameAspect(aspect);
+    this.#scene.resize(width, height, 1);
+    this.#scene.render(shotOf ? shotOf(aspect, this.#stillCamera) : null, cover, ring, poser);
+    const still = document.createElement('canvas');
+    still.width = width;
+    still.height = height;
+    still.getContext('2d')?.drawImage(this.#canvas, 0, 0, width, height);
+    this.#scene.setFrameAspect(CINEMA_ASPECT);
+    this.#scene.resize(
+      this.#canvas.clientWidth,
+      this.#canvas.clientHeight,
+      window.devicePixelRatio,
+    );
+    request.resolve(still);
   }
 
   /**
