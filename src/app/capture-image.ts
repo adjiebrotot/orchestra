@@ -1,6 +1,10 @@
 import type { FrameBox } from '../scene/letterbox.ts';
 import { breakLines, drawTitleCard } from './render-titles.ts';
 import type { RenderTitleFonts, RenderTitleLines } from './render-titles.ts';
+import { stickerImage } from './capture-stickers.ts';
+import type { StickerArt, StickerCut } from './capture-stickers.ts';
+import { drawStyledLines, styleSpacing, stylePad, stylePreset } from './capture-text-styles.ts';
+import type { CaptureFont, CaptureTextStyle } from './capture-text-styles.ts';
 
 /** An aspect of the still image of a capture (design 2.5, capture). */
 export interface CaptureAspect {
@@ -66,11 +70,9 @@ export const CAPTURE_TYPES = [
 /** The quality of a JPEG or a WebP file, from 0 to 1. */
 export const CAPTURE_QUALITY = 0.92;
 
-/** The font of a text of a capture: the serif of the title or the sans of the UI. */
-export type CaptureFont = 'serif' | 'sans';
-
 /** A text over the still image of a capture. */
 export interface CaptureText {
+  readonly kind: 'text';
   /** The text. A line break starts a new line. */
   text: string;
   /** The middle of the text, from the left edge, as a part of the width. */
@@ -79,29 +81,100 @@ export interface CaptureText {
   y: number;
   /** The size of the letters, as a part of the short side of the image. */
   size: number;
-  /** The color of the letters, as `#rrggbb`. */
+  /** The turn of the text, in degrees, clockwise. */
+  turn: number;
+  /** The look of the text (`CAPTURE_STYLES`). */
+  style: CaptureTextStyle;
+  /** The main color of the letters, as `#rrggbb`. */
   color: string;
+  /** The second color of the look (an outline, a box, a glow), as `#rrggbb`. */
+  accent: string;
   font: CaptureFont;
   bold: boolean;
-  /** True to draw a dark outline around the letters, so they read over a bright stage. */
-  outline: boolean;
+  /** True to write the text in capitals. */
+  upper: boolean;
+}
+
+/** A flag sticker over the still image of a capture. */
+export interface CaptureSticker extends StickerArt {
+  readonly kind: 'flag';
+  code: string;
+  cut: StickerCut;
+  border: boolean;
+  /** The middle of the sticker, from the left edge, as a part of the width. */
+  x: number;
+  /** The middle of the sticker, from the top edge, as a part of the height. */
+  y: number;
+  /** The height of the flag, as a part of the short side of the image. */
+  size: number;
+  /** The turn of the sticker, in degrees, clockwise. */
+  turn: number;
+}
+
+/** A part over the still image of a capture: a text or a flag sticker. */
+export type CaptureItem = CaptureText | CaptureSticker;
+
+/**
+ * Puts the values of a look on a text: its colors, its font, its weight, and the capitals.
+ *
+ * @param text The text. The function changes it in place.
+ * @param style The look.
+ */
+export function applyStyle(text: CaptureText, style: CaptureTextStyle): void {
+  const preset = stylePreset(style);
+  text.style = style;
+  text.color = preset.color;
+  text.accent = preset.accent;
+  text.font = preset.font;
+  text.bold = preset.bold;
+  text.upper = preset.upper;
 }
 
 /**
- * Creates the text of the button "Add text": large white letters with an outline, in the middle.
+ * Creates the text of the button "Add text": large letters in a look, in the middle.
  *
+ * @param style The look.
+ * @param value The text.
  * @returns The text.
  */
-export function newCaptureText(): CaptureText {
-  return {
-    text: 'Your text',
+export function newCaptureText(
+  style: CaptureTextStyle = 'classic',
+  value = 'Your text',
+): CaptureText {
+  const text: CaptureText = {
+    kind: 'text',
+    text: value,
     x: 0.5,
     y: 0.5,
     size: 0.12,
+    turn: 0,
+    style,
     color: '#ffffff',
+    accent: '#000000',
     font: 'sans',
     bold: true,
-    outline: true,
+    upper: false,
+  };
+  applyStyle(text, style);
+  return text;
+}
+
+/**
+ * Creates a flag sticker: a tilted rectangle with a white border, at the top right.
+ *
+ * @param code The code of the flag.
+ * @returns The sticker.
+ */
+export function newCaptureSticker(code: string): CaptureSticker {
+  return {
+    kind: 'flag',
+    code,
+    cut: 'rect',
+    border: true,
+    x: 0.82,
+    y: 0.22,
+    size: 0.2,
+    turn: -8,
   };
 }
 
@@ -109,13 +182,15 @@ export function newCaptureText(): CaptureText {
 export const CAPTURE_TEXT = {
   /** The line height, as a part of the size of the letters. */
   line: 1.12,
-  /** The width of the outline, as a part of the size of the letters. */
-  outline: 0.16,
-  /** The color of the outline. */
-  outlineColor: 'rgba(8, 6, 5, 0.92)',
   /** The widest line, as a part of the width of the image. */
   widthShare: 0.92,
 } as const;
+
+/** The box of a part of a capture, in pixels of the image, with its turn. */
+export interface CaptureBox extends FrameBox {
+  /** The turn of the box around its middle, in radians, clockwise. */
+  readonly angle: number;
+}
 
 /** The image of a capture: the still of the stage, and the parts over it. */
 export interface CaptureLayers {
@@ -128,7 +203,8 @@ export interface CaptureLayers {
    * reads better.
    */
   readonly shade: number;
-  readonly texts: readonly CaptureText[];
+  /** The texts and the stickers, from the back to the front. */
+  readonly items: readonly CaptureItem[];
   readonly fonts: RenderTitleFonts;
 }
 
@@ -145,16 +221,94 @@ function fontOf(text: CaptureText, px: number, fonts: RenderTitleFonts): string 
 }
 
 /**
- * Draws the image of a capture: the still, the shade, the title card, and each text. It gives the
- * box of each text, so a press on the preview can find the text under it.
+ * Draws a text of a capture in its look.
+ *
+ * @param context The context, at the size of the image.
+ * @param text The text.
+ * @param fonts The font families.
+ * @returns The box of the text.
+ */
+function drawText(
+  context: CanvasRenderingContext2D,
+  text: CaptureText,
+  fonts: RenderTitleFonts,
+): CaptureBox {
+  const { width, height } = context.canvas;
+  const px = Math.max(1, text.size * Math.min(width, height));
+  context.font = fontOf(text, px, fonts);
+  context.letterSpacing = `${px * styleSpacing(text.style)}px`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  const value = text.upper ? text.text.toLocaleUpperCase() : text.text;
+  const words = value
+    .split('\n')
+    .flatMap((line) => breakLines(context, line, width * CAPTURE_TEXT.widthShare));
+  const lineHeight = px * CAPTURE_TEXT.line;
+  const boxHeight = words.length * lineHeight;
+  const lines = words.map((line, i) => ({
+    text: line,
+    width: context.measureText(line).width,
+    y: -boxHeight / 2 + lineHeight * (i + 0.5),
+  }));
+  const pad = px * stylePad(text.style);
+  const box: CaptureBox = {
+    x: text.x * width,
+    y: text.y * height,
+    width: Math.max(0, ...lines.map((line) => line.width)) + 2 * pad,
+    height: boxHeight + 2 * pad,
+    angle: (text.turn * Math.PI) / 180,
+  };
+  context.save();
+  context.translate(box.x, box.y);
+  context.rotate(box.angle);
+  drawStyledLines(context, text, lines, px);
+  context.restore();
+  context.letterSpacing = '0px';
+  return box;
+}
+
+/**
+ * Draws a flag sticker of a capture, with a soft shadow below it.
+ *
+ * @param context The context, at the size of the image.
+ * @param sticker The sticker.
+ * @returns The box of the sticker.
+ */
+function drawSticker(context: CanvasRenderingContext2D, sticker: CaptureSticker): CaptureBox {
+  const { width, height } = context.canvas;
+  const px = Math.max(4, sticker.size * Math.min(width, height));
+  const image = stickerImage(sticker, px);
+  const box: CaptureBox = {
+    x: sticker.x * width,
+    y: sticker.y * height,
+    width: image.width,
+    height: image.height,
+    angle: (sticker.turn * Math.PI) / 180,
+  };
+  context.save();
+  context.translate(box.x, box.y);
+  context.rotate(box.angle);
+  context.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  context.shadowBlur = px * 0.1;
+  context.shadowOffsetY = px * 0.04;
+  context.drawImage(image, -image.width / 2, -image.height / 2);
+  context.restore();
+  return box;
+}
+
+/**
+ * Draws the image of a capture: the still, the shade, the title card, and each text and sticker.
+ * It gives the box of each part, so a press on the preview can find the part under it.
  *
  * @param context The context, at the size of the image.
  * @param layers The parts of the image.
- * @returns The box of each text, in pixels of the image, in the order of `layers.texts`.
+ * @returns The box of each part, in pixels of the image, in the order of `layers.items`.
  */
-export function drawCapture(context: CanvasRenderingContext2D, layers: CaptureLayers): FrameBox[] {
+export function drawCapture(
+  context: CanvasRenderingContext2D,
+  layers: CaptureLayers,
+): CaptureBox[] {
   const { width, height } = context.canvas;
-  const unit = Math.min(width, height);
   context.save();
   context.drawImage(layers.still, 0, 0, width, height);
   if (layers.shade > 0) {
@@ -173,40 +327,30 @@ export function drawCapture(context: CanvasRenderingContext2D, layers: CaptureLa
       layers.fonts,
     );
   }
-  const boxes: FrameBox[] = [];
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.lineJoin = 'round';
-  for (const text of layers.texts) {
-    const px = Math.max(1, text.size * unit);
-    context.font = fontOf(text, px, layers.fonts);
-    const lines = text.text
-      .split('\n')
-      .flatMap((line) => breakLines(context, line, width * CAPTURE_TEXT.widthShare));
-    const lineHeight = px * CAPTURE_TEXT.line;
-    const boxWidth = Math.max(0, ...lines.map((line) => context.measureText(line).width));
-    const boxHeight = lines.length * lineHeight;
-    const x = text.x * width;
-    const y = text.y * height;
-    boxes.push({ x, y, width: boxWidth, height: boxHeight });
-    let lineY = y - boxHeight / 2 + lineHeight / 2;
-    for (const line of lines) {
-      if (text.outline) {
-        context.lineWidth = px * CAPTURE_TEXT.outline;
-        context.strokeStyle = CAPTURE_TEXT.outlineColor;
-        context.strokeText(line, x, lineY);
-      }
-      context.shadowColor = 'rgba(0, 0, 0, 0.5)';
-      context.shadowBlur = px * 0.08;
-      context.shadowOffsetY = px * 0.03;
-      context.fillStyle = text.color;
-      context.fillText(line, x, lineY);
-      context.shadowColor = 'transparent';
-      lineY += lineHeight;
-    }
-  }
+  const boxes = layers.items.map((item) =>
+    item.kind === 'text' ? drawText(context, item, layers.fonts) : drawSticker(context, item),
+  );
   context.restore();
   return boxes;
+}
+
+/**
+ * Tells if a point is inside a turned box, with a margin.
+ *
+ * @param box The box.
+ * @param x The x of the point.
+ * @param y The y of the point.
+ * @param pad The margin at each side.
+ * @returns True when the point is inside.
+ */
+export function boxHolds(box: CaptureBox, x: number, y: number, pad: number): boolean {
+  const dx = x - box.x;
+  const dy = y - box.y;
+  const cos = Math.cos(-box.angle);
+  const sin = Math.sin(-box.angle);
+  const u = dx * cos - dy * sin;
+  const v = dx * sin + dy * cos;
+  return Math.abs(u) <= box.width / 2 + pad && Math.abs(v) <= box.height / 2 + pad;
 }
 
 /**
