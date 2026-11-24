@@ -195,13 +195,22 @@ page starts in Free mode (`app/camera-mode.ts`).
     still, so the shot fills the new frame in place of a crop. The long side stops at
     `CAPTURE_MAX_SIDE`.
   - the title card of the piece (`drawTitleCard()`) and a dark shade from the bottom edge.
-  - texts with a font, a size, a color, bold, and an outline. A drag on the image moves a text,
+  - texts, each with a style (`CAPTURE_STYLES`, `app/capture-text-styles.ts`): Classic outline,
+    Comic punch, 3D block, Neon glow, Label box, Highlighter, Gold foil, Cinema, and Plain. A
+    style sets a main color and a second color (an outline, a ring, a depth, a glow, a box, a
+    marker, or a rule), a font, bold, and capitals. The user can change each value after it.
+    "Shuffle" gives another style. Each new text takes a style that no other text uses, so a
+    thumbnail does not repeat one look. "Add piece title" adds the piece title in Gold foil.
+  - flag stickers (`app/capture-stickers.ts`): a country flag of the backdrop menu, cut as a
+    rectangle, a waving flag, a round badge, or a heart, with an optional white die-cut border
+    and a soft shadow.
+  - for each text and sticker: a size, a tilt, and "To front". A drag on the image moves it,
     and the menu "Move to" puts it at one of nine places.
   - the file type: PNG, JPEG, or WebP (`CAPTURE_TYPES`). A browser with no encoder of a type
     saves a PNG file.
 
-  The texts stay for the session, so a new capture at another moment keeps them. The page stores
-  the other choices. A render blocks the capture, because the render owns the size of the canvas.
+  The texts and the stickers stay for the session, so a new capture at another moment keeps
+  them. The page stores the other choices. A render blocks the capture, because the render owns the size of the canvas.
 - **Orchestra.** The studio button "Orchestra" opens the panel of the rows and the players
   (`ui/orchestra-panel.ts`). It shares its place with "Stage design", so one closes when the other
   opens. Each section has a line with its players in the current piece, a menu of its count

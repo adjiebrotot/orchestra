@@ -3,16 +3,29 @@ import {
   CAPTURE_QUALITY,
   CAPTURE_SHORT_SIDES,
   CAPTURE_TYPES,
+  applyStyle,
+  boxHolds,
   captureFileName,
   captureSize,
   drawCapture,
+  newCaptureSticker,
   newCaptureText,
 } from '../app/capture-image.ts';
-import type { CaptureFont, CaptureSize, CaptureText } from '../app/capture-image.ts';
+import type {
+  CaptureBox,
+  CaptureItem,
+  CaptureSize,
+  CaptureSticker,
+  CaptureText,
+} from '../app/capture-image.ts';
+import { STICKER_CUTS } from '../app/capture-stickers.ts';
+import { CAPTURE_STYLES, stylePreset } from '../app/capture-text-styles.ts';
+import type { CaptureFont } from '../app/capture-text-styles.ts';
 import type { RenderTitleFonts, RenderTitleLines } from '../app/render-titles.ts';
 import { isRecord } from '../scene/backdrop-settings.ts';
 import type { Json, JsonRecord } from '../scene/backdrop-settings.ts';
-import type { FrameBox } from '../scene/letterbox.ts';
+import { COUNTRY_FLAGS, flagName, loadFlagArt } from '../scene/country-flags.ts';
+import { createCombobox } from './combobox.ts';
 import { createButton, createElement } from './dom.ts';
 import { ModalDialog } from './modal-dialog.ts';
 
@@ -116,6 +129,18 @@ function storeOptions(options: CaptureOptions): void {
   }
 }
 
+/** A field with its label. */
+interface LabeledInput {
+  /** The label, which holds the field. */
+  readonly label: HTMLElement;
+  readonly input: HTMLInputElement;
+}
+
+/** A color field with its label and its name, which a change of style rewrites. */
+interface ColorField extends LabeledInput {
+  readonly name: HTMLElement;
+}
+
 /** The actions of the capture editor. */
 export interface CaptureEditorActions {
   /**
@@ -129,7 +154,7 @@ export interface CaptureEditorActions {
 
 /**
  * The editor of a capture (design 2.5, capture): a modal dialog with the still of the stage, the
- * aspect and the resolution of the image, the title card, a shade, and texts that a drag on the
+ * aspect and the resolution of the image, the title card, a shade, and texts in many styles and flag stickers that a drag on the
  * image moves. "Save image" writes the image to a file. A change of the aspect or of the
  * resolution renders a new still, so the shot fills the new frame in place of a crop.
  */
@@ -146,13 +171,16 @@ export class CaptureEditor {
   readonly #type: HTMLSelectElement;
   readonly #save: HTMLButtonElement;
   readonly #list: HTMLElement;
-  /** The texts over the image. They stay for the session, so the next capture keeps them. */
-  readonly #texts: CaptureText[] = [];
-  /** The editor of each text, in the order of {@link CaptureEditor.#texts}. */
-  readonly #items: HTMLElement[] = [];
-  /** The box of each text in the last drawing, in pixels of the image. */
-  #boxes: FrameBox[] = [];
-  /** The text that the user edits or drags, or -1. */
+  /**
+   * The texts and the stickers over the image, from the back to the front. They stay for the
+   * session, so the next capture keeps them.
+   */
+  readonly #items: CaptureItem[] = [];
+  /** The editor of each part, in the order of {@link CaptureEditor.#items}. */
+  readonly #editors: HTMLElement[] = [];
+  /** The box of each part in the last drawing, in pixels of the image. */
+  #boxes: CaptureBox[] = [];
+  /** The part that the user edits or drags, or -1. */
   #selected = -1;
   /** The still of the stage, or `null` while it renders. */
   #still: HTMLCanvasElement | null = null;
@@ -195,12 +223,12 @@ export class CaptureEditor {
     const view = createElement('div', 'capture-view');
     view.append(this.#preview, this.#status);
 
-    this.#aspect = this.#select(
+    this.#aspect = this.#menu(
       'Aspect',
       CAPTURE_ASPECTS.map((aspect) => aspect.label),
       stored.aspect,
     );
-    this.#shortSide = this.#select(
+    this.#shortSide = this.#menu(
       'Resolution',
       CAPTURE_SHORT_SIDES.map((side) => `${side}p`),
       Math.max(0, CAPTURE_SHORT_SIDES.indexOf(stored.shortSide)),
@@ -245,14 +273,48 @@ export class CaptureEditor {
     const add = createButton('director-button', '');
     add.textContent = 'Add text';
     add.addEventListener('click', () => {
-      this.#addText(newCaptureText());
+      this.#addItem(newCaptureText(this.#nextStyle()));
     });
+    const title = createButton('director-button', '');
+    title.textContent = 'Add piece title';
+    title.addEventListener('click', () => {
+      const text = newCaptureText('metal', this.#lines.title || 'Your title');
+      text.y = 0.2;
+      text.size = 0.11;
+      this.#addItem(text);
+    });
+    const flags = createCombobox(
+      'Add a flag sticker…',
+      [
+        {
+          label: 'Country flags',
+          options: COUNTRY_FLAGS.map(([code, name, keywords]) => ({
+            value: code,
+            text: name,
+            keywords,
+          })),
+        },
+      ],
+      (code) => {
+        this.#addItem(newCaptureSticker(code));
+        loadFlagArt([code])
+          .then(() => {
+            this.#requestDraw();
+          })
+          .catch(() => undefined);
+      },
+    );
     const textsHead = createElement('div', 'capture-texts-head');
-    textsHead.append(createElement('h3', '', 'Texts'), add);
+    textsHead.append(createElement('h3', '', 'Texts and stickers'), add, title);
     const texts = createElement('div', 'capture-group');
     texts.append(
       textsHead,
-      createElement('p', 'render-hint', 'Drag a text on the image to move it.'),
+      flags.element,
+      createElement(
+        'p',
+        'render-hint',
+        'Drag a text or a sticker on the image to move it. Each text has a style.',
+      ),
       this.#list,
     );
 
@@ -261,7 +323,7 @@ export class CaptureEditor {
     const layout = createElement('div', 'capture-layout');
     layout.append(view, tools);
 
-    this.#type = this.#select(
+    this.#type = this.#menu(
       'File type',
       CAPTURE_TYPES.map(([label]) => label),
       stored.type,
@@ -398,6 +460,7 @@ export class CaptureEditor {
     if (!context || !this.#still) {
       return;
     }
+    context.clearRect(0, 0, this.#preview.width, this.#preview.height);
     this.#boxes = this.#draw(context, this.#still);
     const box = this.#boxes[this.#selected];
     if (box) {
@@ -407,9 +470,11 @@ export class CaptureEditor {
       context.lineWidth = Math.max(1, unit / 400);
       context.setLineDash([unit * 0.015, unit * 0.01]);
       context.strokeStyle = '#e7b45a';
+      context.translate(box.x, box.y);
+      context.rotate(box.angle);
       context.strokeRect(
-        box.x - box.width / 2 - pad,
-        box.y - box.height / 2 - pad,
+        -box.width / 2 - pad,
+        -box.height / 2 - pad,
         box.width + 2 * pad,
         box.height + 2 * pad,
       );
@@ -424,12 +489,12 @@ export class CaptureEditor {
    * @param still The still of the stage.
    * @returns The box of each text.
    */
-  #draw(context: CanvasRenderingContext2D, still: HTMLCanvasElement): FrameBox[] {
+  #draw(context: CanvasRenderingContext2D, still: HTMLCanvasElement): CaptureBox[] {
     return drawCapture(context, {
       still,
       titleCard: this.#titleCard.checked ? this.#lines : null,
       shade: Number(this.#shade.value),
-      texts: this.#texts,
+      items: this.#items,
       fonts: this.#fonts,
     });
   }
@@ -469,55 +534,134 @@ export class CaptureEditor {
   }
 
   /**
-   * Adds a text and its editor, and selects it.
+   * Gives the style of the next new text: the first style that no text uses, so each new text
+   * looks different.
    *
-   * @param text The text.
+   * @returns The style.
    */
-  #addText(text: CaptureText): void {
-    this.#texts.push(text);
-    const item = this.#textItem(text);
+  #nextStyle(): CaptureText['style'] {
+    const used = new Set(this.#items.flatMap((item) => (item.kind === 'text' ? [item.style] : [])));
+    const free = CAPTURE_STYLES.find((preset) => !used.has(preset.style));
+    return (free ?? CAPTURE_STYLES[used.size % CAPTURE_STYLES.length] ?? stylePreset('classic'))
+      .style;
+  }
+
+  /**
+   * Adds a text or a sticker and its editor, and selects it.
+   *
+   * @param item The text or the sticker.
+   */
+  #addItem(item: CaptureItem): void {
     this.#items.push(item);
-    this.#list.append(item);
-    this.#selectText(this.#texts.length - 1);
-    item.querySelector('textarea')?.select();
+    const editor = item.kind === 'text' ? this.#textItem(item) : this.#stickerItem(item);
+    this.#editors.push(editor);
+    this.#list.append(editor);
+    this.#selected = -1;
+    this.#select(this.#items.length - 1);
+    editor.querySelector('textarea')?.select();
     this.#requestDraw();
   }
 
   /**
-   * Removes a text and its editor.
+   * Removes a text or a sticker and its editor.
    *
-   * @param text The text.
+   * @param item The text or the sticker.
    */
-  #removeText(text: CaptureText): void {
-    const index = this.#texts.indexOf(text);
+  #removeItem(item: CaptureItem): void {
+    const index = this.#items.indexOf(item);
     if (index < 0) {
       return;
     }
-    this.#texts.splice(index, 1);
-    this.#items.splice(index, 1)[0]?.remove();
-    this.#selectText(-1);
+    this.#items.splice(index, 1);
+    this.#editors.splice(index, 1)[0]?.remove();
+    this.#select(-1);
     this.#requestDraw();
   }
 
   /**
-   * Selects a text: its editor shows as selected, and the preview frames it.
+   * Moves a text or a sticker to the front of the image, and its editor to the end of the list.
    *
-   * @param index The index of the text, or -1 for none.
+   * @param item The text or the sticker.
    */
-  #selectText(index: number): void {
+  #toFront(item: CaptureItem): void {
+    const index = this.#items.indexOf(item);
+    const editor = this.#editors[index];
+    if (index < 0 || !editor) {
+      return;
+    }
+    this.#items.splice(index, 1);
+    this.#editors.splice(index, 1);
+    this.#items.push(item);
+    this.#editors.push(editor);
+    this.#list.append(editor);
+    this.#selected = -1;
+    this.#select(this.#items.length - 1);
+  }
+
+  /**
+   * Selects a text or a sticker: its editor shows as selected, and the preview frames it.
+   *
+   * @param index The index of the part, or -1 for none.
+   */
+  #select(index: number): void {
     if (index === this.#selected) {
       return;
     }
     this.#selected = index;
-    for (const [i, item] of this.#items.entries()) {
-      item.classList.toggle('is-selected', i === index);
+    for (const [i, editor] of this.#editors.entries()) {
+      editor.classList.toggle('is-selected', i === index);
     }
     this.#requestDraw();
   }
 
   /**
-   * Makes the editor of a text: the text, the font, the size, the color, the weight, the outline,
-   * the menu "Move to", and the remove button.
+   * Makes the controls that a text and a sticker share: the size, the tilt, the menu "Move to",
+   * and the buttons "To front" and "Remove".
+   *
+   * @param item The text or the sticker. The controls change it in place.
+   * @param sizes The smallest and the largest size.
+   * @returns The rows of the controls.
+   */
+  #commonControls(item: CaptureItem, sizes: readonly [number, number]): HTMLElement[] {
+    const change = (): void => {
+      this.#requestDraw();
+    };
+    const size = this.#range('Size', sizes[0], sizes[1], 0.005, item.size, (value) => {
+      item.size = value;
+      change();
+    });
+    const tilt = this.#range('Tilt', -45, 45, 1, item.turn, (value) => {
+      item.turn = value;
+      change();
+    });
+
+    const place = this.#menu('Move to', ['Move to…', ...PLACES.map(([label]) => label)], 0);
+    place.addEventListener('change', () => {
+      const target = PLACES[Number(place.value) - 1];
+      if (target) {
+        [, item.x, item.y] = target;
+        change();
+      }
+      place.value = '0';
+    });
+    const front = createButton('director-button', 'Bring to the front');
+    front.textContent = 'To front';
+    front.addEventListener('click', () => {
+      this.#toFront(item);
+    });
+    const remove = createButton('director-button is-danger', 'Remove');
+    remove.textContent = 'Remove';
+    remove.addEventListener('click', () => {
+      this.#removeItem(item);
+    });
+    const row = createElement('div', 'capture-text-row');
+    row.append(place, front, remove);
+    return [this.#row('Size', size), this.#row('Tilt', tilt), row];
+  }
+
+  /**
+   * Makes the editor of a text: the text, the style, the two colors, the font, bold, capitals,
+   * the button "Shuffle", and the shared controls.
    *
    * @param text The text. The controls change it in place.
    * @returns The editor.
@@ -528,7 +672,7 @@ export class CaptureEditor {
       this.#requestDraw();
     };
     item.addEventListener('focusin', () => {
-      this.#selectText(this.#texts.indexOf(text));
+      this.#select(this.#items.indexOf(text));
     });
 
     const area = createElement('textarea', 'render-text capture-text-input');
@@ -540,63 +684,169 @@ export class CaptureEditor {
       change();
     });
 
-    const font = this.#select('Font', ['Sans', 'Serif'], text.font === 'serif' ? 1 : 0);
+    const styleIndex = (): number =>
+      Math.max(
+        0,
+        CAPTURE_STYLES.findIndex((preset) => preset.style === text.style),
+      );
+    const style = this.#menu(
+      'Style',
+      CAPTURE_STYLES.map((preset) => preset.label),
+      styleIndex(),
+    );
+    const color = this.#color('Color', text.color, (value) => {
+      text.color = value;
+      change();
+    });
+    const accent = this.#color(stylePreset(text.style).accentRole, text.accent, (value) => {
+      text.accent = value;
+      change();
+    });
+    const font = this.#menu('Font', ['Sans', 'Serif'], text.font === 'serif' ? 1 : 0);
     font.addEventListener('change', () => {
       const fonts: readonly CaptureFont[] = ['sans', 'serif'];
       text.font = fonts[Number(font.value)] ?? 'sans';
       change();
     });
-
-    const size = createElement('input');
-    size.type = 'range';
-    size.min = '0.02';
-    size.max = '0.3';
-    size.step = '0.005';
-    size.value = String(text.size);
-    size.setAttribute('aria-label', 'Size');
-    size.addEventListener('input', () => {
-      text.size = Number(size.value);
-      change();
-    });
-
-    const color = createElement('input', 'capture-color');
-    color.type = 'color';
-    color.value = text.color;
-    color.setAttribute('aria-label', 'Color');
-    color.addEventListener('input', () => {
-      text.color = color.value;
-      change();
-    });
-
     const bold = this.#toggle('Bold', text.bold, (on) => {
       text.bold = on;
       change();
     });
-    const outline = this.#toggle('Outline', text.outline, (on) => {
-      text.outline = on;
+    const upper = this.#toggle('Capitals', text.upper, (on) => {
+      text.upper = on;
       change();
     });
 
-    const place = this.#select('Move to', ['Move to…', ...PLACES.map(([label]) => label)], 0);
-    place.addEventListener('change', () => {
-      const target = PLACES[Number(place.value) - 1];
-      if (target) {
-        [, text.x, text.y] = target;
-        change();
+    const sync = (): void => {
+      style.value = String(styleIndex());
+      color.input.value = text.color;
+      accent.input.value = text.accent;
+      accent.name.textContent = stylePreset(text.style).accentRole;
+      font.value = text.font === 'serif' ? '1' : '0';
+      bold.input.checked = text.bold;
+      upper.input.checked = text.upper;
+      change();
+    };
+    style.addEventListener('change', () => {
+      applyStyle(text, CAPTURE_STYLES[Number(style.value)]?.style ?? 'classic');
+      sync();
+    });
+    const shuffle = createButton('director-button', 'Try another style');
+    shuffle.textContent = 'Shuffle';
+    shuffle.addEventListener('click', () => {
+      const others = CAPTURE_STYLES.filter((preset) => preset.style !== text.style);
+      const next = others[Math.floor(Math.random() * others.length)];
+      if (next) {
+        applyStyle(text, next.style);
+        sync();
       }
-      place.value = '0';
     });
 
-    const remove = createButton('director-button is-danger', 'Remove the text');
-    remove.textContent = 'Remove';
-    remove.addEventListener('click', () => {
-      this.#removeText(text);
-    });
-
-    const row = createElement('div', 'capture-text-row');
-    row.append(font, color, bold, outline, place, remove);
-    item.append(area, this.#row('Size', size), row);
+    const styleRow = createElement('div', 'capture-text-row');
+    styleRow.append(style, shuffle);
+    const colorRow = createElement('div', 'capture-text-row');
+    colorRow.append(color.label, accent.label, font, bold.label, upper.label);
+    item.append(area, styleRow, colorRow, ...this.#commonControls(text, [0.02, 0.3]));
     return item;
+  }
+
+  /**
+   * Makes the editor of a flag sticker: the name of the flag, the cut, the border, and the shared
+   * controls.
+   *
+   * @param sticker The sticker. The controls change it in place.
+   * @returns The editor.
+   */
+  #stickerItem(sticker: CaptureSticker): HTMLElement {
+    const item = createElement('div', 'capture-text-item');
+    const change = (): void => {
+      this.#requestDraw();
+    };
+    item.tabIndex = -1;
+    item.addEventListener('focusin', () => {
+      this.#select(this.#items.indexOf(sticker));
+    });
+    item.addEventListener('pointerdown', () => {
+      this.#select(this.#items.indexOf(sticker));
+    });
+
+    const cut = this.#menu(
+      'Cut',
+      STICKER_CUTS.map(([, label]) => label),
+      Math.max(
+        0,
+        STICKER_CUTS.findIndex(([id]) => id === sticker.cut),
+      ),
+    );
+    cut.addEventListener('change', () => {
+      sticker.cut = STICKER_CUTS[Number(cut.value)]?.[0] ?? 'rect';
+      change();
+    });
+    const border = this.#toggle('White border', sticker.border, (on) => {
+      sticker.border = on;
+      change();
+    });
+    const row = createElement('div', 'capture-text-row');
+    row.append(cut, border.label);
+    item.append(
+      createElement('strong', 'capture-sticker-name', `Flag sticker: ${flagName(sticker.code)}`),
+      row,
+      ...this.#commonControls(sticker, [0.05, 0.6]),
+    );
+    return item;
+  }
+
+  /**
+   * Makes a slider.
+   *
+   * @param label The accessible name.
+   * @param min The smallest value.
+   * @param max The largest value.
+   * @param step The step.
+   * @param value The first value.
+   * @param change Called with the new value after each change.
+   * @returns The slider.
+   */
+  #range(
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    value: number,
+    change: (value: number) => void,
+  ): HTMLInputElement {
+    const input = createElement('input');
+    input.type = 'range';
+    input.min = String(min);
+    input.max = String(max);
+    input.step = String(step);
+    input.value = String(value);
+    input.setAttribute('aria-label', label);
+    input.addEventListener('input', () => {
+      change(Number(input.value));
+    });
+    return input;
+  }
+
+  /**
+   * Makes a color field with its name.
+   *
+   * @param name The name.
+   * @param value The first color, as `#rrggbb`.
+   * @param change Called with the new color after each change.
+   * @returns The label, its name, and the field.
+   */
+  #color(name: string, value: string, change: (value: string) => void): ColorField {
+    const input = createElement('input', 'capture-color');
+    input.type = 'color';
+    input.value = value;
+    input.addEventListener('input', () => {
+      change(input.value);
+    });
+    const text = createElement('span', '', name);
+    const label = createElement('label', 'capture-color-field');
+    label.append(input, text);
+    return { label, name: text, input };
   }
 
   /**
@@ -607,7 +857,7 @@ export class CaptureEditor {
    * @param value The index of the chosen option.
    * @returns The menu.
    */
-  #select(label: string, options: readonly string[], value: number): HTMLSelectElement {
+  #menu(label: string, options: readonly string[], value: number): HTMLSelectElement {
     const select = createElement('select');
     select.setAttribute('aria-label', label);
     for (const [i, text] of options.entries()) {
@@ -625,9 +875,9 @@ export class CaptureEditor {
    * @param text The label.
    * @param checked The first state.
    * @param change Called with the new state after each change.
-   * @returns The label with the checkbox.
+   * @returns The label with the checkbox, and the checkbox.
    */
-  #toggle(text: string, checked: boolean, change: (on: boolean) => void): HTMLElement {
+  #toggle(text: string, checked: boolean, change: (on: boolean) => void): LabeledInput {
     const box = createElement('input');
     box.type = 'checkbox';
     box.checked = checked;
@@ -636,7 +886,7 @@ export class CaptureEditor {
     });
     const label = createElement('label', 'director-switch');
     label.append(box, document.createTextNode(text));
-    return label;
+    return { label, input: box };
   }
 
   /**
@@ -664,7 +914,7 @@ export class CaptureEditor {
   }
 
   /**
-   * Starts the drag of the text under a press on the preview, and selects it. A press on no text
+   * Starts the drag of the part under a press on the preview, and selects it. A press on no part
    * clears the selection.
    *
    * @param event The event.
@@ -677,15 +927,11 @@ export class CaptureEditor {
     let index = -1;
     for (let i = this.#boxes.length - 1; i >= 0 && index < 0; i--) {
       const box = this.#boxes[i];
-      if (
-        box &&
-        Math.abs(px - box.x) <= box.width / 2 + pad &&
-        Math.abs(py - box.y) <= box.height / 2 + pad
-      ) {
+      if (box && boxHolds(box, px, py, pad)) {
         index = i;
       }
     }
-    this.#selectText(index);
+    this.#select(index);
     if (index >= 0) {
       event.preventDefault();
       this.#preview.setPointerCapture(event.pointerId);
@@ -694,19 +940,19 @@ export class CaptureEditor {
   }
 
   /**
-   * Moves the dragged text with the pointer. The middle of the text stays inside the image.
+   * Moves the dragged part with the pointer. Its middle stays inside the image.
    *
    * @param event The event.
    */
   #movePreview(event: PointerEvent): void {
     const drag = this.#drag;
-    const text = drag ? this.#texts[drag.index] : undefined;
-    if (!drag || !text) {
+    const item = drag ? this.#items[drag.index] : undefined;
+    if (!drag || !item) {
       return;
     }
     const [x, y] = this.#pointOf(event);
-    text.x = Math.min(1, Math.max(0, text.x + x - drag.x));
-    text.y = Math.min(1, Math.max(0, text.y + y - drag.y));
+    item.x = Math.min(1, Math.max(0, item.x + x - drag.x));
+    item.y = Math.min(1, Math.max(0, item.y + y - drag.y));
     drag.x = x;
     drag.y = y;
     this.#requestDraw();

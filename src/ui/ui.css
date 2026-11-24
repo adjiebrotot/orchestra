@@ -2905,6 +2905,18 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   cursor: pointer;
 }
 
+.capture-color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.capture-sticker-name {
+  font-size: 13px;
+}
+
 .capture-actions {
   display: flex;
   flex-wrap: wrap;
