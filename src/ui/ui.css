@@ -3042,6 +3042,11 @@ body:has(.first-screen:not([hidden])):has(.drawer:not([hidden])) .messages {
   max-width: 100%;
 }
 
+.stage-row > input[type='checkbox'] {
+  justify-self: start;
+  margin-top: 8px;
+}
+
 .stage-text-input {
   width: 100%;
   min-width: 0;
