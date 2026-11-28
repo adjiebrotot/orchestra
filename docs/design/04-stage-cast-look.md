@@ -1508,8 +1508,12 @@ horizontal. The United Kingdom and Portugal turn a quarter turn.
   setting "Limpness" (0 to 100 %) mixes the two ends of `BACKDROP.flags.hang` (`flagHang()`): 0
   holds the cloth straight out from its staff with no curl. A flag with its fly to the left shows
   its mirrored back.
-- **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. Each image fits
-  inside the 16:9 screen. The LED dots fade out where they get smaller than a pixel, so a wide
+- **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. The setting
+  "Aspect ratio" (`SCREEN_ASPECTS`) sets the shape of the screen. Its default "Follow the image"
+  takes the aspect of the first image of the list, or the first frame of a video. A built-in flag
+  draws at each aspect, so a flag keeps 16:9. Each screen keeps the area of the 16:9 screen, in
+  the width and height limits of `BACKDROP.screen` (`screenSize()`), so a tall screen stays in
+  the wide shots. An image of another aspect fits inside the screen with dark bars. The LED dots fade out where they get smaller than a pixel, so a wide
   shot shows no moire. The screen also shows a video of the user (a `vid:` id, `VideoTexture`).
   The video plays with no sound in a loop. Its time is the song time since the cue that brought
   it on, modulo its length (`SCREEN_VIDEO` of `scene/backdrop.ts`). Thus a seek, a pause, and a
