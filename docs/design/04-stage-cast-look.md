@@ -1508,7 +1508,10 @@ horizontal. The United Kingdom and Portugal turn a quarter turn.
   as in the reference images. Soft vertical pleats with dark creases run down the cloth. The
   setting "Limpness" (0 to 100 %) mixes the two ends of `BACKDROP.flags.hang` (`flagHang()`): 0
   holds the cloth straight out from its staff with no curl. A flag with its fly to the left shows
-  its mirrored back.
+  its mirrored back. The checkbox "Waving" (`FlagSettings.waving`, off by default) moves each
+  flag as in a wind: ripples run from the hoist to the fly, and the fly swings the most
+  (`BACKDROP.flags.flutter`). The phase changes with the height and the place, so the crests
+  slant and the flags do not move as one.
 - **Screen.** An LED wall, or a projection cloth with less contrast and a hot spot. The setting
   "Aspect ratio" (`SCREEN_ASPECTS`) sets the shape of the screen. Its default "Follow the image"
   takes the aspect of the first image of the list, or the first frame of a video. A built-in flag

@@ -168,7 +168,7 @@ export class StagePanel {
       ),
       this.#section(
         'Flags',
-        'Flag groups beside the back corners. Each group carries all the flags. A stand on the floor holds each flag on an upright wooden pole, as indoor flags. A higher limpness lets each flag hang in deeper folds.',
+        'Flag groups beside the back corners. Each group carries all the flags. A stand on the floor holds each flag on an upright wooden pole, as indoor flags. A higher limpness lets each flag hang in deeper folds. Waving moves each flag as in a wind.',
         s.flags.on,
         (on) => {
           this.#change({ ...this.#settings, flags: { ...s.flags, on } });
@@ -202,6 +202,7 @@ export class StagePanel {
               this.#actions.onChange(this.#settings);
             }),
           ),
+          this.#row('Waving', this.#flagWaving(s.flags.waving)),
           this.#row('Flags', this.#images('flags')),
         ],
       ),
@@ -567,6 +568,26 @@ export class StagePanel {
     body.hidden = !on;
     section.append(head, line, body);
     return section;
+  }
+
+  /**
+   * Creates the checkbox that waves the flags as in a wind.
+   *
+   * @param on True if the flags wave.
+   * @returns The checkbox.
+   */
+  #flagWaving(on: boolean): HTMLElement {
+    const box = createElement('input');
+    box.type = 'checkbox';
+    box.checked = on;
+    box.setAttribute('aria-label', 'Wave the flags');
+    box.addEventListener('change', () => {
+      this.#change({
+        ...this.#settings,
+        flags: { ...this.#settings.flags, waving: box.checked },
+      });
+    });
+    return box;
   }
 
   /**

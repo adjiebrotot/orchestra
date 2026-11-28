@@ -143,6 +143,13 @@ export const BACKDROP = {
       },
     },
     /**
+     * The wave of a flag in a wind (`FlagSettings.waving`): ripples that run from the hoist to
+     * the fly, and grow toward the fly, where the cloth is free. `amplitude` is the swing of the
+     * main ripple at the fly, in meters, `waves` its count across the flag, and `speed` its
+     * angular speed, in radians per second. `flutter` is the share of a second, faster ripple.
+     */
+    flutter: { amplitude: 0.11, waves: 1.6, speed: 5.5, flutter: 0.3 },
+    /**
      * The lean of each lower pair of staffs toward the audience, in radians. The flags of two
      * pairs hang one above the other, so the lean keeps the lower pair in front of the upper one.
      */
@@ -760,6 +767,7 @@ attribute float wave;
 attribute float crease;
 uniform float uTime;
 uniform float uWave;
+uniform vec4 uFlutter;
 uniform float uPlaneZ;
 varying vec2 vUv;
 varying vec3 vWorld;
@@ -776,6 +784,19 @@ void main() {
   float sway = sin(uTime * 0.7 + p.x * 0.4) * wave;
   float ripple = 0.3 * sin(wave * 5.0 - uTime * 1.1 + p.y * 0.9);
   p.z += uWave * wave * (sway + ripple);
+  // A flag in a wind: ripples run from the hoist to the fly, and the free fly swings the most.
+  // uFlutter holds the amplitude (0 for still air), the count of the waves, the speed, and the
+  // share of the fast ripple. The height and the place of the flag shift the phase, so the
+  // crests run on a slant and the flags do not move as one.
+  if (uFlutter.x > 0.0) {
+    float k = 6.2831853 * uFlutter.y;
+    float phase = k * wave - uFlutter.z * uTime + 0.8 * p.y + 1.7 * p.x;
+    float main = sin(phase);
+    float fast = sin(2.3 * phase + 1.1 * p.y + 0.6 * uTime);
+    float reach = wave * (0.35 + 0.65 * wave);
+    p.z += uFlutter.x * reach * (main + uFlutter.w * fast);
+    p.y += 0.25 * uFlutter.x * reach * cos(phase);
+  }
   vUv = uv;
   vec4 world = modelMatrix * vec4(p, 1.0);
   vWorld = world.xyz;
@@ -1318,6 +1339,7 @@ export class Backdrop {
         uFloorY: { value: -STAGE_THICKNESS },
         uTime: { value: 0 },
         uWave: { value: 0 },
+        uFlutter: { value: [0, 0, 0, 0] },
         uPlaneZ: { value: planeZ },
       },
     });
@@ -1604,6 +1626,11 @@ export class Backdrop {
       const wave = material.uniforms['uWave'];
       if (wave) {
         wave.value = hang.wave;
+      }
+      const flutter = material.uniforms['uFlutter'];
+      if (flutter && set.waving) {
+        const { amplitude, waves, speed, flutter: fast } = place.flutter;
+        flutter.value = [amplitude, waves, speed, fast];
       }
       this.#waving.push(material);
     }

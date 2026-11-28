@@ -122,6 +122,11 @@ export interface FlagSettings {
    * `backdrop.ts`).
    */
   readonly limpness: number;
+  /**
+   * True to wave each flag as in a wind: ripples run from the hoist to the fly
+   * (`BACKDROP.flags.flutter` of `backdrop.ts`). False keeps the still air of the hall.
+   */
+  readonly waving: boolean;
   /** The flags of each group, from the left of the left groups. */
   readonly images: readonly string[];
 }
@@ -342,6 +347,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
     groups: 2,
     arrangement: 'mirror',
     limpness: 1,
+    waving: false,
     images: ['flag:id', 'flag:jp'],
   },
   screen: {
@@ -554,6 +560,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       groups: readCount(flags['groups'], 1, BACKDROP_LIMITS.groups, base.flags.groups),
       arrangement: readOption(flags['arrangement'], ARRANGEMENTS, base.flags.arrangement),
       limpness: readShare(flags['limpness'], base.flags.limpness),
+      waving: isBoolean(flags['waving']) ? flags['waving'] : base.flags.waving,
       images: readImages(flags['images'], base.flags.images)
         .filter((id) => !isVideoId(id))
         .slice(0, BACKDROP_LIMITS.flags),
