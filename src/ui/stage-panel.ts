@@ -10,6 +10,7 @@ import {
   FLAG_STANDS,
   DEFAULT_BACKDROP,
   LIGHT_LIMITS,
+  SCREEN_ASPECTS,
   SCREEN_MATERIALS,
   STAGE_TEXT_FONTS,
   STAGE_TEXT_SIZES,
@@ -215,6 +216,12 @@ export class StagePanel {
             'Material',
             this.#select(SCREEN_MATERIALS, s.screen.material, (material) => {
               this.#change({ ...this.#settings, screen: { ...s.screen, material } });
+            }),
+          ),
+          this.#row(
+            'Aspect ratio',
+            this.#select(SCREEN_ASPECTS, s.screen.aspect, (aspect) => {
+              this.#change({ ...this.#settings, screen: { ...s.screen, aspect } });
             }),
           ),
           this.#row('Images', this.#images('screen')),
