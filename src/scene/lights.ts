@@ -20,6 +20,8 @@ import { TIER_SETTINGS } from './quality.ts';
 import type { QualityTier } from './quality.ts';
 import { smoothstep } from '../math.ts';
 import type { LightStyle } from './stage-style.ts';
+import { LIGHT_RIGS, rigKeyPlace } from './light-rigs.ts';
+import type { LightRig } from './light-rigs.ts';
 
 /**
  * The key light (design 4.5): the stage spotlight, and the only light that casts shadows on the
@@ -716,36 +718,64 @@ interface LightOptions {
   readonly backRows?: boolean;
 }
 
+/** The light setup of the user, with the controls that change the stage lights. */
+export interface LightRigSettings {
+  /** The light setup: the place of the key light and the gain of each kind of light. */
+  readonly rig: LightRig;
+  /** The factor of the user for the light of the visible beams (design 4.5, light controls). */
+  readonly beams: number;
+  /** False turns off the center light: the rim lights, their beams, and their lamps. */
+  readonly center: boolean;
+}
+
+/** The light setup of the stage as `scene/lights.ts` builds it: "Concert", with all lights on. */
+const BUILT_RIG: LightRigSettings = { rig: LIGHT_RIGS.concert, beams: 1, center: true };
+
 /**
- * Sets the colors of the stage lights of a stage style (design 4.5, stage style): each spotlight
- * takes the color of its kind, and its intensity at the build times the gain of the style. The
- * fill light and the visible beams take their colors too. The rim uniforms of the materials read
- * the rim lights, so the caller writes them again (`setRimLights()`).
+ * Sets the stage lights of a stage style and of a light setup (design 4.5, stage style, light
+ * setups): each spotlight takes the color of its kind, and its intensity at the build times the
+ * gain of the style and the gain of its kind in the setup. The fill light and the visible beams
+ * take their colors and gains too. With the center light off, the rim lights give no light, and
+ * the beams and their lamps hide. The rim uniforms of the materials read the rim lights, so the
+ * caller writes them again (`setRimLights()`). The key light keeps its place: call
+ * {@link placeKeyLight} for the place of the setup.
  *
  * @param lights The group of {@link createLights}.
  * @param style The colors of the style.
- * @param beams The factor of the user for the light of the visible beams (design 4.5, light
- *   controls).
+ * @param setup The light setup and the controls of the user.
  */
-export function styleLights(lights: Group, style: LightStyle, beams = 1): void {
-  const colors = new Map([
-    [KEY_NAME, style.key],
-    [CONDUCTOR_NAME, style.key],
-    [SIDE_NAME, style.side],
-    [BACK_ROW_NAME, style.backRow],
-    [RIM_NAME, style.rim],
+export function styleLights(
+  lights: Group,
+  style: LightStyle,
+  setup: LightRigSettings = BUILT_RIG,
+): void {
+  const { rig, beams, center } = setup;
+  const rim = center ? rig.rim : 0;
+  const kinds = new Map([
+    [KEY_NAME, { color: style.key, gain: rig.key }],
+    [CONDUCTOR_NAME, { color: style.key, gain: rig.key }],
+    [SIDE_NAME, { color: style.side, gain: rig.side }],
+    [BACK_ROW_NAME, { color: style.backRow, gain: rig.backRow }],
+    [RIM_NAME, { color: style.rim, gain: rim }],
   ]);
+  for (const child of lights.children) {
+    // The group of the beams holds the haze, the motes, and the lamps.
+    if (child instanceof Group) {
+      child.visible = rim > 0;
+    }
+  }
   lights.traverse((object) => {
     if (object instanceof SpotLight) {
-      const color = colors.get(object.name);
-      if (color !== undefined) {
+      const kind = kinds.get(object.name);
+      if (kind !== undefined) {
         const base = baseIntensity(object);
-        object.color.set(color);
-        object.intensity = base * style.gain;
+        object.color.set(kind.color);
+        object.intensity = base * style.gain * kind.gain;
       }
     } else if (object instanceof HemisphereLight) {
       object.color.set(style.fill.sky);
       object.groundColor.set(style.fill.ground);
+      object.intensity = FILL.intensity * rig.fill;
     } else if (
       (object instanceof Mesh || object instanceof Points) &&
       object.material instanceof ShaderMaterial
@@ -754,10 +784,29 @@ export function styleLights(lights: Group, style: LightStyle, beams = 1): void {
       // The haze of each beam, its throat, and its motes share the beam color. The lamp has its
       // own color uniform, with no `uHeight`.
       if (uniform?.value instanceof Color && object.material.uniforms['uHeight']) {
-        uniform.value.set(style.beam).multiplyScalar(style.gain * beams);
+        uniform.value.set(style.beam).multiplyScalar(style.gain * beams * rim);
       }
     }
   });
+}
+
+/**
+ * Puts the key light of a stage at the place of a light setup (design 4.5, light setups). Each
+ * setup keeps the distance of the light from the stage center, so the light keeps its intensity.
+ * The shadow camera fits the new place. The bake of the static props holds the shadows of the
+ * old place until the next bake (`StageScene.relightSteps()`).
+ *
+ * @param lights The group of {@link createLights}.
+ * @param stageSide The stage side `S`, in meters.
+ * @param rig The light setup.
+ */
+export function placeKeyLight(lights: Group, stageSide: number, rig: LightRig): void {
+  for (const child of lights.children) {
+    if (child instanceof SpotLight && child.name === KEY_NAME) {
+      child.position.set(...rigKeyPlace(stageSide, rig));
+      fitShadow(child);
+    }
+  }
 }
 
 /** The intensity of each spotlight at its build, before a stage style changes it. */

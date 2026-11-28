@@ -67,10 +67,12 @@ import {
   fitKeyShadow,
   createLights,
   styleLights,
-  keyLightPosition,
   keyShadowView,
+  placeKeyLight,
   setLightsTier,
 } from './lights.ts';
+import type { LightRigSettings } from './lights.ts';
+import { LIGHT_RIGS, rigKeyPlace } from './light-rigs.ts';
 import { createPoolUniforms, defaultAim, setPoolAim } from './light-pool.ts';
 import type { LightAim } from './light-pool.ts';
 import { TIER_SETTINGS, tierPixelRatio } from './quality.ts';
@@ -406,6 +408,8 @@ interface LayoutBake {
   readonly uniforms: StageBakeUniforms;
   /** The target that holds the bake. */
   target: WebGLRenderTarget;
+  /** The place of the key light of the bake (design 4.5, light setups). */
+  keyPosition: Vec3;
 }
 
 /**
@@ -681,8 +685,10 @@ export class StageScene {
     scene.add(stageGroup);
     yield;
     const lights = createLights(layout.stageSide, this.#tier, layout.conductor);
-    // The bake and the capture of the environment then see the lights of the stage style.
-    styleLights(lights, this.#lightStyle, this.#lightSettings.beams);
+    // The bake and the capture of the environment then see the lights of the stage style and of
+    // the light setup.
+    placeKeyLight(lights, layout.stageSide, LIGHT_RIGS[this.#lightSettings.rig]);
+    styleLights(lights, this.#lightStyle, this.#rigSetup());
     scene.add(lights);
     setRimLights(this.#rim, lights);
     yield;
@@ -906,21 +912,88 @@ export class StageScene {
   }
 
   /**
-   * Sets the light controls of the user (design 4.5, light controls): the haze, the beams, and
-   * the brightness. The shown layout changes at once.
+   * Sets the light controls of the user (design 4.5, light controls, light setups): the light
+   * setup, the center light, the haze, the beams, and the brightness. The shown layout changes at
+   * once. A setup with another place of the key light also needs a new bake of the static props
+   * ({@link StageScene.relightSteps}).
    *
    * @param settings The light controls.
+   * @returns True when the bake of the shown layout has another place of the key light.
    */
-  setLightSettings(settings: LightSettings): void {
+  setLightSettings(settings: LightSettings): boolean {
     this.#lightSettings = settings;
+    const view = this.#view;
+    if (view) {
+      placeKeyLight(view.lights, view.stageSide, LIGHT_RIGS[settings.rig]);
+    }
     this.#restyleLights();
+    return this.#bakeIsOld();
+  }
+
+  /**
+   * Makes the bake of the static props of the shown layout again for the place of the key light
+   * of the light setup (design 4.5, light setups), in steps. The old bake stays on the stage
+   * until the new one is ready. With the bake at the place already, the steps do nothing. The
+   * captured environment keeps the light of its build, as for a change of the stage style.
+   *
+   * @returns The steps.
+   */
+  *relightSteps(): Steps<undefined> {
+    const view = this.#view;
+    const bake = view?.bake;
+    if (!view || !bake || !this.#bakeIsOld()) {
+      return undefined;
+    }
+    const old = bake.target;
+    const { target, keyPosition } = yield* this.#bakeSteps(
+      view.scene,
+      bake.stageSide,
+      bake.stage,
+      bake.props,
+      bake.uniforms,
+      null,
+    );
+    // A new layout during the steps freed the old view and its targets.
+    if (this.#view !== view) {
+      target.dispose();
+      return undefined;
+    }
+    bake.target = target;
+    bake.keyPosition = keyPosition;
+    old.dispose();
+    return undefined;
+  }
+
+  /**
+   * Tells if the bake of the shown layout has another place of the key light than the light
+   * setup.
+   *
+   * @returns True when the bake is old. False with no bake.
+   */
+  #bakeIsOld(): boolean {
+    const bake = this.#view?.bake;
+    if (!bake) {
+      return false;
+    }
+    const place = rigKeyPlace(bake.stageSide, LIGHT_RIGS[this.#lightSettings.rig]);
+    return place.some((value, i) => Math.abs(value - (bake.keyPosition[i] ?? 0)) > 1e-6);
+  }
+
+  /**
+   * Gives the light setup and the controls of the user that change the stage lights.
+   *
+   * @returns The setup.
+   */
+  #rigSetup(): LightRigSettings {
+    const light = this.#lightSettings;
+    return { rig: LIGHT_RIGS[light.rig], beams: light.beams, center: light.center };
   }
 
   /** Writes the stage style and the beams of the user to the lights of the shown layout. */
   #restyleLights(): void {
     const view = this.#view;
     if (view) {
-      styleLights(view.lights, this.#lightStyle, this.#lightSettings.beams);
+      styleLights(view.lights, this.#lightStyle, this.#rigSetup());
       setRimLights(this.#rim, view.lights);
     }
   }
@@ -1135,9 +1208,10 @@ export class StageScene {
     pending: PendingBuild | null,
   ): Steps<LayoutBake> {
     scene.updateMatrixWorld(true);
+    const keyPosition = rigKeyPlace(stageSide, LIGHT_RIGS[this.#lightSettings.rig]);
     const target = yield* bakeStageSteps(this.#renderer, {
       stageSide,
-      keyPosition: keyLightPosition(stageSide),
+      keyPosition,
       casters: [stage, props],
       receiver: stage,
     });
@@ -1147,7 +1221,7 @@ export class StageScene {
     uniforms.uStageBlur.value = STAGE_SHADOW.radius;
     stage.castShadow = false;
     props.castShadow = false;
-    return { stageSide, stage, props, uniforms, target };
+    return { stageSide, stage, props, uniforms, target, keyPosition };
   }
 
   /**
@@ -1718,7 +1792,7 @@ export class StageScene {
     const bake = view.bake;
     if (bake) {
       bake.target.dispose();
-      const { target } = yield* this.#bakeSteps(
+      const { target, keyPosition } = yield* this.#bakeSteps(
         view.scene,
         bake.stageSide,
         bake.stage,
@@ -1727,6 +1801,7 @@ export class StageScene {
         null,
       );
       bake.target = target;
+      bake.keyPosition = keyPosition;
     }
     const capture = view.capture;
     if (capture) {

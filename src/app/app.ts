@@ -673,7 +673,9 @@ export class App {
         scene.setPropDressing(dressing);
       },
       (light) => {
-        scene.setLightSettings(light);
+        if (scene.setLightSettings(light)) {
+          this.#relightScene();
+        }
       },
     );
     scene.setBackdrop(this.#backdrop.group);
@@ -793,6 +795,20 @@ export class App {
   #restoreScene(): void {
     const steps = this.#scene.restoreSteps();
     const run = this.#lastBuild.then(async () => this.#runSliced(steps, () => true));
+    this.#lastBuild = run.catch(() => null);
+    run.catch(reportError);
+  }
+
+  /**
+   * Bakes the static props of the shown layout again for a new place of the key light
+   * (`StageScene.relightSteps()`, design 4.5, light setups), in slices of the main thread after
+   * the build before it. Each run reads the light setup when it starts, and it does nothing when
+   * the bake already has the place of the key light.
+   */
+  #relightScene(): void {
+    const run = this.#lastBuild.then(async () =>
+      this.#runSliced(this.#scene.relightSteps(), () => true),
+    );
     this.#lastBuild = run.catch(() => null);
     run.catch(reportError);
   }

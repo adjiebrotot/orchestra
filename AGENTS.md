@@ -20,10 +20,11 @@ This file holds the rules of each round. The modules in `docs/agents/` hold the 
   section in the same commit.
 - **Reference images.** The images of `docs/reference/` win over the values that design 4.5 to
   4.7 names. Design 1 gives the role of each image and which image wins where they differ.
-- **Technique references.** The motion of each player follows a real musician, and the cinematic
-  camera follows a concert film. The `*-technique.md` files of `docs/reference/` give the target of
-  each family, with a source for each fact. A change of the motion or of the shots updates the
-  section "Use in the app" of its reference in the same commit.
+- **Technique references.** The motion of each player follows a real musician, the cinematic
+  camera follows a concert film, and the light setups follow the standard angles of stage light.
+  The `*-technique.md` files of `docs/reference/` give the target of each family, with a source for
+  each fact. A change of the motion, the shots, or the light setups updates the section "Use in the
+  app" of its reference in the same commit.
 - **UI.** `docs/prototype/ui.html` and its screenshots. Design 2.8 gives the tokens and the exact
   message texts.
 - **Assets.** The `README.md` files of `demos/` and of each folder of `assets/` give the sources,

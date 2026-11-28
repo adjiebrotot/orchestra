@@ -20,11 +20,12 @@ import {
 import type {
   BackdropSettings,
   BannerSettings,
-  LightSettings,
+  LightFactors,
   StageTextSettings,
 } from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
 import { type ComboGroup, createCombobox } from './combobox.ts';
+import { LIGHT_RIG_OPTIONS } from '../scene/light-rigs.ts';
 import { STAGE_STYLE_OPTIONS } from '../scene/stage-style.ts';
 import { createButton, createElement } from './dom.ts';
 
@@ -254,15 +255,16 @@ export class StagePanel {
   }
 
   /**
-   * Creates the section of the light controls (design 4.5, light controls): the haze, the beams,
-   * the brightness, and the light of the screen, each as a part of the value of the stage style.
+   * Creates the section of the light controls (design 4.5, light controls, light setups): the
+   * light setup, the switch of the center light, and the haze, the beams, the brightness, and the
+   * light of the screen, each as a part of the value of the stage style.
    *
    * @returns The section.
    */
   #lightSection(): HTMLElement {
     const light = this.#settings.light;
     /** Makes the slider of one light factor. A drag applies at once, with no new controls. */
-    const factor = (key: keyof LightSettings, label: string): HTMLElement =>
+    const factor = (key: keyof LightFactors, label: string): HTMLElement =>
       this.#factor(label, light[key], LIGHT_LIMITS[key], (value) => {
         this.#settings = {
           ...this.#settings,
@@ -270,6 +272,16 @@ export class StagePanel {
         };
         this.#actions.onChange(this.#settings);
       });
+    const center = createElement('input');
+    center.type = 'checkbox';
+    center.checked = light.center;
+    center.setAttribute('aria-label', 'Center light');
+    center.addEventListener('change', () => {
+      this.#change({
+        ...this.#settings,
+        light: { ...this.#settings.light, center: center.checked },
+      });
+    });
     const reset = this.#textButton('Reset', () => {
       this.#change({ ...this.#settings, light: DEFAULT_BACKDROP.light });
     });
@@ -280,8 +292,15 @@ export class StagePanel {
       createElement(
         'p',
         'render-hint',
-        'Changes the light of the stage style. Less haze makes the screen and the back of the hall clear. 100 % keeps the look of the style.',
+        'The setup sets the angle of the main light and the mix of the other lights. The center light is the beam behind the middle of the orchestra. Less haze makes the screen and the back of the hall clear. 100 % keeps the look of the style.',
       ),
+      this.#row(
+        'Setup',
+        this.#select(LIGHT_RIG_OPTIONS, light.rig, (rig) => {
+          this.#change({ ...this.#settings, light: { ...this.#settings.light, rig } });
+        }),
+      ),
+      this.#row('Center light', center),
       this.#row('Haze', factor('haze', 'Haze in the hall')),
       this.#row('Beams', factor('beams', 'Light of the beams')),
       this.#row('Brightness', factor('brightness', 'Brightness of the frame')),
