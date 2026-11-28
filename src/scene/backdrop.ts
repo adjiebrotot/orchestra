@@ -169,9 +169,21 @@ export const BACKDROP = {
   /** The screen behind the orchestra, above the heads of the back row. */
   screen: {
     behind: 1.3,
-    /** The width, in stage sides, with a cap in meters. */
+    /**
+     * The width of a 16:9 screen, in stage sides, with a cap in meters. A screen of another
+     * aspect keeps the area of the 16:9 screen (`screenSize()`).
+     */
     width: 0.37,
     maxWidth: 5.5,
+    /** The largest width of a screen of another aspect, as a part of the width of the 16:9 screen. */
+    maxWide: 1.4,
+    /**
+     * The largest height of a screen of another aspect, as a part of the width of the 16:9
+     * screen, so a tall screen does not go out of the top of a wide shot.
+     */
+    maxTall: 0.8,
+    /** The limits of the aspect of an image that the screen follows, as the height over the width. */
+    follow: [0.25, 2.5],
     /**
      * The height of the bottom edge above the stage top: above the heads of the back row, as the
      * organ above the orchestra of the fourth reference image.
@@ -832,7 +844,7 @@ void main() {
 }
 `;
 
-// The screen mixes two images. Each image fits inside the 16:9 screen with dark bars. An LED wall
+// The screen mixes two images. Each image fits inside the screen with dark bars. An LED wall
 // shows a grid of dots in a close shot, and it fades the grid out where the dots get smaller than
 // a pixel, so a wide shot shows no moire. A cloth shows a soft projection: less contrast, a
 // warm hot spot in the middle, and the stage glow on the white cloth.
@@ -950,6 +962,8 @@ export class Backdrop {
   #screen: ShaderMaterial | null = null;
   /** The light of the screen before the factor of the user (`LightSettings.screen`). */
   #screenLevel = 1;
+  /** The height over the width of the screen of the last build. */
+  #screenAspectBuilt = 9 / 16;
   readonly #waving: ShaderMaterial[] = [];
   /** The videos that the screen plays. */
   readonly #videos = new Set<HTMLVideoElement>();
@@ -1002,17 +1016,18 @@ export class Backdrop {
       return;
     }
     const used = new Set<string>();
-    if (settings.screen.on) {
-      this.#buildScreen(stageSide, settings.screen.material, used);
+    const screen = settings.screen.on ? screenSize(stageSide, this.#screenAspect()) : null;
+    if (screen) {
+      this.#buildScreen(stageSide, screen, settings.screen.material, used);
     }
     if (settings.standing.on) {
-      this.#buildStanding(stageSide, settings.standing, settings.screen.on, used);
+      this.#buildStanding(stageSide, settings.standing, screen, used);
     }
     if (settings.hanging.on) {
-      this.#buildHanging(stageSide, settings.hanging, settings.screen.on, used);
+      this.#buildHanging(stageSide, settings.hanging, screen, used);
     }
     if (settings.flags.on) {
-      this.#buildFlags(stageSide, settings.flags, settings.screen.on, used);
+      this.#buildFlags(stageSide, settings.flags, screen, used);
     }
     for (const [key, texture] of this.#textures) {
       if (!used.has(key)) {
@@ -1244,6 +1259,26 @@ export class Backdrop {
   }
 
   /**
+   * Gives the height over the width of the screen: the aspect of the setting, or the aspect of
+   * the first image of the list. A built-in flag draws at each aspect, so it keeps 16:9. A video
+   * gives the aspect of its first frame.
+   *
+   * @returns The aspect.
+   */
+  #screenAspect(): number {
+    const { aspect, images } = this.#settings.screen;
+    if (aspect > 0) {
+      return aspect;
+    }
+    const first = images[0];
+    const canvas = first && !first.startsWith('flag:') ? this.#images.canvasOf(first) : null;
+    const [low, high] = BACKDROP.screen.follow;
+    return canvas && canvas.width > 0
+      ? Math.min(high, Math.max(low, canvas.height / canvas.width))
+      : 9 / 16;
+  }
+
+  /**
    * Creates the material of a cloth or of a solid part.
    *
    * @param planeZ The cutaway plane: a camera with a smaller z sees nothing.
@@ -1349,15 +1384,20 @@ export class Backdrop {
    *
    * @param side The stage side.
    * @param set The settings.
-   * @param screen True if the screen shows.
+   * @param screen The width and the height of the screen, or `null` with no screen.
    * @param used The keys of the textures.
    */
-  #buildStanding(side: number, set: BannerSettings, screen: boolean, used: Set<string>): void {
+  #buildStanding(
+    side: number,
+    set: BannerSettings,
+    screen: ScreenSize | null,
+    used: Set<string>,
+  ): void {
     const place = BACKDROP.standing;
     const floor = -STAGE_THICKNESS;
     const z = -side / 2 - place.behind;
     const outer = place.halfSpan * side;
-    const inner = screen ? screenWidth(side) / 2 + place.screenGap + place.width / 2 : null;
+    const inner = screen ? screen[0] / 2 + place.screenGap + place.width / 2 : null;
     const metal = new Triangles();
     const cloths: { texture: ClothTexture; add: (list: Triangles) => void }[] = [];
     const images = slotImages(set.count, set.images, set.arrangement);
@@ -1412,16 +1452,21 @@ export class Backdrop {
    *
    * @param side The stage side.
    * @param set The settings.
-   * @param screen True if the screen shows.
+   * @param screen The width and the height of the screen, or `null` with no screen.
    * @param used The keys of the textures.
    */
-  #buildHanging(side: number, set: BannerSettings, screen: boolean, used: Set<string>): void {
+  #buildHanging(
+    side: number,
+    set: BannerSettings,
+    screen: ScreenSize | null,
+    used: Set<string>,
+  ): void {
     const place = BACKDROP.hanging;
     const floor = -STAGE_THICKNESS;
     const z = -side / 2 - place.behind;
     const battenY = floor + place.batten;
     const outer = place.halfSpan * side;
-    const inner = screen ? screenWidth(side) / 2 + place.screenGap + place.width / 2 : null;
+    const inner = screen ? screen[0] / 2 + place.screenGap + place.width / 2 : null;
     const slots = rowSlots(set.count, inner, Math.max(outer, (inner ?? 0) + place.width));
     const dark = new Triangles();
     const rods = new Triangles();
@@ -1477,10 +1522,10 @@ export class Backdrop {
    *
    * @param side The stage side.
    * @param set The settings of the flags.
-   * @param screen True if the screen shows.
+   * @param screen The width and the height of the screen, or `null` with no screen.
    * @param used The keys of the textures.
    */
-  #buildFlags(side: number, set: FlagSettings, screen: boolean, used: Set<string>): void {
+  #buildFlags(side: number, set: FlagSettings, screen: ScreenSize | null, used: Set<string>): void {
     const place = BACKDROP.flags;
     const hang = flagHang(set.limpness);
     const floor = -STAGE_THICKNESS;
@@ -1494,7 +1539,7 @@ export class Backdrop {
     }
     if (set.groups % 2 === 1) {
       if (screen && set.stand === 'group') {
-        const top = BACKDROP.screen.bottom + (screenWidth(side) * 9) / 16 + BACKDROP.screen.bezel;
+        const top = BACKDROP.screen.bottom + screen[1] + BACKDROP.screen.bezel;
         places.push([0, -side / 2 - BACKDROP.screen.behind - 0.08, top, place.middlePole]);
       } else if (!screen) {
         // A floor stand in the middle would hide the screen, so it stands only with no screen.
@@ -1731,13 +1776,15 @@ export class Backdrop {
    * roller on top, and a weight bar at the bottom. Two cables hold it from above.
    *
    * @param side The stage side.
+   * @param size The width and the height of the screen (`screenSize()`).
    * @param material The material of the screen.
    * @param used The keys of the textures.
    */
-  #buildScreen(side: number, material: ScreenMaterial, used: Set<string>): void {
+  #buildScreen(side: number, size: ScreenSize, material: ScreenMaterial, used: Set<string>): void {
     const place = BACKDROP.screen;
-    const width = screenWidth(side);
-    const height = (width * 9) / 16;
+    const [width, height] = size;
+    const aspect = height / width;
+    this.#screenAspectBuilt = aspect;
     const z = -side / 2 - place.behind;
     const bottom = place.bottom;
     const center = new Vector3(0, bottom + height / 2, z);
@@ -1810,7 +1857,9 @@ export class Backdrop {
         uLed: { value: led ? 1 : 0 },
         uLevel: { value: this.#screenLevel * this.#settings.light.screen },
         uTint: { value: new Vector3(...this.#style.screenTint) },
-        uGrid: { value: new Vector2(place.ledColumns, Math.round((place.ledColumns * 9) / 16)) },
+        uGrid: {
+          value: new Vector2(place.ledColumns, Math.max(1, Math.round(place.ledColumns * aspect))),
+        },
         uUnit: { value: unit },
         uGlow: { value: HALL_LIGHT.glow },
         uReach: { value: HALL_LIGHT.glowReach * unit },
@@ -1823,10 +1872,10 @@ export class Backdrop {
     // The textures of all the images of the screen stay while it shows, so a cue does not wait
     // for an upload.
     for (const id of this.#settings.screen.images) {
-      this.#texture(id, 9 / 16, false, used);
+      this.#texture(id, aspect, false, used);
     }
     for (const cue of this.#screenCues) {
-      this.#texture(cue.image, 9 / 16, false, used);
+      this.#texture(cue.image, aspect, false, used);
     }
   }
 
@@ -1844,7 +1893,8 @@ export class Backdrop {
     if (!map || !(fit instanceof Vector2)) {
       return;
     }
-    const texture = id ? this.#texture(id, 9 / 16, false, this.#used) : null;
+    const screenAspect = this.#screenAspectBuilt;
+    const texture = id ? this.#texture(id, screenAspect, false, this.#used) : null;
     if (!texture) {
       map.value = this.#black;
       fit.set(1, 1);
@@ -1852,23 +1902,36 @@ export class Backdrop {
     }
     map.value = texture.texture;
     const image = textureAspect(texture.texture);
-    // The image fits inside the screen of 16:9: a wider image fills the width.
-    if (image < 9 / 16) {
-      fit.set(1, image / (9 / 16));
+    // The image fits inside the screen: a wider image fills the width.
+    if (image < screenAspect) {
+      fit.set(1, image / screenAspect);
     } else {
-      fit.set(9 / 16 / image, 1);
+      fit.set(screenAspect / image, 1);
     }
   }
 }
 
+/** The width and the height of the screen, in meters. */
+export type ScreenSize = readonly [number, number];
+
 /**
- * Gives the width of the screen of a stage.
+ * Gives the size of the screen of a stage at an aspect (design 4.5, backdrop). The screen keeps
+ * the area of the 16:9 screen, in the limits `BACKDROP.screen.maxWide` and `maxTall`.
  *
  * @param side The stage side.
- * @returns The width, in meters.
+ * @param aspect The height over the width.
+ * @returns The width and the height, in meters.
  */
-export function screenWidth(side: number): number {
-  return Math.min(BACKDROP.screen.maxWidth, BACKDROP.screen.width * side);
+export function screenSize(side: number, aspect: number): ScreenSize {
+  const place = BACKDROP.screen;
+  const base = Math.min(place.maxWidth, place.width * side);
+  const area = (base * base * 9) / 16;
+  const width = Math.min(
+    base * place.maxWide,
+    (base * place.maxTall) / aspect,
+    Math.sqrt(area / aspect),
+  );
+  return [width, width * aspect];
 }
 
 /**
