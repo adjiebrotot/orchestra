@@ -57,6 +57,23 @@ export const SCREEN_MATERIALS: readonly (readonly [ScreenMaterial, string])[] = 
   ['cloth', 'Cloth (projection)'],
 ];
 
+/**
+ * The aspect ratios of the screen, as the height over the width, in the order of the menu. The
+ * value 0 follows the first image of the screen list.
+ */
+export const SCREEN_ASPECTS: readonly (readonly [number, string])[] = [
+  [0, 'Follow the image'],
+  [1, '1 : 1'],
+  [3 / 4, '4 : 3'],
+  [2 / 3, '3 : 2'],
+  [9 / 16, '16 : 9'],
+  [1 / 2, '2 : 1'],
+  [9 / 21, '21 : 9'],
+  [9 / 32, '32 : 9'],
+  [4 / 3, '3 : 4'],
+  [16 / 9, '9 : 16'],
+];
+
 /** One row of banners: standing banners on poles, or hanging banners on a batten. */
 export interface BannerSettings {
   readonly on: boolean;
@@ -111,6 +128,11 @@ export interface FlagSettings {
 export interface ScreenSettings {
   readonly on: boolean;
   readonly material: ScreenMaterial;
+  /**
+   * The height over the width, or 0 to follow the first image of the list. An image of another
+   * aspect fits inside the screen with dark bars.
+   */
+  readonly aspect: number;
   /**
    * The images of the screen. Before the first screen cue of a piece, the screen shows the first
    * image. The cues of the camera director change it.
@@ -309,10 +331,24 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
   screen: {
     on: true,
     material: 'led',
+    aspect: 0,
     images: ['flag:id', 'flag:jp', 'flag:gb', 'flag:fr'],
   },
-  text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif', size: 'fit' },
-  stand: { on: false, target: 'conductor', cloth: '#b3141c', fringe: '#f1eee6', images: [] },
+  text: {
+    on: false,
+    text: '',
+    place: 'floor',
+    tone: 'light',
+    font: 'serif',
+    size: 'fit',
+  },
+  stand: {
+    on: false,
+    target: 'conductor',
+    cloth: '#b3141c',
+    fringe: '#f1eee6',
+    images: [],
+  },
   folder: { on: false, covers: 'front', images: [] },
   light: { haze: 1, beams: 1, brightness: 1, screen: 1 },
 };
@@ -509,6 +545,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
     screen: {
       on: isBoolean(screen['on']) ? screen['on'] : base.screen.on,
       material: readOption(screen['material'], SCREEN_MATERIALS, base.screen.material),
+      aspect: readOption(screen['aspect'], SCREEN_ASPECTS, base.screen.aspect),
       images: readImages(screen['images'], base.screen.images),
     },
     text: {
