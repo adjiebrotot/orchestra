@@ -1,3 +1,5 @@
+import { LIGHT_RIG_OPTIONS } from './light-rigs.ts';
+import type { LightRigId } from './light-rigs.ts';
 import { STAGE_STYLE_OPTIONS } from './stage-style.ts';
 import type { StageStyleId } from './stage-style.ts';
 
@@ -230,10 +232,10 @@ export interface StageTextSettings {
 }
 
 /**
- * The light controls of the user (design 4.5, light controls). Each value is a factor of the
+ * The light factors of the user (design 4.5, light controls). Each value is a factor of the
  * value of the stage style: 1 keeps the look of the style.
  */
-export interface LightSettings {
+export interface LightFactors {
   /** The factor of the density of the room haze. 0 gives clear air. */
   readonly haze: number;
   /** The factor of the light of the visible beams in the haze. 0 hides the beams. */
@@ -244,8 +246,22 @@ export interface LightSettings {
   readonly screen: number;
 }
 
+/**
+ * The light controls of the user (design 4.5, light controls, light setups): the light setup, the
+ * switch of the center light, and the light factors.
+ */
+export interface LightSettings extends LightFactors {
+  /** The light setup: the angle of the key light and the gain of each kind of light. */
+  readonly rig: LightRigId;
+  /**
+   * True to show the center light: the rim light behind the middle of the orchestra, with its
+   * visible beam and its lamp. False turns off its light, and hides the beam and the lamp.
+   */
+  readonly center: boolean;
+}
+
 /** The limits of each light factor, as [smallest, largest]. */
-export const LIGHT_LIMITS: Readonly<Record<keyof LightSettings, readonly [number, number]>> = {
+export const LIGHT_LIMITS: Readonly<Record<keyof LightFactors, readonly [number, number]>> = {
   haze: [0, 2],
   beams: [0, 2],
   brightness: [0.5, 2],
@@ -314,7 +330,7 @@ export const DEFAULT_BACKDROP: BackdropSettings = {
   text: { on: false, text: '', place: 'floor', tone: 'light', font: 'serif', size: 'fit' },
   stand: { on: false, target: 'conductor', cloth: '#b3141c', fringe: '#f1eee6', images: [] },
   folder: { on: false, covers: 'front', images: [] },
-  light: { haze: 1, beams: 1, brightness: 1, screen: 1 },
+  light: { rig: 'concert', center: true, haze: 1, beams: 1, brightness: 1, screen: 1 },
 };
 
 /** A value of JSON text. */
@@ -482,7 +498,7 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
   const light = isRecord(data['light']) ? data['light'] : {};
   const base = DEFAULT_BACKDROP;
   /** Reads one light factor in its limits. */
-  const factor = (key: keyof LightSettings): number => {
+  const factor = (key: keyof LightFactors): number => {
     const given = light[key];
     const [min, max] = LIGHT_LIMITS[key];
     return isNumber(given) ? Math.min(max, Math.max(min, given)) : base.light[key];
@@ -532,6 +548,8 @@ export function readBackdrop(value: Json | undefined): BackdropSettings {
       images: propImage(folder['images']),
     },
     light: {
+      rig: readOption(light['rig'], LIGHT_RIG_OPTIONS, base.light.rig),
+      center: isBoolean(light['center']) ? light['center'] : base.light.center,
       haze: factor('haze'),
       beams: factor('beams'),
       brightness: factor('brightness'),

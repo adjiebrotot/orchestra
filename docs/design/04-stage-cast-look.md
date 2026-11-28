@@ -1383,7 +1383,8 @@ edges of the triangles, so such a line breaks into dashes that move with the cam
 - **Key light** (`KEY_PLACE`). A warm `SpotLight` far in front of the stage, high and to the
   left, acts as the front light of a concert hall. The shadows fall back, beside the players in
   the default view. Each body keeps a lit side and a shade side. The intensity grows with the
-  square of the distance, so each stage size gets the same light.
+  square of the distance, so each stage size gets the same light. A light setup can put the key
+  light at another angle ("Light setups" below).
 - **Shadow fit** (`SHADOW_FIT` of `shots/shadow-fit.ts`, `fitKeyShadow()`). The shadow map of the
   whole stage has texels of about 12 mm on a large stage, so a paw or a bow cast no shadow. A
   solo or a section shot fits the map to a sphere around the target of the shot, with a radius
@@ -1593,7 +1594,8 @@ warm amber look of the reference images. The other styles are "Royal gala", "Mid
 
 The section "Light" of the panel "Stage design" changes the light of the stage style
 (`LightSettings` of `scene/backdrop-settings.ts`). Each slider is a factor of the value of the
-style, and 100 % keeps the look of the style. "Reset" sets all the factors to 100 %.
+style, and 100 % keeps the look of the style. "Reset" sets all the factors to 100 %, the setup
+"Concert", and the center light on.
 
 - "Haze" multiplies the density of the room haze (`ROOM_HAZE.density`). 0 % gives clear air, so
   the screen and the back of the hall show with no veil. The range is 0 % to 200 %.
@@ -1603,6 +1605,31 @@ style, and 100 % keeps the look of the style. "Reset" sets all the factors to 10
 - "Screen" multiplies the light of the screen. The range is 25 % to 200 %.
 - A change shows at once and builds no object again. The settings stay in the local storage with
   the other settings of the dressing, and the video render uses them.
+
+**Light setups**
+
+The menu "Setup" and the switch "Center light" of the section "Light" change the stage lights
+(`LIGHT_RIGS` of `scene/light-rigs.ts`, `styleLights()`, `placeKeyLight()`). The setups follow the
+standard angles of stage light and of film light (`docs/reference/light-technique.md`).
+
+- Each setup puts the key light at an azimuth and an elevation, and multiplies the key light, the
+  side lights, the back-row lights, the rim lights, and the fill light by a gain of its own.
+  "Concert" keeps the lights of `scene/lights.ts`.
+- The setups are "Concert" (high front key from the left, beam behind), "Front light" (a frontal
+  wash), "Side light" (a low key from the left side), "Top light" (a key almost overhead),
+  "Back light" (a weak key and strong rim lights), "Cross light" (a key at 45° and strong cross
+  lights), and "Low front light" (a low key, as footlights).
+- Each setup keeps the distance of the key light (`KEY_PLACE.distance`), so its intensity stays
+  correct. "Top light" stays below 90°, because a vertical light gives its cameras no up
+  direction.
+- The key light alone casts shadows, so a new angle also needs a new bake of the static props.
+  The app bakes again in slices of the main thread (`StageScene.relightSteps()`). The old bake
+  stays on the stage until the new one is ready, and a bake already at the place does nothing.
+  The captured environment keeps the light of its build, as for a change of the stage style.
+- "Center light" turns off the rim light behind the middle of the orchestra: its light, its
+  visible beam, and its lamp. The haze stays.
+- The lamps of a close shot (`shots/shot-light.ts`) keep their side from `KEY_PLACE` in each
+  setup, because the shot plan is pure and does not read the settings.
 
 **Stage text**
 

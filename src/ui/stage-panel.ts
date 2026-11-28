@@ -20,7 +20,7 @@ import {
 import type {
   BackdropSettings,
   BannerSettings,
-  LightSettings,
+  LightFactors,
   StageTextSettings,
 } from '../scene/backdrop-settings.ts';
 import { COUNTRY_FLAGS } from '../scene/country-flags.ts';
@@ -262,7 +262,7 @@ export class StagePanel {
   #lightSection(): HTMLElement {
     const light = this.#settings.light;
     /** Makes the slider of one light factor. A drag applies at once, with no new controls. */
-    const factor = (key: keyof LightSettings, label: string): HTMLElement =>
+    const factor = (key: keyof LightFactors, label: string): HTMLElement =>
       this.#factor(label, light[key], LIGHT_LIMITS[key], (value) => {
         this.#settings = {
           ...this.#settings,
